@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 
 def back_testing():
-
-
     # 현재 스크립트 디렉토리를 기준으로 데이터 파일 경로 설정
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_path = os.path.join(script_dir, "data", "bitcoin_chart_1m.csv")
@@ -12,9 +10,6 @@ def back_testing():
     # 데이터 로드
     data = pd.read_csv(data_path)
     data['timestamp'] = pd.to_datetime(data['timestamp'])
-
-    stop_loss_rate = 0.0002
-    leverage = 1
 
     # 지표 계산 - MACD, SMA, RSI, 볼린저 밴드, 볼륨
     # MACD
@@ -27,7 +22,7 @@ def back_testing():
     data['SMA50'] = data['close'].rolling(window=50).mean()
     data['SMA200'] = data['close'].rolling(window=200).mean()
 
-    # RSI 계산은 유지
+    # RSI
     delta = data['close'].diff()
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
@@ -63,10 +58,11 @@ def back_testing():
     for index, row in data.iterrows():
         if position is None:
             # 롱 포지션 진입 조건
-            if (row['MACD'] > 70 and
-                row['Signal_Line'] > 50 and
-                row['volume'] > row['Volume_Avg50'] and
-                row['Bollinger_Percentage'] > 40):
+            if (row['MACD'] > 1 and
+                row['Signal_Line'] > 0 and
+                row['RSI'] > 55 and
+                row['Bollinger_Percentage'] > 40 and
+                row['volume'] > row['Volume_Avg50']):
                 
                 position = 'Long'
                 entry_time = row['timestamp']
@@ -77,17 +73,12 @@ def back_testing():
                 max_price = row['high']
                 max_profit_row = row  # 초기값 설정
 
-
-                # 롱 포지션 스탑로스 조건 (2% 손실)
-                stop_loss_threshold_long = entry_price * (1 - (stop_loss_rate/ leverage)) # 롱 포지션의 스탑로스 가격
-
-
-
             # 숏 포지션 진입 조건
-            elif (row['MACD'] < -70 and
-                  row['Signal_Line'] < -50 and
-                  row['volume'] > row['Volume_Avg50'] and
-                  row['Bollinger_Percentage'] < 45):
+            elif (row['MACD'] < -9 and
+                  row['Signal_Line'] < 0 and
+                  row['RSI'] < 45 and
+                  row['Bollinger_Percentage'] < 45 and
+                  row['volume'] > row['Volume_Avg50']):
                 
                 position = 'Short'
                 entry_time = row['timestamp']
@@ -97,8 +88,7 @@ def back_testing():
                 entry_fee = entry_price * position_size_btc * fee_rate
                 min_price = row['low']
                 min_profit_row = row  # 초기값 설정
-                # 숏 포지션 스탑로스 조건 (2% 손실)
-                stop_loss_threshold_short = entry_price * (1 + (stop_loss_rate/ leverage)) # 숏 포지션의 스탑로스 가격
+
         elif position == 'Long':
             # 최대 가격 및 지표 업데이트
             if row['high'] > max_price:
@@ -113,13 +103,10 @@ def back_testing():
             max_profit_value = (max_price - entry_price) * position_size_btc - (entry_fee + max_price * position_size_btc * fee_rate)
 
             # 롱 포지션 청산 조건
-            if (row['RSI'] >= 55 or 
-                row['MACD'] >= 100 or 
-                row['Signal_Line'] >= 80 or 
-        row['close'] <= stop_loss_threshold_long):
+            if (row['MACD'] < entry_data['MACD'] or row['RSI'] < 70 or row['Bollinger_Percentage'] < 50):
                 results.append({
                     "Position": position,
-                    "Entry_RSI": entry_data['RSI'],  # RSI 값 유지
+                    "Entry_RSI": entry_data['RSI'],
                     "Exit_RSI": row['RSI'],
                     "Max_Profit_RSI": max_profit_row['RSI'],
                     "Entry_MACD": entry_data['MACD'],
@@ -157,13 +144,10 @@ def back_testing():
             max_profit_value = (entry_price - min_price) * position_size_btc - (entry_fee + min_price * position_size_btc * fee_rate)
 
             # 숏 포지션 청산 조건
-            if (row['RSI'] <= 40 or 
-                row['MACD'] <= -100 or 
-                row['Signal_Line'] <= 100 or 
-        row['close'] >= stop_loss_threshold_short):
+            if (row['MACD'] > entry_data['MACD'] or row['RSI'] > 35 or row['Bollinger_Percentage'] > 50):
                 results.append({
                     "Position": position,
-                    "Entry_RSI": entry_data['RSI'],  # RSI 값 유지
+                    "Entry_RSI": entry_data['RSI'],
                     "Exit_RSI": row['RSI'],
                     "Max_Profit_RSI": min_profit_row['RSI'],
                     "Entry_MACD": entry_data['MACD'],
@@ -187,29 +171,11 @@ def back_testing():
                 min_price = np.inf
                 min_profit_row = None
 
+        # 이전 MACD 값 업데이트
         previous_macd = row['MACD']
 
     results_df = pd.DataFrame(results)
     print(results_df)
-
-    # 양수인 경우의 개수
-    positive = results_df[results_df['Max_Profit_Value'] > 0]
-    negative = results_df[results_df['Max_Profit_Value'] < 0]
-    num_positive_max_profit = len(positive)
-    num_negative_max_profit = len(negative)
-    total = sum(positive['Max_Profit_Value']) + sum(negative['Max_Profit_Value'])
-
-    # 전체 개수
-    total_entries = len(results_df)
-
-    # 비율 계산
-    positive_ratio = (num_positive_max_profit / total_entries) * 100
-
-    # 결과 출력
-    print(f"포지션 오픈 성공 개수: {num_positive_max_profit}")
-    print(f"포지션 오픈 실패 개수: {num_negative_max_profit}")
-    print(f"성공 비율: {positive_ratio:.2f}%")
-    print(f"손익: {total}")
 
     return results_df
 
