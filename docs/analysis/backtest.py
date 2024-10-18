@@ -99,10 +99,11 @@ def back_testing():
     for index, row in data.iterrows():
         if position is None:
             # 롱 포지션 진입 조건
-            if (row['MACD'] > 400 and
-                row['Signal_Line'] > 50 and
-                row['volume'] > row['Volume_Avg50'] and
-                row['Bollinger_Percentage'] > 40):
+            if (row['MACD'] > 400 
+                and row['Signal_Line'] > 50 
+                and row['volume'] > row['Volume_Avg50'] 
+                # and row['Bollinger_Percentage'] > 40
+                ):
                 
                 position = 'Long'
                 entry_time = row['timestamp']
@@ -120,10 +121,11 @@ def back_testing():
 
 
             # 숏 포지션 진입 조건
-            elif (row['MACD'] < -150 and
-                  row['Signal_Line'] < -50 and
-                  row['volume'] > row['Volume_Avg50'] and
-                  row['Bollinger_Percentage'] < 45):
+            elif (row['MACD'] < -150 
+                  and row['Signal_Line'] < -50 
+                  and row['volume'] > row['Volume_Avg50'] 
+                #   and row['Bollinger_Percentage'] < 45
+                  ):
                 
                 position = 'Short'
                 entry_time = row['timestamp']
@@ -150,8 +152,8 @@ def back_testing():
 
             # 롱 포지션 청산 조건
             if (row['RSI'] >= 80 or 
-                row['MACD'] >= 300 or 
-                row['Signal_Line'] >= 100 or 
+                row['MACD'] >= 400 or 
+                row['Signal_Line'] >= 300 or 
         row['close'] <= stop_loss_threshold_long):
                 results.append({
                     "Position": position,
@@ -194,8 +196,8 @@ def back_testing():
 
             # 숏 포지션 청산 조건
             if (row['RSI'] <= 30 or 
-                row['MACD'] <= -200 or 
-                row['Signal_Line'] <= -125 or 
+                row['MACD'] <= -300 or 
+                row['Signal_Line'] <= -200 or 
         row['close'] >= stop_loss_threshold_short):
                 results.append({
                     "Position": position,
@@ -235,17 +237,32 @@ def back_testing():
     num_negative_max_profit = len(negative)
     total = sum(positive['Max_Profit_Value']) + sum(negative['Max_Profit_Value'])
 
+    # 실제 수익
+    positive_real = results_df[results_df['Profit_Loss'] > 0]
+    negative_real = results_df[results_df['Profit_Loss'] < 0]
+    num_positive_max_profit_real = len(positive_real)
+    num_negative_max_profit_real = len(negative_real)
+    total_real = sum(positive_real['Profit_Loss']) + sum(negative_real['Profit_Loss'])
+
+
     # 전체 개수
     total_entries = len(results_df)
 
     # 비율 계산
     positive_ratio = (num_positive_max_profit / total_entries) * 100
+    positive_ratio_real = (num_positive_max_profit_real / total_entries) * 100
 
     # 결과 출력
+    print("-------------------------------------------")
     print(f"포지션 오픈 성공 개수: {num_positive_max_profit}")
     print(f"포지션 오픈 실패 개수: {num_negative_max_profit}")
     print(f"성공 비율: {positive_ratio:.2f}%")
-    print(f"손익: {total}")
+    print(f"최대 이익: {total}")
+    print("-------------------------------------------")
+    print(f"포지션 이익 개수: {num_positive_max_profit_real}")
+    print(f"포지션 손해 개수: {num_negative_max_profit_real}")
+    print(f"이익 비율: {positive_ratio_real:.2f}%")
+    print(f"손익합: {total_real}")
 
     # 첫 번째와 마지막 행의 날짜만 추출
     first_date = data['timestamp'].iloc[0].date()  # 첫 번째 날짜
@@ -255,6 +272,8 @@ def back_testing():
     date_difference = (last_date - first_date).days + 1  # 1을 더해서 첫날도 포함
 
     # 결과 출력
+    print("-------------------------------------------")
+
     print(f"첫 번째 날짜: {first_date}, 마지막 날짜: {last_date}")
     print(f"데이터에 포함된 총 날짜 수: {date_difference}일")
     print(f"1일 평균 포지션 갯수 : {round(total_entries/date_difference, 1)}개/일")
