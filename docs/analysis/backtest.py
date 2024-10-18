@@ -1,20 +1,58 @@
 import os
 import pandas as pd
 import numpy as np
+import sys
+
+# 현재 파일이 위치한 경로의 상위 디렉토리를 모듈 경로에 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+# docs.get_chart 모듈을 임포트
+from docs.get_chart import chart_update
+from pymongo import MongoClient
+
 
 def back_testing():
 
+    chart_update()
 
     # 현재 스크립트 디렉토리를 기준으로 데이터 파일 경로 설정
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(script_dir, "data", "bitcoin_chart_1m.csv")
+    # data_path = os.path.join(script_dir, "data", "bitcoin_chart_1m.csv")
+    data_path = os.path.join(script_dir, "data", "bitcoin_chart_3m.csv")
+
 
     # 데이터 로드
     data = pd.read_csv(data_path)
     data['timestamp'] = pd.to_datetime(data['timestamp'])
 
-    stop_loss_rate = 0.0002
+
+    # 몽고 db에서 데이터 로드
+        # MongoDB에 접속
+    mongoClient = MongoClient("mongodb://localhost:27017")
+    database = mongoClient["bitcoin"]
+    chart_collection_1m = database['chart_1m']
+    chart_collection_3m = database['chart_3m']
+
+    # 1분봉 데이터를 MongoDB에서 로드
+    # data_list = list(chart_collection_1m.find())  # MongoDB의 모든 데이터를 리스트로 변환
+    data_list = list(chart_collection_3m.find())  # MongoDB의 모든 데이터를 리스트로 변환
+
+        # 리스트가 비어있지 않을 경우, 데이터를 DataFrame으로 변환
+    if data_list:
+        # 데이터를 pandas DataFrame으로 변환
+        data = pd.DataFrame(data_list)
+        
+        # MongoDB 데이터에는 `_id` 필드가 자동으로 포함되므로, 이를 제외하고 CSV로 저장
+        if '_id' in data.columns:
+            data.drop(columns=['_id'], inplace=True)
+
+    # 옵션
+    stop_loss_rate = 0.0001
     leverage = 1
+    # 수수료 설정 및 거래량 (USDT)
+    fee_rate = 0.0006  # 0.06%
+    position_size_usdt = 10000  # 거래량을 10000 USDT로 가정
+
 
     # 지표 계산 - MACD, SMA, RSI, 볼린저 밴드, 볼륨
     # MACD
@@ -46,9 +84,7 @@ def back_testing():
     # 볼륨 평균
     data['Volume_Avg50'] = data['volume'].rolling(window=50).mean()
 
-    # 수수료 설정 및 거래량 (USDT)
-    fee_rate = 0.0006  # 0.06%
-    position_size_usdt = 10000  # 거래량을 10000 USDT로 가정
+
 
     # 포지션 추적을 위한 설정
     position = None
@@ -63,7 +99,7 @@ def back_testing():
     for index, row in data.iterrows():
         if position is None:
             # 롱 포지션 진입 조건
-            if (row['MACD'] > 70 and
+            if (row['MACD'] > 400 and
                 row['Signal_Line'] > 50 and
                 row['volume'] > row['Volume_Avg50'] and
                 row['Bollinger_Percentage'] > 40):
@@ -84,7 +120,7 @@ def back_testing():
 
 
             # 숏 포지션 진입 조건
-            elif (row['MACD'] < -70 and
+            elif (row['MACD'] < -150 and
                   row['Signal_Line'] < -50 and
                   row['volume'] > row['Volume_Avg50'] and
                   row['Bollinger_Percentage'] < 45):
@@ -113,9 +149,9 @@ def back_testing():
             max_profit_value = (max_price - entry_price) * position_size_btc - (entry_fee + max_price * position_size_btc * fee_rate)
 
             # 롱 포지션 청산 조건
-            if (row['RSI'] >= 55 or 
-                row['MACD'] >= 100 or 
-                row['Signal_Line'] >= 80 or 
+            if (row['RSI'] >= 80 or 
+                row['MACD'] >= 300 or 
+                row['Signal_Line'] >= 100 or 
         row['close'] <= stop_loss_threshold_long):
                 results.append({
                     "Position": position,
@@ -157,9 +193,9 @@ def back_testing():
             max_profit_value = (entry_price - min_price) * position_size_btc - (entry_fee + min_price * position_size_btc * fee_rate)
 
             # 숏 포지션 청산 조건
-            if (row['RSI'] <= 40 or 
-                row['MACD'] <= -100 or 
-                row['Signal_Line'] <= 100 or 
+            if (row['RSI'] <= 30 or 
+                row['MACD'] <= -200 or 
+                row['Signal_Line'] <= -125 or 
         row['close'] >= stop_loss_threshold_short):
                 results.append({
                     "Position": position,
@@ -211,6 +247,17 @@ def back_testing():
     print(f"성공 비율: {positive_ratio:.2f}%")
     print(f"손익: {total}")
 
+    # 첫 번째와 마지막 행의 날짜만 추출
+    first_date = data['timestamp'].iloc[0].date()  # 첫 번째 날짜
+    last_date = data['timestamp'].iloc[-1].date()  # 마지막 날짜
+
+    # 두 날짜의 차이 계산
+    date_difference = (last_date - first_date).days + 1  # 1을 더해서 첫날도 포함
+
+    # 결과 출력
+    print(f"첫 번째 날짜: {first_date}, 마지막 날짜: {last_date}")
+    print(f"데이터에 포함된 총 날짜 수: {date_difference}일")
+    print(f"1일 평균 포지션 갯수 : {round(total_entries/date_difference, 1)}개/일")
     return results_df
 
 if __name__ == "__main__":

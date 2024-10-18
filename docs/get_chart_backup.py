@@ -14,24 +14,30 @@ def chart_update():
 
     # MongoDB에 접속
     mongoClient = MongoClient("mongodb://localhost:27017")
+    # 'bitcoin' 데이터베이스 연결
     database = mongoClient["bitcoin"]
+    # 'chart_1m', 'chart_5m', 'chart_15m', 'chart_1h', 'chart_30d' 컬렉션 작업
     chart_collection_1m = database['chart_1m']
-    chart_collection_3m = database['chart_3m']
+    chart_collection_5m = database['chart_5m']
+    chart_collection_15m = database['chart_15m']
+    chart_collection_1h = database['chart_1h']
+    chart_collection_30d = database['chart_30d']
 
-    # Bybit 거래소 객체 생성 (recvWindow 값 조정)
+    # Bybit 거래소 객체 생성
     bybit = ccxt.bybit({
         'apiKey': BYBIT_ACCESS_KEY,
         'secret': BYBIT_SECRET_KEY,
         'options': {
-            'recvWindow': 5000,  # recvWindow 값을 5000으로 설정
+            'recvWindow': 10000,  # 기본값을 10초로 증가
         },
-        'enableRateLimit': True
+        'enableRateLimit': True  # API 호출 속도 제한 관리 활성화
     })
 
-    # Bybit 서버 시간 가져오기
+    # 서버 시간 가져오기
     server_time = bybit.fetch_time() / 1000
     server_datetime = datetime.utcfromtimestamp(server_time)
     print(f"서버 시간 (UTC): {server_datetime}")
+
 
     def fetch_and_store_ohlcv(collection, timeframe, symbol, limit, minutes_per_unit, time_description):
         # MongoDB에서 마지막으로 저장된 데이터의 타임스탬프 찾기
@@ -40,18 +46,15 @@ def chart_update():
             last_timestamp = last_saved_data["timestamp"]
             print(f"{time_description} 마지막으로 저장된 데이터 시점: {last_timestamp}")
         else:
-            # 저장된 데이터가 없으면 기본값을 과거로 설정 (ex: 7일 전)
+            # 저장된 데이터가 없으면 기본 값을 과거로 설정 (ex: 30일 또는 24시간 전)
             last_timestamp = server_datetime - timedelta(minutes=minutes_per_unit * limit)
             print(f"{time_description} 저장된 데이터가 없습니다. {limit}틱 전 시점부터 데이터를 가져옵니다.")
 
+        # 데이터 수집 시작 시간 설정 (마지막 저장된 데이터 이후)
         since_timestamp = int(last_timestamp.timestamp() * 1000)  # 밀리초 단위 타임스탬프 변환
 
-        # 데이터 가져오기 (Bybit 서버 시간 기반으로)
-        try:
-            ohlcv = bybit.fetch_ohlcv(symbol, timeframe, since=since_timestamp, limit=limit)
-        except ccxt.InvalidNonce as e:
-            print(f"InvalidNonce 오류 발생: {e}")
-            return
+        # 최대 limit틱의 데이터 가져오기
+        ohlcv = bybit.fetch_ohlcv(symbol, timeframe, since=since_timestamp, limit=limit)
 
         # MongoDB에 데이터 저장
         for data in ohlcv:
@@ -73,6 +76,7 @@ def chart_update():
                 "volume": volume
             }
 
+            # 중복 방지를 위한 타임스탬프 기준으로 업데이트하거나 삽입
             collection.update_one({"timestamp": dt_object}, {"$set": data_dict}, upsert=True)
 
             # 출력
@@ -81,15 +85,24 @@ def chart_update():
     # 심볼 설정
     symbol = 'BTC/USDT'
 
-    # 1분봉 데이터 업데이트
+    # 1분봉 (최근 1440틱 데이터 저장 및 업데이트)
     fetch_and_store_ohlcv(chart_collection_1m, '1m', symbol, limit=1440, minutes_per_unit=1, time_description="1분봉")
 
-    # 3분봉 데이터 업데이트 (7일치)
-    minutes_per_3m = 3
-    limit_7d = (7 * 24 * 60) // minutes_per_3m
-    fetch_and_store_ohlcv(chart_collection_3m, '3m', symbol, limit=limit_7d, minutes_per_unit=minutes_per_3m, time_description="3분봉")
+    # 5분봉 (최근 1000틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_5m, '5m', symbol, limit=1000, minutes_per_unit=5, time_description="5분봉")
+
+    # 15분봉 (최근 3500틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_15m, '15m', symbol, limit=3500, minutes_per_unit=15, time_description="15분봉")
+
+    # 1시간봉 (최근 48틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_1h, '1h', symbol, limit=48, minutes_per_unit=60, time_description="1시간봉")
+
+    # 1일봉 (최근 60틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_30d, '1d', symbol, limit=60, minutes_per_unit=1440, time_description="1일봉")
 
     pass
+
+    return 
 
 if __name__ == "__main__":
     chart_update()
