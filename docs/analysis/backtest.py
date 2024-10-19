@@ -19,7 +19,14 @@ def back_testing():
     mongoClient = MongoClient("mongodb://localhost:27017")
     database = mongoClient["bitcoin"]
     chart_collection_3m = database['chart_3m']
+    chart_collection_1m = database['chart_1m']
+
     data_list = list(chart_collection_3m.find())
+
+    days = 3
+    minutes = 1440
+    # MongoDB에서 최신 데이터를 기준으로 필요한 개수만큼 조회 (역순으로 정렬 후 제한)
+    data_list = list(chart_collection_1m.find().sort([('_id', -1)]).limit(days * minutes))
     
     if data_list:
         data = pd.DataFrame(data_list)
@@ -28,8 +35,12 @@ def back_testing():
     
     data['timestamp'] = pd.to_datetime(data['timestamp'])
 
+
+    # timestamp를 기준으로 다시 오름차순으로 정렬
+    data.sort_values(by='timestamp', inplace=True)
+
     # 옵션
-    tp_rate = 1
+    tp_rate = 1.5
     stop_loss_rate = 0.0001
     leverage = 2  # 레버리지 적용
     fee_rate = 0.0006
