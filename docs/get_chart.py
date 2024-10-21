@@ -17,6 +17,8 @@ def chart_update():
     database = mongoClient["bitcoin"]
     chart_collection_1m = database['chart_1m']
     chart_collection_3m = database['chart_3m']
+    chart_collection_5m = database['chart_5m']
+    chart_collection_15m = database['chart_15m']
 
     # Bybit 거래소 객체 생성 (recvWindow 값 조정)
     bybit = ccxt.bybit({
@@ -88,6 +90,13 @@ def chart_update():
     minutes_per_3m = 3
     limit_7d = (7 * 24 * 60) // minutes_per_3m
     fetch_and_store_ohlcv(chart_collection_3m, '3m', symbol, limit=limit_7d, minutes_per_unit=minutes_per_3m, time_description="3분봉")
+
+    # 5분봉 (최근 1000틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_5m, '5m', symbol, limit=1000, minutes_per_unit=5, time_description="5분봉")
+
+    # 15분봉 (최근 3500틱 데이터 저장 및 업데이트)
+    fetch_and_store_ohlcv(chart_collection_15m, '15m', symbol, limit=3500, minutes_per_unit=15, time_description="15분봉")
+
 
     pass
 

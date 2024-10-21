@@ -11,6 +11,26 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 # docs.get_chart 모듈을 임포트
 from docs.get_chart import chart_update
 
+# 전저점(SL)을 찾는 함수: 현재 가격부터 이전 가격을 하나씩 확인하여 반전이 일어나는 시점까지 찾기
+def find_previous_low(data, current_index):
+    recent_low = data.loc[current_index, 'low']  # 현재 시점의 low
+    for i in range(current_index - 1, -1, -1):  # 현재 시점 이전의 가격을 탐색
+        if data.loc[i, 'low'] > recent_low:
+            # 이전 가격이 현재 가격보다 높으면, 최근 하락 구간이 끝난 것으로 판단
+            break
+        recent_low = data.loc[i, 'low']
+    return recent_low
+
+# 전고점(SL)을 찾는 함수: 현재 가격부터 이전 가격을 하나씩 확인하여 반전이 일어나는 시점까지 찾기
+def find_previous_high(data, current_index):
+    recent_high = data.loc[current_index, 'high']  # 현재 시점의 high
+    for i in range(current_index - 1, -1, -1):  # 현재 시점 이전의 가격을 탐색
+        if data.loc[i, 'high'] < recent_high:
+            # 이전 가격이 현재 가격보다 낮으면, 최근 상승 구간이 끝난 것으로 판단
+            break
+        recent_high = data.loc[i, 'high']
+    return recent_high
+
 def back_testing():
 
     chart_update()
@@ -20,14 +40,30 @@ def back_testing():
     database = mongoClient["bitcoin"]
     chart_collection_3m = database['chart_3m']
     chart_collection_1m = database['chart_1m']
+    chart_collection_5m = database['chart_5m']
+    chart_collection_15m = database['chart_15m']
 
+    # 3분봉 테스트
     data_list = list(chart_collection_3m.find())
 
-    days = 3
+
+    # 1분봉 테스트
+    days = 5
     minutes = 1440
+
     # MongoDB에서 최신 데이터를 기준으로 필요한 개수만큼 조회 (역순으로 정렬 후 제한)
     data_list = list(chart_collection_1m.find().sort([('_id', -1)]).limit(days * minutes))
     
+
+    # 5분봉 테스트
+    data_list = list(chart_collection_5m.find())
+
+    # 15분봉 테스트
+    # data_list = list(chart_collection_15m.find())
+
+
+
+
     if data_list:
         data = pd.DataFrame(data_list)
         if '_id' in data.columns:
@@ -42,8 +78,8 @@ def back_testing():
     # 옵션
     tp_rate = 1.5
     stop_loss_rate = 0.0001
-    leverage = 2  # 레버리지 적용
-    fee_rate = 0.0006
+    leverage = 1  # 레버리지 적용
+    fee_rate = 0.0000
     position_size_usdt = 10000  # 거래량을 10000 USDT로 가정
 
     # 지표 계산 (MACD, RSI, Stochastic)
@@ -105,10 +141,9 @@ def back_testing():
                     position_size_btc = (position_size_usdt / entry_price) * leverage  # 레버리지 반영
                     entry_fee = (entry_price * position_size_btc * fee_rate) * leverage  # 레버리지 반영된 수수료
 
-                    # 전저점을 SL로 설정
-                    wave_low = data.loc[:index, 'low'].min()
-                    sl = wave_low
-                    tp = entry_price + tp_rate * leverage * (entry_price - sl)  # 레버리지 반영된 TP 설정
+                    # 전저점을 SL로 설정 (함수 사용)
+                    sl = find_previous_low(data, index)
+                    tp = entry_price + (tp_rate / leverage) * (entry_price - sl)  # 레버리지 반영된 TP 설정
 
                     entry_data = {
                         "Position": position,
@@ -153,10 +188,9 @@ def back_testing():
                     position_size_btc = (position_size_usdt / entry_price) * leverage  # 레버리지 반영
                     entry_fee = (entry_price * position_size_btc * fee_rate) * leverage  # 레버리지 반영된 수수료
 
-                    # 전고점을 SL로 설정
-                    wave_high = data.loc[:index, 'high'].max()
-                    sl = wave_high
-                    tp = entry_price - tp_rate * leverage * (sl - entry_price)  # 레버리지 반영된 TP 설정
+                    # 전고점을 SL로 설정 (함수 사용)
+                    sl = find_previous_high(data, index)
+                    tp = entry_price - (tp_rate / leverage) * (sl - entry_price)  # 레버리지 반영된 TP 설정
 
                     entry_data = {
                         "Position": position,
@@ -182,12 +216,17 @@ def back_testing():
             exit_fee = (exit_price * position_size_btc * fee_rate) * leverage  # 레버리지 반영된 수수료
             profit_loss = leverage * ((exit_price - entry_price) * position_size_btc - (entry_fee + exit_fee))  # 레버리지 반영된 수익
 
-            # 수익률 계산을 위한 최대 이익 업데이트
-            max_profit_value = max(max_profit_value, leverage * ((row['high'] - entry_price) * position_size_btc - (entry_fee + row['high'] * position_size_btc * fee_rate)))
-            if row['high'] > max_profit_row['high']:
+            # 최대 수익 기록 (포지션 중 실제 가격 상승이 있었을 때만 계산)
+            if row['high'] > entry_price:  # 실제로 가격 상승이 있었을 때만 최대 수익 계산
+                potential_profit = leverage * ((row['high'] - entry_price) * position_size_btc - (entry_fee + row['high'] * position_size_btc * fee_rate))
+                max_profit_value = max(max_profit_value, potential_profit)
                 max_profit_row = row
 
-            if (row['low'] <= sl or row['high'] >= tp):
+            # 청산 시점에서 수익이 최대 수익과 같다면, 최대 수익 값과 동일하게 설정
+            if row['timestamp'] == max_profit_row['timestamp']:
+                max_profit_value = profit_loss
+
+            if row['low'] <= sl or row['high'] >= tp:
                 results.append({
                     "Position": position,
                     "Entry_RSI": entry_data['Entry_RSI'],
@@ -216,11 +255,17 @@ def back_testing():
             exit_fee = (exit_price * position_size_btc * fee_rate) * leverage  # 레버리지 반영된 수수료
             profit_loss = leverage * ((entry_price - exit_price) * position_size_btc - (entry_fee + exit_fee))  # 레버리지 반영된 수익
 
-            max_profit_value = max(max_profit_value, leverage * ((entry_price - row['low']) * position_size_btc - (entry_fee + row['low'] * position_size_btc * fee_rate)))
-            if row['low'] < min_profit_row['low']:
-                min_profit_row = row
+            # 최대 수익 기록 (포지션 중 실제 가격 하락이 있었을 때만 계산)
+            if row['low'] < entry_price:  # 실제로 가격 하락이 있었을 때만 최대 수익 계산
+                potential_profit = leverage * ((entry_price - row['low']) * position_size_btc - (entry_fee + row['low'] * position_size_btc * fee_rate))
+                max_profit_value = max(max_profit_value, potential_profit)
+                max_profit_row = row
 
-            if (row['high'] >= sl or row['low'] <= tp):
+            # 청산 시점에서 수익이 최대 수익과 같다면, 최대 수익 값과 동일하게 설정
+            if row['timestamp'] == max_profit_row['timestamp']:
+                max_profit_value = profit_loss
+
+            if row['high'] >= sl or row['low'] <= tp:
                 results.append({
                     "Position": position,
                     "Entry_RSI": entry_data['Entry_RSI'],
@@ -242,6 +287,7 @@ def back_testing():
                 })
                 position = None
                 min_profit_row = None
+
 
     # 결과를 DataFrame으로 변환
     results_df = pd.DataFrame(results)
@@ -293,9 +339,9 @@ def back_testing():
     print(f"데이터에 포함된 총 날짜 수: {date_difference}일")
     print(f"1일 평균 포지션 갯수 : {round(total_entries/date_difference, 1)}개/일")
 
-    return results_df
+    return results_df, data
 
 if __name__ == "__main__":
-    results_df = back_testing()
-    print(results_df)
+    results_df,data = back_testing()
+    # print(results_df)
 
