@@ -1,6 +1,12 @@
 def r_m_s(data):
     position = None
 
+    # 마지막 행이 비어 있지 않은지 확인
+    if not data.tail(1).empty:
+        row = data.tail(1).iloc[0]
+    else:
+        return position  # 데이터가 없을 때 None 반환
+
     # 트리거 플래그 초기화
     first_trigger_active = False
     second_trigger_active = False
