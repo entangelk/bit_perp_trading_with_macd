@@ -1,8 +1,7 @@
-from pymongo import MongoClient
 import pandas as pd
 import ta  # 기술적 지표 라이브러리
 
-def process_chart_data(chart_collection, timeframe_name):
+def process_chart_data(chart_collection):
     # 최신 데이터 200개만 가져오기 (timestamp 내림차순 정렬)
     data_cursor = chart_collection.find().sort("timestamp", -1).limit(200)
 
@@ -23,9 +22,6 @@ def process_chart_data(chart_collection, timeframe_name):
     # 시간순으로 정렬 (오름차순)
     df.sort_index(inplace=True)
 
-    # 열 이름 확인 (예: ['close', 'high', 'low', 'open', 'volume'])
-    print(f"{timeframe_name} 데이터 컬럼명:", df.columns)
-
     # 1. MACD (Moving Average Convergence Divergence)
     df['macd'] = ta.trend.macd(df['close'])
     df['macd_signal'] = ta.trend.macd_signal(df['close'])
@@ -43,5 +39,7 @@ def process_chart_data(chart_collection, timeframe_name):
     df['stoch_k'] = ta.momentum.stoch(df['high'], df['low'], df['close'])
     df['stoch_d'] = ta.momentum.stoch_signal(df['high'], df['low'], df['close'])
 
+    # 5. Volume 30-period moving average (volume_Avg30)
+    df['volume_Avg30'] = df['volume'].rolling(window=30).mean()
 
     return df
