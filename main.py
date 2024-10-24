@@ -5,7 +5,7 @@ from docs.cal_chart import process_chart_data
 from docs.strategy.rsi_macd_stocastic import r_m_s
 from docs.strategy.zlma import zero_reg
 from docs.strategy.flow_line import flow_line
-from docs.strategy.tbrp import three_bar
+from docs.strategy.tbrp import three_bar_ma, three_bar_donchian
 from docs.strategy.supertrend import supertrend
 
 
@@ -53,7 +53,9 @@ position_zlma = zero_reg(df)
 # Flow line전략 확인
 position_fl = flow_line(df)
 # three_bar전략 확인
-position_tbrp = three_bar(df)
+position_tbrp_donc = three_bar_donchian(df)
+position_tbrp_ma = three_bar_ma(df) 
+
 # supertrend전략 확인
 position_super = supertrend(df)
 
@@ -68,9 +70,10 @@ for i in range(start_idx, len(df)):
     position_rms = r_m_s(df.iloc[:i+1])
     position_zlma = zero_reg(df.iloc[:i+1])
     position_fl = flow_line(df.iloc[:i+1])
-    position_tbrp = three_bar(df.iloc[:i+1])
     position_super = supertrend(df.iloc[:i+1])
+    position_tbrp_donc = three_bar_donchian(df.iloc[:i+1])
+    position_tbrp_ma = three_bar_ma(df.iloc[:i+1]) 
 
 
     # 결과 출력
-    print(f"Timestamp: {df.index[i]}, RMS: {position_rms}, ZLMA: {position_zlma}, Flow Line: {position_fl}, Three Bar: {position_tbrp}, Super trend: {position_super}")
+    print(f"Timestamp: {df.index[i]}, RMS: {position_rms}, ZLMA: {position_zlma}, Flow Line: {position_fl}, Three Bar: {position_tbrp_donc,position_tbrp_ma}, Super trend: {position_super}")
