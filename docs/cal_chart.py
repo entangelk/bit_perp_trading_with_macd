@@ -43,37 +43,5 @@ def process_chart_data(chart_collection, timeframe_name):
     df['stoch_k'] = ta.momentum.stoch(df['high'], df['low'], df['close'])
     df['stoch_d'] = ta.momentum.stoch_signal(df['high'], df['low'], df['close'])
 
-    # 지표 계산 후 NaN 값 여부 확인
-    print(f"\n{timeframe_name} 지표 계산 후 NaN 값 여부 확인:")
-    print(df[['macd', 'macd_signal', 'macd_diff', 'rsi', 'bb_high', 'bb_low', 'bb_mavg', 'stoch_k', 'stoch_d']].isna().sum())
-
-    # 지표 출력 (마지막 5개)
-    print(f"\n{timeframe_name} MACD, RSI, Bollinger Bands, Stochastic (마지막 5개):")
-    print(df[['macd', 'macd_signal', 'macd_diff', 'rsi', 'bb_high', 'bb_low', 'bb_mavg', 'stoch_k', 'stoch_d']].tail())
 
     return df
-
-def cal_chart():
-    # MongoDB에 접속
-    mongoClient = MongoClient("mongodb://localhost:27017")
-    # 'bitcoin' 데이터베이스 연결
-    database = mongoClient["bitcoin"]
-
-    # 'chart_1m', 'chart_5m', 'chart_15m', 'chart_1h', 'chart_30d' 컬렉션 작업
-    chart_collection_1m = database['chart_1m']
-    chart_collection_5m = database['chart_5m']
-    chart_collection_15m = database['chart_15m']
-    chart_collection_1h = database['chart_1h']
-    chart_collection_30d = database['chart_30d']
-
-
-    # 각각의 봉 데이터에 대해 처리
-    df_1m = process_chart_data(chart_collection_1m, '1분봉')
-    df_5m = process_chart_data(chart_collection_5m, '5분봉')
-    df_15m = process_chart_data(chart_collection_15m, '15분봉')
-    df_1h = process_chart_data(chart_collection_1h, '1시간봉')
-    df_30d = process_chart_data(chart_collection_30d, '1일봉')
-
-    pass
-    # 각각의 데이터프레임 반환
-    return df_1m, df_5m, df_15m, df_1h, df_30d
