@@ -4,12 +4,12 @@
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 
-from cal_chart import process_chart_data
-from strategy.rsi_macd_stocastic import r_m_s
-from strategy.zlma import zero_reg
-from strategy.flow_line import flow_line
-from strategy.tbrp import three_bar_ma, three_bar_donchian
-from strategy.supertrend import supertrend
+from docs.cal_chart import process_chart_data
+from docs.strategy.rsi_macd_stocastic import r_m_s
+from docs.strategy.zlma import zero_reg
+from docs.strategy.flow_line import flow_line
+from docs.strategy.tbrp import three_bar_ma, three_bar_donchian
+from docs.strategy.supertrend import supertrend
 
 
 
@@ -66,3 +66,4 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid time value: {set_timevalue}")
     
     cal_position(chart_collection)
+    pass
