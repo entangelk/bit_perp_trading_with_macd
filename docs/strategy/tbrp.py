@@ -37,12 +37,12 @@ def three_bar_ma(df):
         if bullish_reversal:
             position = 'Long'  # 상승 추세에서 반전 감지
         else:
-            position = 'No Position'  # 상승 추세이나 반전 패턴 없음
+            position = None  # 상승 추세이나 반전 패턴 없음
     elif C_DownTrend_ma.iloc[-1]:
         if bearish_reversal:
             position = 'Short'  # 하락 추세에서 반전 감지
         else:
-            position = 'No Position'  # 하락 추세이나 반전 패턴 없음
+            position = None  # 하락 추세이나 반전 패턴 없음
 
     return position
 
@@ -83,12 +83,12 @@ def three_bar_donchian(df):
         if bullish_reversal:
             position = 'Long'  # 상승 추세에서 반전 감지
         else:
-            position = 'No Position'  # 상승 추세이나 반전 패턴 없음
+            position = None  # 상승 추세이나 반전 패턴 없음
     elif C_DownTrend_donchian.iloc[-1]:
         if bearish_reversal:
             position = 'Short'  # 하락 추세에서 반전 감지
         else:
-            position = 'No Position'  # 하락 추세이나 반전 패턴 없음
+            position = None  # 하락 추세이나 반전 패턴 없음
 
     return position
 

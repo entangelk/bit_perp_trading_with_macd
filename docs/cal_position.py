@@ -13,9 +13,9 @@ from docs.strategy.supertrend import supertrend
 
 
 
-def cal_position(chart_collection):
+def cal_position(set_timevalue,times_check):
     # 기본 사용 지표 계산
-    df = process_chart_data(chart_collection)
+    df = process_chart_data(set_timevalue,times_check)
     
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
@@ -28,6 +28,7 @@ def cal_position(chart_collection):
     position_dict['Three Bar MA'] = three_bar_ma(df)
     position_dict['Supertrend'] = supertrend(df)
 
+    # print(df.index[-1])
     # 최종 포지션 딕셔너리 반환
     return position_dict
 

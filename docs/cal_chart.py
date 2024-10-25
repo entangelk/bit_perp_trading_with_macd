@@ -1,9 +1,34 @@
 import pandas as pd
 import ta  # 기술적 지표 라이브러리
+from pymongo import MongoClient
 
-def process_chart_data(chart_collection):
+def process_chart_data(set_timevalue,times_check):
+
+    # MongoDB에 접속
+    mongoClient = MongoClient("mongodb://localhost:27017")
+    database = mongoClient["bitcoin"]
+
+    # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
+    if set_timevalue == '1m':
+        chart_collection = database['chart_1m']
+    elif set_timevalue == '3m':
+        chart_collection = database['chart_3m']
+    elif set_timevalue == '5m':
+        chart_collection = database["chart_5m"]
+    elif set_timevalue == '15m':
+        chart_collection = database['chart_15m']
+    elif set_timevalue == '1h':
+        chart_collection = database['chart_1h']
+    elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
+        chart_collection = database['chart_30d']
+    else:
+        raise ValueError(f"Invalid time value: {set_timevalue}")
+
+
+
+
     # 최신 데이터 200개만 가져오기 (timestamp 내림차순 정렬)
-    data_cursor = chart_collection.find().sort("timestamp", -1).limit(300)
+    data_cursor = chart_collection.find().sort("timestamp", -1).skip(times_check).limit(300)
 
     # MongoDB 데이터 DataFrame으로 변환
     data_list = list(data_cursor)

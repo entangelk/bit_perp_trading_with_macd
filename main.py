@@ -19,57 +19,88 @@ set_timevalue = '5m'
 
 # 초기 차트 업데이트
 chart_update(set_timevalue)
-time.sleep(1)
-# 데이터베이스 연결
-mongoClient = MongoClient("mongodb://localhost:27017")
-database = mongoClient["bitcoin"]
-
-# set_timevalue 값에 따라 적절한 차트 컬렉션 선택
-if set_timevalue == '1m':
-    chart_collection = database['chart_1m']
-elif set_timevalue == '3m':
-    chart_collection = database['chart_3m']
-elif set_timevalue == '5m':
-    chart_collection = database["chart_5m"]
-elif set_timevalue == '15m':
-    chart_collection = database['chart_15m']
-elif set_timevalue == '1h':
-    chart_collection = database['chart_1h']
-elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
-    chart_collection = database['chart_30d']
-else:
-    raise ValueError(f"Invalid time value: {set_timevalue}")
 
 # position_dict 저장소, 최대 3개까지 저장하는 deque 설정
 position_queue = deque(maxlen=3)
 
 first_time_run_flag = True
+start_counter = 3
+repeat_counter = start_counter
+
+
+
+# 최소 3개의 신호가 일치하는지 확인하는 함수
+def calculate_position(queue):
+    # 신호 초기화
+
+    final_signal = None
+
+
+    long_count = queue.count('Long')
+    short_count = queue.count('Short')
+
+    # 최소 3개의 신호가 동일할 때 최종 신호 설정
+    if long_count >= 3:
+        final_signal = 'Long'
+    elif short_count >= 3:
+        final_signal = 'Short'
+    
+    # 최종 신호 반환
+    return final_signal
 
 # while True:
-for i in range(1):
+for i in range(2):
     if first_time_run_flag:
-        get_len = chart_collection.count_documents({}) - 3
-
-        for i in range(get_len):
+        for i in range(repeat_counter):
             # position_dict 값 계산
-            position_dict = cal_position(chart_collection[:i+1])
-
+            position_dict = cal_position(set_timevalue,start_counter)
             # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
             position_queue.append(position_dict)
-
+            start_counter -= 1
         first_time_run_flag = False
     else:
         # position_dict 값 계산
-        position_dict = cal_position(chart_collection)
+        position_dict = cal_position(set_timevalue,start_counter)
 
         # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
         position_queue.append(position_dict)
 
 
-    # 현재 position_queue 출력 (또는 다른 방식으로 사용 가능)
-    print("현재 저장된 position_dict 리스트:")
-    for idx, position in enumerate(position_queue):
-        print(f"{idx + 1}: {position}")
+    select_list = []
+
+    # 각 딕셔너리를 리스트로 변환하여 select_list에 추가
+    for data in position_queue:
+        temp_list = []
+        for k, v in data.items():
+            temp_list.append(v)
+        select_list.append(temp_list)
+
+    # 마지막 리스트 가져오기
+    position_list = select_list[-1]
+
+    # None이 있는 곳을 이전 값으로 채우기
+    for idx, i in enumerate(position_list):
+        if i is None:
+            # 이전 리스트들에서 None이 아닌 첫 번째 값으로 대체
+            for prev_list in reversed(select_list[:-1]):  # 마지막을 제외한 리스트들 순회
+                if prev_list[idx] is not None:
+                    position_list[idx] = prev_list[idx]
+                    break  # None이 아닌 값을 찾으면 해당 위치는 업데이트 완료
+
+    # print("최종 업데이트된 position_list:", position_list)
+
+    # 최종 신호 계산 및 결과 출력
+    position = calculate_position(position_list)
+    # print("최종 position:", position)
+
+
+
+    # 포지션이 정해졌으니 이제 거래 요청 함수 짜면 됌
+    # SL/TP는 만들어져있음
+    # 테스트는... 어떻게 하지...?
+
+
+
 
     # 5분 대기
-    time.sleep(300)  # 300초 == 5분
+    # time.sleep(300)  # 300초 == 5분
