@@ -1,17 +1,8 @@
 from pymongo import MongoClient
-# docs.get_chart 모듈을 임포트
 from docs.get_chart import chart_update
-from docs.cal_chart import process_chart_data
-from docs.strategy.rsi_macd_stocastic import r_m_s
-from docs.strategy.zlma import zero_reg
-from docs.strategy.flow_line import flow_line
-from docs.strategy.tbrp import three_bar_ma, three_bar_donchian
-from docs.strategy.supertrend import supertrend
-
-
+from docs.cal_position import cal_position
+from collections import deque
 import time
-import json
-import schedule
 
 # 초기 설정
 symbol = "BTCUSDT"
@@ -24,56 +15,50 @@ chart_update(set_timevalue)
 
 # 데이터베이스 연결
 mongoClient = MongoClient("mongodb://localhost:27017")
-# 'bitcoin' 데이터베이스 연결
 database = mongoClient["bitcoin"]
 
 # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
-if set_timevalue == '1m':
-    chart_collection = database['chart_1m']
-elif set_timevalue == '3m':
-    chart_collection = database['chart_3m']
-elif set_timevalue == '5m':
-    chart_collection = database['chart_5m']
-elif set_timevalue == '15m':
-    chart_collection = database['chart_15m']
-elif set_timevalue == '1h':
-    chart_collection = database['chart_1h']
-elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
-    chart_collection = database['chart_30d']
-else:
+chart_collection_map = {
+    '1m': 'chart_1m',
+    '3m': 'chart_3m',
+    '5m': 'chart_5m',
+    '15m': 'chart_15m',
+    '1h': 'chart_1h',
+    '30d': 'chart_30d'
+}
+
+if set_timevalue not in chart_collection_map:
     raise ValueError(f"Invalid time value: {set_timevalue}")
 
-# 기본 사용 지표 계산
-df = process_chart_data(chart_collection)
+chart_collection = database[chart_collection_map[set_timevalue]]
 
-# RMS전략 확인
-position_rms = r_m_s(df)
-# zlma전략 확인
-position_zlma = zero_reg(df)
-# Flow line전략 확인
-position_fl = flow_line(df)
-# three_bar전략 확인
-position_tbrp_donc = three_bar_donchian(df)
-position_tbrp_ma = three_bar_ma(df) 
+# position_dict 저장소, 최대 3개까지 저장하는 deque 설정
+position_queue = deque(maxlen=3)
 
-# supertrend전략 확인
-position_super = supertrend(df)
+first_time_run_flag = True
 
+while True:
+    if first_time_run_flag:
+        get_len = len(chart_collection)-3
+        for i in range(get_len):
+            # position_dict 값 계산
+            position_dict = cal_position(chart_collection[:i+1])
 
-# print(position_rms,position_zlma,position_fl,position_tbrp)
+            # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
+            position_queue.append(position_dict)
 
-# 마지막 250틱을 제외한 데이터만 사용
-start_idx = len(df) - 250  # 250틱 이전 데이터를 기준으로 테스트 시작
+        first_time_run_flag = False
+    else:
+        # position_dict 값 계산
+        position_dict = cal_position(chart_collection)
 
-# 각 전략을 테스트
-for i in range(start_idx, len(df)):
-    position_rms = r_m_s(df.iloc[:i+1])
-    position_zlma = zero_reg(df.iloc[:i+1])
-    position_fl = flow_line(df.iloc[:i+1])
-    position_super = supertrend(df.iloc[:i+1])
-    position_tbrp_donc = three_bar_donchian(df.iloc[:i+1])
-    position_tbrp_ma = three_bar_ma(df.iloc[:i+1]) 
+        # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
+        position_queue.append(position_dict)
 
+    # 현재 position_queue 출력 (또는 다른 방식으로 사용 가능)
+    print("현재 저장된 position_dict 리스트:")
+    for idx, position in enumerate(position_queue):
+        print(f"{idx + 1}: {position}")
 
-    # 결과 출력
-    print(f"Timestamp: {df.index[i]}, RMS: {position_rms}, ZLMA: {position_zlma}, Flow Line: {position_fl}, Three Bar: {position_tbrp_donc,position_tbrp_ma}, Super trend: {position_super}")
+    # 5분 대기
+    time.sleep(300)  # 300초 == 5분
