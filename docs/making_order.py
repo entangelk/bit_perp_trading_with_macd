@@ -153,7 +153,7 @@ def calculate_amount(usdt_amount, leverage, current_price):
         print(f"amount 계산 중 오류 발생: {e}")
         return None
 
-def create_order_with_tp_sl(symbol, side, current_price, usdt_amount, leverage=100, tp_rate=0.20, sl_rate=0.20):
+def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,tp_rate):
     try:
         # 외부에서 전달된 현재 가격을 기준으로 수량 계산
         amount = calculate_amount(usdt_amount, leverage, current_price)
@@ -196,7 +196,7 @@ def create_order_with_tp_sl(symbol, side, current_price, usdt_amount, leverage=1
 
             if avgPrice:
                 # TP/SL 설정
-                set_tp_sl(symbol, side, avgPrice, leverage, tp_rate, sl_rate)
+                set_tp_sl(symbol,stop_loss,tp_rate,current_price,side)
             return order_data
         else:
             print(f"시장가 주문 생성 중 오류 발생: {response.text}")
@@ -206,16 +206,17 @@ def create_order_with_tp_sl(symbol, side, current_price, usdt_amount, leverage=1
         print(f"주문 생성 중 오류 발생: {e}")
         return None
 
-def set_tp_sl(symbol, side, fill_price, leverage, tp_rate, sl_rate):
+def set_tp_sl(symbol, stop_loss,tp_rate,current_price,side):
     try:
         # TP 및 SL 가격 계산
         tp_price = None
-        sl_price = None
+        sl_price = stop_loss
 
-        if tp_rate:
-            tp_price = fill_price * (1 + (tp_rate / leverage)) if side.lower() == 'buy' else fill_price * (1 - (tp_rate / leverage))
-        if sl_rate:
-            sl_price = fill_price * (1 - (sl_rate / leverage)) if side.lower() == 'buy' else fill_price * (1 + (sl_rate / leverage))
+        if side == 'Long':
+            tp_price = current_price + (current_price - stop_loss)*tp_rate 
+        else:
+            tp_price = current_price - (current_price + stop_loss)*tp_rate
+            
 
         server_time = get_server_time()
         timestamp = server_time if server_time else int(time.time() * 1000)

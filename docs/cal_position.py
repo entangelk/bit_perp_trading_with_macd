@@ -30,7 +30,7 @@ def cal_position(set_timevalue,times_check):
 
     # print(df.index[-1])
     # 최종 포지션 딕셔너리 반환
-    return position_dict
+    return position_dict,df
 
 
 
