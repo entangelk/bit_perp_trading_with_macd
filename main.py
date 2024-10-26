@@ -114,7 +114,8 @@ for i in range(65):
 
     # 대기 시간을 계산해 sleep 후 실행
     if wait_seconds > 0:
-        time.sleep(wait_seconds)
+        # time.sleep(wait_seconds)
+        pass
 
     chart_update_one(set_timevalue,symbol)
 
@@ -168,6 +169,7 @@ for i in range(65):
     # 포지션 상태 저장 (포지션이 open 상태일경우 True)
     positions_flag = True
     if positions_json == '[]' or positions_json is None:
+        print('포지션 없음 -> 포지션 오픈 결정 단계 진행')
         positions_flag = False
 
 
@@ -225,6 +227,8 @@ for i in range(65):
         position = calculate_position(position_list)
         # print("최종 position:", position)
 
+        print(f'결정 포지션 : {position}')
+
         if position == "Long":
             stop_loss = set_sl(df,position)
             # 주문 생성 함수 호출
@@ -232,7 +236,7 @@ for i in range(65):
 
             order_response = create_order_with_tp_sl(
                 symbol=symbol,  # 거래할 심볼 (예: 'BTC/USDT')
-                side=position,  # 'buy' 또는 'sell'
+                side="Buy",  # 'buy' 또는 'sell'
                 usdt_amount=usdt_amount,  # 주문 수량
                 leverage=leverage,  # 레버리지 100배
                 current_price=current_price,  # 현재 가격
@@ -251,7 +255,7 @@ for i in range(65):
 
             order_response = create_order_with_tp_sl(
                 symbol=symbol,  # 거래할 심볼 (예: 'BTC/USDT')
-                side=position,  # 'buy' 또는 'sell'
+                side="Sell",  # 'buy' 또는 'sell'
                 usdt_amount=usdt_amount,  # 주문 수량
                 leverage=leverage,  # 레버리지 100배
                 current_price=current_price,  # 현재 가격

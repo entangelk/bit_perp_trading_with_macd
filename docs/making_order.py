@@ -145,9 +145,9 @@ def calculate_amount(usdt_amount, leverage, current_price):
         raw_amount = target_investment / current_price
         amount = math.floor(raw_amount * 1000) / 1000  # 소수점 3자리까지 버림
         if amount < 0.001:  # 최소 수량 제한을 예로 들어 0.001로 설정
-            print("오류: 최소 주문 수량을 충족하지 않습니다.")
-            return None
-        
+            print("오류: 최소 주문 수량을 충족하지 않습니다. 최소 수량인 0.001로 시작합니다")
+            amount = 0.001
+            
         return amount
     except Exception as e:
         print(f"amount 계산 중 오류 발생: {e}")
