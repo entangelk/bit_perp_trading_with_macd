@@ -103,7 +103,8 @@ def calculate_position(queue):
     # 최종 신호 반환
     return final_signal
 
-while True:
+# while True:
+for i in range(65):
     # 현재 서버 시간으로 다음 실행 시간을 계산
     server_time = datetime.now(timezone.utc)
     next_run_time = get_next_run_time(server_time, time_interval)  # time_interval은 분 단위로 사용
