@@ -117,7 +117,7 @@ for i in range(time_range):
     print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
 
     if wait_seconds > 0:
-        with tqdm(total=int(wait_seconds), desc="대기 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
+        with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
             for _ in range(int(wait_seconds)):
                 time.sleep(1)  # 1초 대기
                 pbar.update(1)  # 진행바 업데이트
