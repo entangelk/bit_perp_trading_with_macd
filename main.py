@@ -281,7 +281,7 @@ for i in range(time_range):
 
     # 총 대기 시간과 업데이트 주기 설정
     total_time = 270  # 총 대기 시간 (초 단위) 4분 30초
-    update_interval = 10  # 진행 상황 업데이트 주기 (10초마다)
+    update_interval = 1  # 진행 상황 업데이트 주기 (10초마다)
 
     # 진행바 초기화, leave=True로 완료 후에도 표시 유지, dynamic_ncols=True로 터미널 너비 자동 조정
     with tqdm(total=total_time, desc="대기 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
