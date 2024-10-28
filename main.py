@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from tqdm import tqdm
 from docs.get_chart import chart_update, chart_update_one
 from docs.cal_position import cal_position
 from docs.get_current import fetch_investment_status
@@ -58,7 +58,8 @@ while get_time_block(server_time, time_interval) != get_time_block(last_time, ti
     last_time, server_time = chart_update(set_timevalue,symbol)  # 차트 업데이트 함수 호출
     last_time = last_time['timestamp'].astimezone(timezone.utc)  # last_time을 UTC로 변환
     server_time = datetime.fromtimestamp(server_time, timezone.utc)  # server_time을 UTC로 변환
-    time.sleep(60)  # 1분 대기 (API 요청 빈도 조절)
+    # time.sleep(60)  # 1분 대기 (API 요청 빈도 조절)
+    time.sleep(1)
 
 print(f"{set_timevalue} 차트 업데이트 완료. 서버 시간과 일치합니다.")
 
@@ -104,7 +105,10 @@ def calculate_position(queue):
     return final_signal
 
 # while True:
-for i in range(65):
+
+test_time = 8
+time_range = int(test_time*60/time_interval)
+for i in range(time_range):
     # 현재 서버 시간으로 다음 실행 시간을 계산
     server_time = datetime.now(timezone.utc)
     next_run_time = get_next_run_time(server_time, time_interval)  # time_interval은 분 단위로 사용
@@ -112,10 +116,12 @@ for i in range(65):
 
     print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
 
-    # 대기 시간을 계산해 sleep 후 실행
     if wait_seconds > 0:
-        # time.sleep(wait_seconds)
-        pass
+        with tqdm(total=int(wait_seconds), desc="대기 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
+            for _ in range(int(wait_seconds)):
+                time.sleep(1)  # 1초 대기
+                pbar.update(1)  # 진행바 업데이트
+
 
     chart_update_one(set_timevalue,symbol)
 
@@ -158,7 +164,7 @@ for i in range(65):
                     position_list[idx] = prev_list[idx]
                     break  # None이 아닌 값을 찾으면 해당 위치는 업데이트 완료
 
-    # print("최종 업데이트된 position_list:", position_list)
+    print("최종 업데이트된 position_list:", position_list)
 
 
 
@@ -181,7 +187,7 @@ for i in range(65):
         check_nowPnL = float(positions_data[0]['info']['unrealisedPnl'])
         total_pnl = check_nowPnL + (check_fee * 2)
                 # 이익이 발생한 경우: 포지션 종료 후 새로운 주문 생성
-        if total_pnl > 0:
+        if total_pnl > 10:
             # 기존 포지션 종료
             close_position(symbol=symbol)
             print("포지션 종료 성공")
@@ -273,5 +279,12 @@ for i in range(65):
 
 
 
-    # 4분 30초 대기
-    time.sleep(270)
+# 총 대기 시간과 업데이트 주기 설정
+total_time = 270  # 총 대기 시간 (초 단위) 4분 30초
+update_interval = 10  # 진행 상황 업데이트 주기 (10초마다)
+
+# 진행바 초기화, leave=True로 완료 후에도 표시 유지, dynamic_ncols=True로 터미널 너비 자동 조정
+with tqdm(total=total_time, desc="대기 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
+    for _ in range(total_time // update_interval):
+        time.sleep(update_interval)
+        pbar.update(update_interval)

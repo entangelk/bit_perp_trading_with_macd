@@ -43,8 +43,8 @@ def fetch_investment_status():
 
         # 현재 잔고 정보 가져오기
         balance = bybit.fetch_balance()
-        print("잔고 정보:")
-        print(balance)
+        # print("잔고 정보:")
+        # print(balance)
 
         # 현재 포지션 정보 가져오기
         positions = bybit.fetch_positions()

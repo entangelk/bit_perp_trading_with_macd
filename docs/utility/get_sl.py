@@ -10,21 +10,21 @@ def set_sl(df, position):
         if position == 'Long':
             # Long 포지션: 이전 close 값이 현재 close 값보다 높았다가 낮아질 때 low 값을 가져옴
             if before_price > current_price:
-                stop_loss = df.iloc[i]['low']
+                stop_loss = df.iloc[i]['low'] - 10
                 break
 
         elif position == 'Short':
             # Short 포지션: 이전 close 값이 현재 close 값보다 낮았다가 높아질 때 high 값을 가져옴
             if before_price < current_price:
-                stop_loss = df.iloc[i]['high']
+                stop_loss = df.iloc[i]['high'] + 10
                 break
 
     # 반전이 발생하지 않았을 때, 최종적으로 마지막 고점/저점을 기준으로 설정
     if stop_loss is None:
         if position == 'Long':
-            stop_loss = df.tail(1)['low'].values[0]
+            stop_loss = df.tail(1)['low'].values[0] - 10
         elif position == 'Short':
-            stop_loss = df.tail(1)['high'].values[0]
+            stop_loss = df.tail(1)['high'].values[0] + 10
 
     return stop_loss
 

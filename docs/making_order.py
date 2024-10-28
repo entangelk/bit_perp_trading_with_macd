@@ -85,6 +85,7 @@ def set_leverage(symbol, leverage, category='linear'):
     if current_leverage_data:
         current_leverage = int(current_leverage_data.get('list', [])[0]['leverage'])  # 현재 레버리지 추출
         print(f"현재 레버리지: {current_leverage}")
+        print(f"설정할 레버리지: {leverage}")
 
         # 현재 설정된 레버리지와 동일한 경우 설정하지 않음
         if current_leverage == leverage:
