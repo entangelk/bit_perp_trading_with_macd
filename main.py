@@ -126,6 +126,7 @@ for i in range(time_range):
 
     chart_update_one(set_timevalue,symbol)
 
+    time.sleep(1)
 
     if first_time_run_flag:
         for i in range(repeat_counter):
