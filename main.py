@@ -122,10 +122,10 @@ for i in range(time_range):
                 time.sleep(1)  # 1초 대기
                 pbar.update(1)  # 진행바 업데이트
 
+    time.sleep(1)
 
     chart_update_one(set_timevalue,symbol)
 
-    time.sleep(1)
 
     if first_time_run_flag:
         for i in range(repeat_counter):
