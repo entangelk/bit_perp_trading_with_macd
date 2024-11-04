@@ -24,3 +24,4 @@ MACD를 활용, RSI도 활용
 3. 횡보 체크 - high and low optimized trend tracker 
     * https://www.youtube.com/watch?v=h7REvukGEZc&t=40s
     * highest and lowest lenghth = 5
+    asdf
