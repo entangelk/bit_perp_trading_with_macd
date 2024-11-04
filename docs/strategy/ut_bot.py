@@ -13,7 +13,7 @@ def calculate_ut_bot_signal(df, a=4):
         str: 'Long', 'Short', 또는 None
     """
     # 트레일링 스탑 계산을 위한 설정
-    nLoss = a * df['atr_150'].iloc[-1]
+    nLoss = a * df['atr_100'].iloc[-1]
     xATRTrailingStop = None  # 초기값
 
     # 마지막 두 개의 종가로 트레일링 스탑 계산 및 신호 생성

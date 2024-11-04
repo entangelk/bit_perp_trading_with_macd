@@ -75,7 +75,7 @@ def process_chart_data(set_timevalue,times_check):
 
     # ATR(10-period) 및 ATR(200-period) 계산
     df['atr_10'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=10)
-    df['atr_150'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=150)
+    df['atr_100'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=100)
     df['atr_200'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=200)
 
     # Follow Line 계산을 위한 Bollinger Bands 추가 계산
