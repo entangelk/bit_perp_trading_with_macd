@@ -1,7 +1,6 @@
 import pandas as pd
 import ta  # 기술적 지표 라이브러리
 from pymongo import MongoClient
-import numpy as np
 
 def process_chart_data(set_timevalue,times_check):
 
@@ -53,17 +52,6 @@ def process_chart_data(set_timevalue,times_check):
     df['macd_signal'] = ta.trend.macd_signal(df['close'])
     df['macd_diff'] = ta.trend.macd_diff(df['close'])
 
-
-    # 1++ MACD stragy 용 계산 (사용자 정의 파라미터 적용)
-
-    fast_length=4
-    slow_length=100
-    macd_length=21
-
-    df['macd_stg'] = ta.trend.ema_indicator(df['close'], window=fast_length) - ta.trend.ema_indicator(df['close'], window=slow_length)
-    df['macd_signal_stg'] = ta.trend.ema_indicator(df['macd'], window=macd_length)
-    df['macd_diff_stg'] = df['macd'] - df['macd_signal']
-
     # 2. RSI (Relative Strength Index)
     df['rsi'] = ta.momentum.rsi(df['close'])
 
@@ -78,6 +66,12 @@ def process_chart_data(set_timevalue,times_check):
 
     # 5. Volume 30-period moving average (volume_Avg30)
     df['volume_Avg30'] = df['volume'].rolling(window=30).mean()
+
+    # 추가 지표: Zero-Lag Moving Average (ZLMA)
+    length = 15  # ZLMA에서 사용할 기간 (필요 시 변경 가능)
+    df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
+    correction = df['close'] + (df['close'] - df['ema'])
+    df['zlma'] = ta.trend.ema_indicator(correction, window=length)
 
     # ATR(10-period) 및 ATR(200-period) 계산
     df['atr_10'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=10)
@@ -96,24 +90,16 @@ def process_chart_data(set_timevalue,times_check):
     df['maFast'] = ta.trend.sma_indicator(df['close'], maFLength)
     df['maSlow'] = ta.trend.sma_indicator(df['close'], maSLength)
 
-    # 7. ADX, DI+ 및 DI- 계산
-    adx_period = 14
-    df['TR'] = np.maximum(df['high'] - df['low'], 
-                          np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                                     abs(df['low'] - df['close'].shift(1))))
-    df['DM+'] = np.where((df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
-                         np.maximum(df['high'] - df['high'].shift(1), 0), 0)
-    df['DM-'] = np.where((df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
-                         np.maximum(df['low'].shift(1) - df['low'], 0), 0)
+    # 7. Donchian 채널 계산
+    dcLength = 13
+    df['upper'] = df['high'].rolling(window=dcLength).max()
+    df['lower'] = df['low'].rolling(window=dcLength).min()
 
-    df['ATR'] = df['TR'].rolling(window=adx_period, min_periods=1).mean()
-    df['DI+'] = 100 * (df['DM+'].rolling(window=adx_period, min_periods=1).mean() / df['ATR'])
-    df['DI-'] = 100 * (df['DM-'].rolling(window=adx_period, min_periods=1).mean() / df['ATR'])
+    # 8. Supertrend 계산 (10-period ATR 사용)
+    factor = 3.0
 
-    df['DX'] = 100 * abs(df['DI+'] - df['DI-']) / (df['DI+'] + df['DI-'])
-    df['ADX'] = df['DX'].rolling(window=adx_period, min_periods=1).mean()
-
-    # 필요없는 중간 계산 열 삭제
-    df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)
+    df['hl2'] = (df['high'] + df['low']) / 2
+    df['up'] = df['hl2'] - (factor * df['atr_10'])  # 10-period ATR 사용
+    df['dn'] = df['hl2'] + (factor * df['atr_10'])  # 10-period ATR 사용
 
     return df

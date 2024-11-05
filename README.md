@@ -18,7 +18,8 @@ MACD를 활용, RSI도 활용
 1. ut bot : 4, 100
 2. macd 전략 : 4,100,21
 3. follow line : 100,21,1
-
+4. ADX and DI : 14,20
+    * 기준 20
 
 
 ### 거짓 신호 판별

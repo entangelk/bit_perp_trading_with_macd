@@ -14,9 +14,9 @@ def flow_line(df, UseATRfilter=True):
         # Follow Line 계산
         follow_line_value = None
         if BBSignal == 1:  # 매수 신호 처리
-            follow_line_value = df['low'].iloc[i] - df['atr_200'].iloc[i] if UseATRfilter else df['low'].iloc[i]
+            follow_line_value = df['low'].iloc[i] - df['atr_100'].iloc[i] if UseATRfilter else df['low'].iloc[i]
         elif BBSignal == -1:  # 매도 신호 처리
-            follow_line_value = df['high'].iloc[i] + df['atr_200'].iloc[i] if UseATRfilter else df['high'].iloc[i]
+            follow_line_value = df['high'].iloc[i] + df['atr_100'].iloc[i] if UseATRfilter else df['high'].iloc[i]
 
 
         # 추세 방향 결정 및 신호 반환
