@@ -5,32 +5,43 @@
 
 
 from docs.cal_chart import process_chart_data
-from docs.strategy.rsi_macd_stocastic import r_m_s
-from docs.strategy.zlma import zero_reg
+from docs.strategy.ut_bot import calculate_ut_bot_signal
 from docs.strategy.flow_line import flow_line
-from docs.strategy.tbrp import three_bar_ma, three_bar_donchian
-from docs.strategy.supertrend import supertrend
+from docs.strategy.adx_di import adx_di_signal
+from docs.strategy.macd_stg import macd_stg
 
 
 
-def cal_position(set_timevalue,times_check):
+def cal_position(set_timevalue, times_check):
     # 기본 사용 지표 계산
-    df = process_chart_data(set_timevalue,times_check)
+    df = process_chart_data(set_timevalue, times_check)
     
+    # 포지션 오픈 시그널 확인
+    start_signal = adx_di_signal(df)
+
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
 
     # 각 전략의 포지션 확인
-    position_dict['RMS'] = r_m_s(df)
-    position_dict['ZLMA'] = zero_reg(df)
     position_dict['Flow Line'] = flow_line(df)
-    position_dict['Three Bar Donchian'] = three_bar_donchian(df)
-    position_dict['Three Bar MA'] = three_bar_ma(df)
-    position_dict['Supertrend'] = supertrend(df)
+    position_dict['ut bot'] = calculate_ut_bot_signal(df)
+    position_dict['macd stg'] = macd_stg(df)
 
-    # print(df.index[-1])
-    # 최종 포지션 딕셔너리 반환
-    return position_dict,df
+    # None을 제외한 'Long', 'Short' 포지션의 개수를 계산
+    long_count = sum(1 for pos in position_dict.values() if pos == 'Long')
+    short_count = sum(1 for pos in position_dict.values() if pos == 'Short')
+
+    # 가장 많은 포지션을 반환
+    if long_count > short_count:
+        final_position = 'Long'
+    elif short_count > long_count:
+        final_position = 'Short'
+    else:
+        final_position = None  # 동률이거나 모든 값이 None일 경우
+
+    # 최종 포지션 딕셔너리와 결과 반환
+    return start_signal,final_position,df
+
 
 
 

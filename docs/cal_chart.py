@@ -67,17 +67,9 @@ def process_chart_data(set_timevalue,times_check):
     # 2. RSI (Relative Strength Index)
     df['rsi'] = ta.momentum.rsi(df['close'])
 
-    # 3. Bollinger Bands (볼린저 밴드)
-    df['bb_high'] = ta.volatility.bollinger_hband(df['close'])
-    df['bb_low'] = ta.volatility.bollinger_lband(df['close'])
-    df['bb_mavg'] = ta.volatility.bollinger_mavg(df['close'])
-
-    # 4. Stochastic Oscillator (스토캐스틱 오실레이터)
-    df['stoch_k'] = ta.momentum.stoch(df['high'], df['low'], df['close'])
-    df['stoch_d'] = ta.momentum.stoch_signal(df['high'], df['low'], df['close'])
-
-    # 5. Volume 30-period moving average (volume_Avg30)
-    df['volume_Avg30'] = df['volume'].rolling(window=30).mean()
+    # RSI의 21기간 SMA
+    rsi_period = 21
+    df['rsi_sma'] = df['rsi'].rolling(window=rsi_period).mean()
 
     # ATR(10-period) 및 ATR(200-period) 계산
     df['atr_10'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=10)

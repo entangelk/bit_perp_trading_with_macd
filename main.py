@@ -71,6 +71,29 @@ def get_next_run_time(current_time, interval_minutes):
     # return next_time + timedelta(seconds=10)
     return next_time
 
+def start_signal_final_check(start_signal, df):
+    """
+    최종 신호 검증 함수.
+    start_signal이 'Long', 'Short', 또는 'None' 중 하나일 때,
+    추가 조건을 확인하고 신호를 검증합니다.
+    """
+    # DI+와 DI- 차이 계산
+    di_difference = abs(df['DI+'].iloc[-1] - df['DI-'].iloc[-1])
+
+    # 조건에 따라 신호 검증
+    if start_signal == 'Long':
+        # DI 차이가 10 이상이고, RSI 이동 평균이 양의 기울기인지 확인
+        rsi_slope = df['rsi_sma'].iloc[-1] - df['rsi_sma'].iloc[-2]
+        if di_difference >= 10 and rsi_slope > 0:
+            return "Long"  # 조건 충족 시 최종 'Long' 신호 반환
+    elif start_signal == 'Short':
+        # DI 차이가 10 이상이고, RSI 이동 평균이 음의 기울기인지 확인
+        rsi_slope = df['rsi_sma'].iloc[-1] - df['rsi_sma'].iloc[-2]
+        if di_difference >= 10 and rsi_slope < 0:
+            return "Short"  # 조건 충족 시 최종 'Short' 신호 반환
+    
+    # 조건에 맞지 않으면 None 반환
+    return None
 
 
 # 초기 레버리지 설정
@@ -78,31 +101,7 @@ leverage_response = set_leverage(symbol, leverage)
 if leverage_response is None:
     print("레버리지 설정 실패. 주문 생성을 중단합니다.")
 
-# position_dict 저장소, 최대 3개까지 저장하는 deque 설정
-position_queue = deque(maxlen=3)
-
-
-
-
-
-# 최소 3개의 신호가 일치하는지 확인하는 함수
-def calculate_position(queue):
-    # 신호 초기화
-
-    final_signal = None
-
-
-    long_count = queue.count('Long')
-    short_count = queue.count('Short')
-
-    # 최소 3개의 신호가 동일할 때 최종 신호 설정
-    if long_count >= 3:
-        final_signal = 'Long'
-    elif short_count >= 3:
-        final_signal = 'Short'
-    
-    # 최종 신호 반환
-    return final_signal
+start_triger = None
 
 # while True:
 
@@ -128,47 +127,15 @@ for i in range(time_range):
 
     time.sleep(1)
 
-    if first_time_run_flag:
-        for i in range(repeat_counter):
-            # position_dict 값 계산
-            position_dict,df = cal_position(set_timevalue,start_counter)
-            # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
-            position_queue.append(position_dict)
-            start_counter -= 1
-        first_time_run_flag = False
+    # position_dict 값 계산
+    start_signal,position,df = cal_position(set_timevalue,start_counter)
+
+    if start_signal:
+        start_triger = start_signal
+    elif start_signal == 'Reset':
+        start_triger = None
     else:
-        # position_dict 값 계산
-        position_dict,df = cal_position(set_timevalue,start_counter)
-
-        # position_dict를 position_queue에 추가 (3개 초과 시 자동으로 오래된 항목 삭제)
-        position_queue.append(position_dict)
-
-
-    select_list = []
-
-    # 각 딕셔너리를 리스트로 변환하여 select_list에 추가
-    for data in position_queue:
-        temp_list = []
-        for k, v in data.items():
-            temp_list.append(v)
-        select_list.append(temp_list)
-
-    # 마지막 리스트 가져오기
-    position_list = select_list[-1]
-
-    # None이 있는 곳을 이전 값으로 채우기
-    for idx, i in enumerate(position_list):
-        if i is None:
-            # 이전 리스트들에서 None이 아닌 첫 번째 값으로 대체
-            for prev_list in reversed(select_list[:-1]):  # 마지막을 제외한 리스트들 순회
-                if prev_list[idx] is not None:
-                    position_list[idx] = prev_list[idx]
-                    break  # None이 아닌 값을 찾으면 해당 위치는 업데이트 완료
-
-    print("최종 업데이트된 position_list:", position_list)
-
-
-
+        pass
 
     # 내 포지션 정보 가져오기
     balance, positions_json, ledger = fetch_investment_status()
@@ -187,52 +154,33 @@ for i in range(time_range):
         check_fee = float(positions_data[0]['info']['curRealisedPnl'])
         check_nowPnL = float(positions_data[0]['info']['unrealisedPnl'])
         total_pnl = check_nowPnL + (check_fee * 2)
-                # 이익이 발생한 경우: 포지션 종료 후 새로운 주문 생성
-        if total_pnl > 10:
-            # 기존 포지션 종료
-            close_position(symbol=symbol)
-            print("포지션 종료 성공")
 
-            # 새로 매수 또는 매도 방향 결정 (기존 투자금 유지)
-            current_price = get_current_price(symbol=symbol)
+        print(f"현재 포지셔닝 중입니다. Pnl : {total_pnl}")
 
-            # 최종 신호 계산 및 결과 출력
-            position = calculate_position(position_list)
-            
-            # 'stay'가 반환되면 주문 생성을 중단하고 함수 종료
-            if position == None:
-                print("stay 상태입니다. 다음 턴까지 대기합니다.")
-
-            # 포지션이 결정되어 있을 경우 주문 재생성
-            else:
-                stop_loss = set_sl(df,position)
-                # 주문 생성 함수 호출
-                current_price = get_current_price(symbol=symbol)
-
-                order_response = create_order_with_tp_sl(
-                    symbol=symbol,  # 거래할 심볼 (예: 'BTC/USDT')
-                    side=position,  # 'buy' 또는 'sell'
-                    usdt_amount=usdt_amount,  # 주문 수량
-                    leverage=leverage,  # 레버리지 100배
-                    current_price=current_price,  # 현재 가격
-                    stop_loss = stop_loss,
-                    tp_rate = tp_rate
-                )
-                if order_response is None:
-                    print("주문 생성 실패.")
-                else:
-                    print(f"주문 성공: {order_response}")
-
-        else:
-            # 손실 발생 시 포지션 유지
-            print("손실 발생 중, 포지션 유지.")
-            side = 'Wait and see'
-            decision = 'No clear direction in time'
-
+        # 포지션 종료 조건 달성시 포지셔닝 종료
+        # 여기 부분부터 제작 진행해야됨!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ##############################################################
+        # 제작할꺼, 스탑로스, 포지셔닝 종료 조건 함수 만들기, 백테스팅
+        close_position(symbol=symbol)
+        print("포지션 종료 성공")
+        ######################################################################
     else:
-        # 최종 신호 계산 및 결과 출력
-        position = calculate_position(position_list)
+        # position_dict 값 계산
+        start_signal,position,df = cal_position(set_timevalue,start_counter)
         # print("최종 position:", position)
+
+        if start_signal:
+            start_triger = start_signal
+        elif start_signal == 'Reset':
+            start_triger = None
+        else:
+            pass
+
+        if start_triger == position:
+            pass
+        else:
+            position == None
+        
 
         print(f'결정 포지션 : {position}')
 
@@ -289,3 +237,4 @@ for i in range(time_range):
         for _ in range(total_time // update_interval):
             time.sleep(update_interval)
             pbar.update(update_interval)
+
