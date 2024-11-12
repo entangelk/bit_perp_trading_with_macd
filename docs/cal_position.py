@@ -12,9 +12,9 @@ from docs.strategy.macd_stg import macd_stg
 
 
 
-def cal_position(set_timevalue, times_check):
+def cal_position(set_timevalue):
     # 기본 사용 지표 계산
-    df = process_chart_data(set_timevalue, times_check)
+    df = process_chart_data(set_timevalue)
     
     # 포지션 오픈 시그널 확인
     start_signal = adx_di_signal(df)

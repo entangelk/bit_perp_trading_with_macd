@@ -3,7 +3,7 @@ import ta  # 기술적 지표 라이브러리
 from pymongo import MongoClient
 import numpy as np
 
-def process_chart_data(set_timevalue,times_check):
+def process_chart_data(set_timevalue):
 
     # MongoDB에 접속
     mongoClient = MongoClient("mongodb://localhost:27017")
@@ -29,7 +29,7 @@ def process_chart_data(set_timevalue,times_check):
 
 
     # 최신 데이터 200개만 가져오기 (timestamp 내림차순 정렬)
-    data_cursor = chart_collection.find().sort("timestamp", -1).skip(times_check).limit(300)
+    data_cursor = chart_collection.find().sort("timestamp", -1).limit(300)
 
     # MongoDB 데이터 DataFrame으로 변환
     data_list = list(data_cursor)

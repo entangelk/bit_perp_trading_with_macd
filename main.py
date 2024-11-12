@@ -2,8 +2,9 @@ from tqdm import tqdm
 from docs.get_chart import chart_update, chart_update_one
 from docs.cal_position import cal_position
 from docs.get_current import fetch_investment_status
-from docs.making_order import set_leverage, create_order_with_tp_sl, close_position
+from docs.making_order import set_leverage, create_order_with_tp_sl, close_position,get_position_amount
 from docs.utility.get_sl import set_sl
+from docs.utility.cal_close import isclowstime
 from docs.current_price import get_current_price
 from datetime import datetime, timezone, timedelta
 from collections import deque
@@ -22,12 +23,6 @@ leverage = 1
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
 tp_rate = 1.5
-
-# 첫 실행시 3개의 데이터 쌓고 시작
-first_time_run_flag = True
-start_counter = 3
-repeat_counter = start_counter
-
 
 
 
@@ -102,15 +97,18 @@ if leverage_response is None:
     print("레버리지 설정 실패. 주문 생성을 중단합니다.")
 
 start_triger = None
+signal_save_list = [None, None, None]
+first_time_run_flag = True
+signal_save_flag = False
+save_signal = None
 
 # while True:
-
 test_time = 8
-time_range = int(test_time*60/time_interval)
+time_range = int(test_time * 60 / time_interval)
 for i in range(time_range):
     # 현재 서버 시간으로 다음 실행 시간을 계산
     server_time = datetime.now(timezone.utc)
-    next_run_time = get_next_run_time(server_time, time_interval)  # time_interval은 분 단위로 사용
+    next_run_time = get_next_run_time(server_time, time_interval)
     wait_seconds = (next_run_time - server_time).total_seconds()
 
     print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
@@ -118,24 +116,53 @@ for i in range(time_range):
     if wait_seconds > 0:
         with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
             for _ in range(int(wait_seconds)):
-                time.sleep(1)  # 1초 대기
-                pbar.update(1)  # 진행바 업데이트
+                time.sleep(1)
+                pbar.update(1)
 
     time.sleep(1)
 
-    chart_update_one(set_timevalue,symbol)
-
+    # 차트 업데이트
+    chart_update_one(set_timevalue, symbol)
     time.sleep(1)
 
     # position_dict 값 계산
-    start_signal,position,df = cal_position(set_timevalue,start_counter)
+    start_signal, position, df = cal_position(set_timevalue)
 
-    if start_signal:
-        start_triger = start_signal
-    elif start_signal == 'Reset':
-        start_triger = None
+    # save_position_signal = position
+
+    # 현재 start_signal이 None이면서 position에 신호가 발생한 경우
+    if position:
+        # 포지션 시그널 저장
+        signal_save_list.pop(0)
+        signal_save_list.append(position)
     else:
-        pass
+        # 포지션 시그널 저장
+        signal_save_list.pop(0)
+        signal_save_list.append(None)
+
+    # start_signal에 따라 save_signal 값을 업데이트
+    if start_signal is not None and start_signal != 'Reset':
+        save_signal = start_signal
+    elif start_signal == 'Reset':
+        save_signal = None
+    # None일 경우 이전에 저장된 save_signal 값을 그대로 유지
+
+    print(f"현재 save_signal: {save_signal}")
+
+    # 조건 확인 및 유효 신호 확인
+    if start_signal is not None and start_signal != 'Reset' and position is None:
+        for signal in reversed(signal_save_list):
+            if signal == start_signal:
+                position = save_signal
+                print(f"유효 신호 감지: Position '{position}' 후 Start Signal '{start_triger}' 발생")
+                break
+            elif position == 'Long' and signal == 'Short':
+                position = None
+                break
+            elif position == 'Short' and signal == 'Long':
+                position = None
+                break
+
 
     # 내 포지션 정보 가져오기
     balance, positions_json, ledger = fetch_investment_status()
@@ -161,26 +188,31 @@ for i in range(time_range):
         # 여기 부분부터 제작 진행해야됨!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ##############################################################
         # 제작할꺼, 스탑로스, 포지셔닝 종료 조건 함수 만들기, 백테스팅
-        close_position(symbol=symbol)
-        print("포지션 종료 성공")
+
+        current_amount,current_side,current_avgPrice = get_position_amount(symbol)
+
+        # 현제 포지션과 반대 포지션 시그널 진입시 청산
+        if current_side == 'Buy':
+            current_side = 'Long'
+        else:
+            current_side = 'Short'
+        if current_side == position:
+            close_position(symbol=symbol)
+
+
+        close_signal = False
+        close_signal = isclowstime(df)
+        if close_signal:
+            close_position(symbol=symbol)
+            print("포지션 종료 성공")
+        else:
+            print("최적 포지션 미도달, Stay")
         ######################################################################
     else:
-        # position_dict 값 계산
-        start_signal,position,df = cal_position(set_timevalue,start_counter)
-        # print("최종 position:", position)
 
-        if start_signal:
-            start_triger = start_signal
-        elif start_signal == 'Reset':
-            start_triger = None
-        else:
-            pass
-
-        if start_triger == position:
-            pass
-        else:
-            position == None
-        
+        # 세이브된 시그널과 포지션이 서로 다를 경우 주문 생성 중지
+        if save_signal != position:
+            position = None  
 
         print(f'결정 포지션 : {position}')
 
