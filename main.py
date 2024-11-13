@@ -19,11 +19,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 초기 설정
 symbol = "BTCUSDT"
-leverage = 1
+leverage = 100
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
-tp_rate = 1.5
-
+tp_rate = 10000
+stop_loss = 500
 
 
 # 초기 차트 업데이트
@@ -191,17 +191,20 @@ for i in range(time_range):
 
         current_amount,current_side,current_avgPrice = get_position_amount(symbol)
 
-        # 현제 포지션과 반대 포지션 시그널 진입시 청산
+        # 포지션 값 설정
         if current_side == 'Buy':
             current_side = 'Long'
-        else:
+        elif current_side == 'Sell':
             current_side = 'Short'
-        if current_side == position:
+
+        # 현 포지션과 반대 포지션 시그널 진입 시 청산
+        if (current_side == 'Long' and position == 'Short') or \
+        (current_side == 'Short' and position == 'Long'):
             close_position(symbol=symbol)
 
 
         close_signal = False
-        close_signal = isclowstime(df)
+        close_signal = isclowstime(df,current_side)
         if close_signal:
             close_position(symbol=symbol)
             print("포지션 종료 성공")
@@ -217,7 +220,10 @@ for i in range(time_range):
         print(f'결정 포지션 : {position}')
 
         if position == "Long":
-            stop_loss = set_sl(df,position)
+
+            # 스탑 로스는 오더 주문에서 설정
+            # stop_loss = set_sl(df,position)
+
             # 주문 생성 함수 호출
             current_price = get_current_price(symbol=symbol)
 
@@ -236,7 +242,7 @@ for i in range(time_range):
                 print(f"주문 성공: {order_response}")
 
         elif position == "Short":
-            stop_loss = set_sl(df,position)
+            # stop_loss = set_sl(df,position)
             # 주문 생성 함수 호출
             current_price = get_current_price(symbol=symbol)
 

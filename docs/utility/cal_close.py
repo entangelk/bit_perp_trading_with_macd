@@ -1,24 +1,39 @@
-def isclowstime(df):
+def isclowstime(df,side):
     # 초기 매도 신호 설정
     close_signal = False
     reason = ""
 
-    # ADX가 하락 중이고 MACD가 활성화된 경우 - 복수 매도 조건
-    if df['adx'].iloc[-1] < df['adx'].iloc[-2] and df['macd'].iloc[-1] > 0:
-        # ADX가 상승 신호로 변환될 때까지 MACD와 RSI 신호를 wait 상태로 전환
-        wait = df['adx'].iloc[-1] < df['adx'].max()
+
+    # ADX 플래그 설정: 이전 값보다 작아지면 False, 커지면 True
+    adx_flag = df['ADX'].iloc[-1] > df['ADX'].iloc[-2]
+
+    if adx_flag:  # ADX 플래그가 True일 때만 매도 조건 확인
+        # Long 포지션인 경우
+        if side == 'Long':
+            # 복수 매도 조건: ADX, MACD 상승, RSI SMA 상승 추세
+            if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] > 0:
+                if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
+                   (df['macd'].iloc[-1] > df['macd'].iloc[-2]) and \
+                   (df['rsi_sma'].iloc[-1] > df['rsi_sma'].iloc[-2]):  # RSI SMA 상승 추세
+                    close_signal = True
+                    reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 상승 추세"
         
-        # 매도 조건: ADX, MACD, RSI 이평선의 최대값 도달
-        if df['adx'].iloc[-1] >= df['adx'].max() and \
-           df['macd'].iloc[-1] >= df['macd'].max() and \
-           df['rsi_ma'].iloc[-1] >= df['rsi_ma'].max():
-            close_signal = True
-            reason = "복수 매도 조건 - ADX, MACD, RSI 이평선 최대값 도달"
+        # Short 포지션인 경우
+        elif side == 'Short':
+            # 복수 매도 조건: ADX, MACD 상승, RSI SMA 하락 추세
+            if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] < 0:
+                if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
+                   (df['macd'].iloc[-1] < df['macd'].iloc[-2]) and \
+                   (df['rsi_sma'].iloc[-1] < df['rsi_sma'].iloc[-2]):  # RSI SMA 하락 추세
+                    close_signal = True
+                    reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 하락 추세"
+
+
 
     # 단독 매도 조건
-    elif (df['rsi'].iloc[-1] < 20 or df['rsi'].iloc[-1] > 80) or \
+    if (df['rsi'].iloc[-1] < 20 or df['rsi'].iloc[-1] > 80) or \
          (df['macd'].iloc[-1] > df['macd_limit'].iloc[-1]) or \
-         (df['adx'].iloc[-1] >= 60):
+         (df['ADX'].iloc[-1] >= 60):
         close_signal = True
         reason = "단독 매도 조건 - RSI 임계값 초과, MACD 라인 오버, 또는 ADX 60 이상"
 

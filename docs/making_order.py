@@ -211,12 +211,18 @@ def set_tp_sl(symbol, stop_loss,tp_rate,current_price,side):
     try:
         # TP 및 SL 가격 계산
         tp_price = None
-        sl_price = stop_loss
+        # sl_price = stop_loss
+        sl_price = None
 
         if side == 'Long':
-            tp_price = current_price + (current_price - stop_loss)*tp_rate 
+            sl_price = current_price + stop_loss 
         else:
-            tp_price = current_price - (current_price + stop_loss)*tp_rate
+            sl_price = current_price - stop_loss
+
+        if side == 'Long':
+            tp_price = current_price + tp_rate 
+        else:
+            tp_price = current_price - tp_rate
             
 
         server_time = get_server_time()
