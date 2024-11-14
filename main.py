@@ -101,6 +101,7 @@ signal_save_list = [None, None, None]
 first_time_run_flag = True
 signal_save_flag = False
 save_signal = None
+adx_flag_counter = 0
 
 # while True:
 test_time = 8
@@ -202,10 +203,21 @@ for i in range(time_range):
         (current_side == 'Short' and position == 'Long'):
             close_position(symbol=symbol)
 
+        # 조건에 의한 adx 상승까지 waiting flag 설정
+        adx_flag = False
 
-        close_signal = False
-        close_signal = isclowstime(df,current_side)
+        adx_flag = df['ADX'].iloc[-1] > df['ADX'].iloc[-2]
+
+
+        if adx_flag:
+            adx_flag_counter += 1
+            if adx_flag_counter >= 1:
+                close_signal = False
+                close_signal = isclowstime(df,current_side)
+        
         if close_signal:
+            adx_flag_counter = 0
+            adx_flag = False
             close_position(symbol=symbol)
             print("포지션 종료 성공")
         else:

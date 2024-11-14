@@ -4,29 +4,24 @@ def isclowstime(df,side):
     reason = ""
 
 
-    # ADX 플래그 설정: 이전 값보다 작아지면 False, 커지면 True
-    adx_flag = df['ADX'].iloc[-1] > df['ADX'].iloc[-2]
-
-    if adx_flag:  # ADX 플래그가 True일 때만 매도 조건 확인
-        # Long 포지션인 경우
-        if side == 'Long':
-            # 복수 매도 조건: ADX, MACD 상승, RSI SMA 상승 추세
-            if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] > 0:
-                if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
-                   (df['macd'].iloc[-1] > df['macd'].iloc[-2]) and \
-                   (df['rsi_sma'].iloc[-1] > df['rsi_sma'].iloc[-2]):  # RSI SMA 상승 추세
-                    close_signal = True
-                    reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 상승 추세"
-        
-        # Short 포지션인 경우
-        elif side == 'Short':
-            # 복수 매도 조건: ADX, MACD 상승, RSI SMA 하락 추세
-            if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] < 0:
-                if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
-                   (df['macd'].iloc[-1] < df['macd'].iloc[-2]) and \
-                   (df['rsi_sma'].iloc[-1] < df['rsi_sma'].iloc[-2]):  # RSI SMA 하락 추세
-                    close_signal = True
-                    reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 하락 추세"
+    if side == 'Long':
+        # 복수 매도 조건: ADX, MACD 상승, RSI SMA 상승 추세
+        if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] > 0:
+            if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
+                (df['macd'].iloc[-1] > df['macd'].iloc[-2]) and \
+                (df['rsi_sma'].iloc[-1] > df['rsi_sma'].iloc[-2]):  # RSI SMA 상승 추세
+                close_signal = True
+                reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 상승 추세"
+    
+    # Short 포지션인 경우
+    elif side == 'Short':
+        # 복수 매도 조건: ADX, MACD 상승, RSI SMA 하락 추세
+        if df['ADX'].iloc[-1] < df['ADX'].iloc[-2] and df['macd'].iloc[-1] < 0:
+            if (df['ADX'].iloc[-1] > df['ADX'].iloc[-2]) and \
+                (df['macd'].iloc[-1] < df['macd'].iloc[-2]) and \
+                (df['rsi_sma'].iloc[-1] < df['rsi_sma'].iloc[-2]):  # RSI SMA 하락 추세
+                close_signal = True
+                reason = "복수 매도 조건 - ADX, MACD 상승 및 RSI SMA 하락 추세"
 
 
 
