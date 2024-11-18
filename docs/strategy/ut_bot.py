@@ -33,11 +33,12 @@ def calculate_ut_bot_signal(df, a=4):
 
     # 신호 결정 (EMA 제거)
     last_close = df['close'].iloc[-1]
+    last_ema = df['ema'].iloc[-1]  # 사전 계산된 ema 사용
     signal = None
 
-    if last_close > xATRTrailingStop:
+    if last_close > xATRTrailingStop and last_ema > xATRTrailingStop:
         signal = 'Long'
-    elif last_close < xATRTrailingStop:
+    elif last_close < xATRTrailingStop and last_ema < xATRTrailingStop:
         signal = 'Short'
 
     return signal

@@ -96,7 +96,6 @@ leverage_response = set_leverage(symbol, leverage)
 if leverage_response is None:
     print("레버리지 설정 실패. 주문 생성을 중단합니다.")
 
-start_triger = None
 signal_save_list = [None, None, None]
 first_time_run_flag = True
 signal_save_flag = False
@@ -149,13 +148,15 @@ for i in range(time_range):
     # None일 경우 이전에 저장된 save_signal 값을 그대로 유지
 
     print(f"현재 save_signal: {save_signal}")
+    print(f"현재 position: {position}")
+
 
     # 조건 확인 및 유효 신호 확인
     if start_signal is not None and start_signal != 'Reset' and position is None:
         for signal in reversed(signal_save_list):
             if signal == start_signal:
                 position = save_signal
-                print(f"유효 신호 감지: Position '{position}' 후 Start Signal '{start_triger}' 발생")
+                print(f"유효 신호 감지: Position '{position}' 후 Start Signal '{save_signal}' 발생")
                 break
             elif position == 'Long' and signal == 'Short':
                 position = None

@@ -27,6 +27,11 @@ def cal_position(set_timevalue):
     position_dict['ut bot'] = calculate_ut_bot_signal(df)
     position_dict['macd stg'] = macd_stg(df)
 
+    print(f'Flow Line : {position_dict["Flow Line"]}')
+    print(f'ut bot : {position_dict["ut bot"]}')
+    print(f'macd stg : {position_dict["macd stg"]}')
+
+
     # None을 제외한 'Long', 'Short' 포지션의 개수를 계산
     long_count = sum(1 for pos in position_dict.values() if pos == 'Long')
     short_count = sum(1 for pos in position_dict.values() if pos == 'Short')

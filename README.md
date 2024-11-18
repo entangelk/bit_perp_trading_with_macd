@@ -11,29 +11,14 @@ MACD를 활용, RSI도 활용
 
 
 ## 해야할일
-1. 지속 추세 매매에 대한 기준 sl 설정 필요
 
-## 지표 선별 작업 필요
-### 신호 감지
-1. ut bot : 4, 100
-2. macd 전략 : 4,100,21
-3. follow line : 100,21,1
-4. ADX and DI : 14,20
-    * 기준 20
-
-토요일,일요일같은 횡보장에서의 판별이 필요함.
-
-DI의 교차, ut bot이 메인 시그널?
-
-adx값이 증가할떄만?
-
-dax가 하락하고 있을때, 20% 같은 정적 sl 설정
-
-dax가 상승하고 있을때, dax의 변곡점?
-
-정리하자.
-(https://docs.google.com/presentation/d/18RYC6-jbd7dBVGmWDHZy-pM9PH_qMX73KTXyKD-5sIQ/edit#slide=id.p)
-
-
-### 거짓 신호 판별
-1. 베어트랩 방지 - 2b reversal pattern
+1. 코드 디버깅 : 스타트 시그널 신호 유지 되고 있음 고쳐야함. adx_di.py
+2. ut bot 시그널이 돌파가 아닌 유지로 되어있음. 고쳐야함
+```
+Bybit 서버에서 가져온 최신 데이터가 데이터베이스에 업데이트되었습니다: {'timestamp': datetime.datetime(2024, 11, 18, 9, 35), 'open': 92099.5, 'high': 92101.4, 'low': 92088.0, 'close': 92088.1, 'volume': 1.908}
+Flow Line : None
+ut bot : Long
+macd stg : None
+현재 save_signal: Short
+현재 position: Long
+```
