@@ -29,7 +29,7 @@ def flow_line(df, UseATRfilter=True):
                     position = 'Short'
 
         # 이전 Follow Line 값을 업데이트
-        if follow_line_value is not None:
-            previous_follow_line = follow_line_value
+        # if follow_line_value is not None:
+        #     previous_follow_line = follow_line_value
 
     return position
