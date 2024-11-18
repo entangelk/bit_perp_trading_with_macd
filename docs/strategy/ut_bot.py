@@ -7,7 +7,6 @@ def calculate_ut_bot_signal(df, a=4):
     Parameters:
         df (DataFrame): 사전 계산된 지표를 포함한 DataFrame.
         a (float): 트레일링 스탑 민감도 값.
-        atr_period (int): ATR 계산에 사용되는 기간.
 
     Returns:
         str: 'Long', 'Short', 또는 None
@@ -32,14 +31,13 @@ def calculate_ut_bot_signal(df, a=4):
         else:
             xATRTrailingStop = close_curr + nLoss
 
-    # 신호 결정
+    # 신호 결정 (EMA 제거)
     last_close = df['close'].iloc[-1]
-    last_ema = df['ema'].iloc[-1]  # 사전 계산된 ema 사용
     signal = None
 
-    if last_close > xATRTrailingStop and last_ema > xATRTrailingStop:
+    if last_close > xATRTrailingStop:
         signal = 'Long'
-    elif last_close < xATRTrailingStop and last_ema < xATRTrailingStop:
+    elif last_close < xATRTrailingStop:
         signal = 'Short'
 
     return signal

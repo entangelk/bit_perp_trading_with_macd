@@ -108,4 +108,7 @@ def process_chart_data(set_timevalue):
     # 필요없는 중간 계산 열 삭제
     df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)
 
+    length = 15  # ZLMA에서 사용할 기간 (필요 시 변경 가능)
+    df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
+
     return df

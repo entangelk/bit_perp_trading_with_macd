@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 초기 설정
 symbol = "BTCUSDT"
-leverage = 100
+leverage = 1
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
 tp_rate = 10000
@@ -53,8 +53,8 @@ while get_time_block(server_time, time_interval) != get_time_block(last_time, ti
     last_time, server_time = chart_update(set_timevalue,symbol)  # 차트 업데이트 함수 호출
     last_time = last_time['timestamp'].astimezone(timezone.utc)  # last_time을 UTC로 변환
     server_time = datetime.fromtimestamp(server_time, timezone.utc)  # server_time을 UTC로 변환
-    # time.sleep(60)  # 1분 대기 (API 요청 빈도 조절)
-    time.sleep(1)
+    time.sleep(60)  # 1분 대기 (API 요청 빈도 조절)
+    # time.sleep(1)
 
 print(f"{set_timevalue} 차트 업데이트 완료. 서버 시간과 일치합니다.")
 
@@ -185,11 +185,6 @@ for i in range(time_range):
 
         print(f"현재 포지셔닝 중입니다. Pnl : {total_pnl}")
 
-        # 포지션 종료 조건 달성시 포지셔닝 종료
-        # 여기 부분부터 제작 진행해야됨!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        ##############################################################
-        # 제작할꺼, 스탑로스, 포지셔닝 종료 조건 함수 만들기, 백테스팅
-
         current_amount,current_side,current_avgPrice = get_position_amount(symbol)
 
         # 포지션 값 설정
@@ -222,7 +217,6 @@ for i in range(time_range):
             print("포지션 종료 성공")
         else:
             print("최적 포지션 미도달, Stay")
-        ######################################################################
     else:
 
         # 세이브된 시그널과 포지션이 서로 다를 경우 주문 생성 중지
