@@ -1,5 +1,3 @@
-import numpy as np
-
 def calculate_ut_bot_signal(df, a=4):
     """
     UT Bot Alerts 전략을 구현하여 단일 신호('Long', 'Short', None)만 생성.
