@@ -14,6 +14,7 @@ MACD를 활용, RSI도 활용
 
 1. 코드 디버깅 : 스타트 시그널 신호 유지 되고 있음 고쳐야함. adx_di.py
 2. ut bot 시그널이 돌파가 아닌 유지로 되어있음. 고쳐야함
+3. start_signal_final_check 로직 적용시켜야함
 ```
 Bybit 서버에서 가져온 최신 데이터가 데이터베이스에 업데이트되었습니다: {'timestamp': datetime.datetime(2024, 11, 18, 9, 35), 'open': 92099.5, 'high': 92101.4, 'low': 92088.0, 'close': 92088.1, 'volume': 1.908}
 Flow Line : None

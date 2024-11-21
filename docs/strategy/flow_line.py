@@ -1,4 +1,4 @@
-def calculate_follow_line(df, UseATRfilter=True):
+def flow_line(df, UseATRfilter=True):
     # Follow Line 계산
     if df['close'].iloc[-1] > df['BBUpper'].iloc[-1]:  # 상한선 돌파
         FollowLine = (
