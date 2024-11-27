@@ -1,57 +1,27 @@
 import pandas as pd
 import ta  # 기술적 지표 라이브러리
-from pymongo import MongoClient
 import numpy as np
 
-def process_chart_data(set_timevalue):
-
-    # MongoDB에 접속
-    mongoClient = MongoClient("mongodb://localhost:27017")
-    database = mongoClient["bitcoin"]
-
-    # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
-    if set_timevalue == '1m':
-        chart_collection = database['chart_1m']
-    elif set_timevalue == '3m':
-        chart_collection = database['chart_3m']
-    elif set_timevalue == '5m':
-        chart_collection = database["chart_5m"]
-    elif set_timevalue == '15m':
-        chart_collection = database['chart_15m']
-    elif set_timevalue == '1h':
-        chart_collection = database['chart_1h']
-    elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
-        chart_collection = database['chart_30d']
-    else:
-        raise ValueError(f"Invalid time value: {set_timevalue}")
-
-
-
-
-    # 최신 데이터 200개만 가져오기 (timestamp 내림차순 정렬)
-    data_cursor = chart_collection.find().sort("timestamp", -1).limit(300)
-
-    # MongoDB 데이터 DataFrame으로 변환
-    data_list = list(data_cursor)
-    df = pd.DataFrame(data_list)
-
-    # 타임스탬프를 datetime 형식으로 변환
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-    # 불필요한 ObjectId 필드 제거
-    if '_id' in df.columns:
-        df.drop('_id', axis=1, inplace=True)
-
-    # 인덱스를 타임스탬프로 설정
-    df.set_index('timestamp', inplace=True)
-
-    # 시간순으로 정렬 (오름차순)
-    df.sort_index(inplace=True)
+def process_chart_data(df):
 
     # 1. MACD (Moving Average Convergence Divergence)
-    df['macd'] = ta.trend.macd(df['close'])
-    df['macd_signal'] = ta.trend.macd_signal(df['close'])
-    df['macd_diff'] = ta.trend.macd_diff(df['close'])
+    # SMA 초기값을 사용하는 EMA 함수
+    def ema_with_sma_init(series, period):
+        sma = series.rolling(window=period, min_periods=period).mean()
+        ema = series.ewm(span=period, adjust=False).mean()
+        ema[:period] = sma[:period]  # 초기값을 SMA로 설정
+        return ema
+
+    # MACD 계산
+    fast_period = 12
+    slow_period = 26
+    signal_period = 9
+
+    df['EMA_fast'] = ema_with_sma_init(df['close'], fast_period)
+    df['EMA_slow'] = ema_with_sma_init(df['close'], slow_period)
+    df['macd'] = df['EMA_fast'] - df['EMA_slow']
+    df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
+    df['macd_diff'] = df['macd'] - df['macd_signal']
 
 
     # 1++ MACD stragy 용 계산 (사용자 정의 파라미터 적용)
@@ -64,51 +34,95 @@ def process_chart_data(set_timevalue):
     df['macd_signal_stg'] = ta.trend.ema_indicator(df['macd'], window=macd_length)
     df['macd_diff_stg'] = df['macd'] - df['macd_signal']
 
+    # Wilder 방식 스무딩 함수
+    def wilder_smoothing(series, period):
+        return series.ewm(alpha=1/period, adjust=False).mean()
+
     # 2. RSI (Relative Strength Index)
-    df['rsi'] = ta.momentum.rsi(df['close'])
+    df['rsi'] = ta.momentum.rsi(df['close'], window=14).fillna(50)
 
-    # RSI의 21기간 SMA
-    rsi_period = 21
-    df['rsi_sma'] = df['rsi'].rolling(window=rsi_period).mean()
+    # Bollinger Bands
+    df['BBUpper'] = (df['close'].rolling(window=21).mean() + 
+                    df['close'].rolling(window=21).std() * 1.00).bfill()
+    df['BBLower'] = (df['close'].rolling(window=21).mean() - 
+                    df['close'].rolling(window=21).std() * 1.00).bfill()
 
-    # ATR(10-period) 및 ATR(200-period) 계산
-    df['atr_10'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=10)
-    df['atr_100'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=100)
-    df['atr_200'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=200)
+    # Moving Averages
+    df['maFast'] = df['close'].rolling(window=50).mean().bfill()
+    df['maSlow'] = df['close'].rolling(window=200).mean().bfill()
 
-    # Follow Line 계산을 위한 Bollinger Bands 추가 계산
-    BBperiod = 21  # 기본 설정 값, 필요 시 변경 가능
-    BBdeviation = 1.00  # 기본 편차 값
-    df['BBUpper'] = ta.trend.sma_indicator(df['close'], window=BBperiod) + df['close'].rolling(window=BBperiod).std() * BBdeviation
-    df['BBLower'] = ta.trend.sma_indicator(df['close'], window=BBperiod) - df['close'].rolling(window=BBperiod).std() * BBdeviation
 
-    # 6. 이동 평균 (Moving Average Cloud)
-    maFLength = 50  # Fast MA
-    maSLength = 200  # Slow MA
-    df['maFast'] = ta.trend.sma_indicator(df['close'], maFLength)
-    df['maSlow'] = ta.trend.sma_indicator(df['close'], maSLength)
+    # 2. RSI의 21기간 SMA
+    df['rsi_sma'] = df['rsi'].rolling(window=21).mean()
 
-    # 7. ADX, DI+ 및 DI- 계산
+    # 3. ATR 계산
+    tr = np.maximum(df['high'] - df['low'], 
+                    np.maximum(abs(df['high'] - df['close'].shift(1)), 
+                            abs(df['low'] - df['close'].shift(1))))
+    df['atr_10'] = wilder_smoothing(tr, 10)
+    df['atr_100'] = wilder_smoothing(tr, 100)
+    df['atr_200'] = wilder_smoothing(tr, 200)
+
+
+
+
+
+    # adx di
     adx_period = 14
+
+    # 조정치 정의
+    adjust_di_plus = 0  # DI+에 추가할 조정치
+    adjust_di_minus = 0  # DI-에 추가할 조정치
+
+    # 1. True Range (TR) 계산
     df['TR'] = np.maximum(df['high'] - df['low'], 
-                          np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                                     abs(df['low'] - df['close'].shift(1))))
+                        np.maximum(abs(df['high'] - df['close'].shift(1)), 
+                                    abs(df['low'] - df['close'].shift(1))))
+    df['TR'] = df['TR'].fillna(0)
+
+    # 2. Directional Movement (DM+ 및 DM-) 계산
     df['DM+'] = np.where((df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
-                         np.maximum(df['high'] - df['high'].shift(1), 0), 0)
+                        np.maximum(df['high'] - df['high'].shift(1), 0), 0)
     df['DM-'] = np.where((df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
-                         np.maximum(df['low'].shift(1) - df['low'], 0), 0)
+                        np.maximum(df['low'].shift(1) - df['low'], 0), 0)
 
-    df['ATR'] = df['TR'].rolling(window=adx_period, min_periods=1).mean()
-    df['DI+'] = 100 * (df['DM+'].rolling(window=adx_period, min_periods=1).mean() / df['ATR'])
-    df['DI-'] = 100 * (df['DM-'].rolling(window=adx_period, min_periods=1).mean() / df['ATR'])
+    # 동시 활성화 방지
+    df.loc[df['DM+'] > 0, 'DM-'] = 0
+    df.loc[df['DM-'] > 0, 'DM+'] = 0
+    df[['DM+', 'DM-']] = df[['DM+', 'DM-']].fillna(0)
 
-    df['DX'] = 100 * abs(df['DI+'] - df['DI-']) / (df['DI+'] + df['DI-'])
-    df['ADX'] = df['DX'].rolling(window=adx_period, min_periods=1).mean()
+    # 3. Wilder 스무딩
+    def wilder_smoothing(series, period):
+        smoothed = [series.iloc[0]]  # 초기값
+        for i in range(1, len(series)):
+            prev = smoothed[-1]
+            current = series.iloc[i]
+            smoothed.append(prev - (prev / period) + current)
+        return pd.Series(smoothed, index=series.index)
+
+    df['Smoothed_TR'] = wilder_smoothing(df['TR'], adx_period)
+    df['Smoothed_DM+'] = wilder_smoothing(df['DM+'], adx_period)
+    df['Smoothed_DM-'] = wilder_smoothing(df['DM-'], adx_period)
+
+    # 4. DI+ 및 DI- 계산 (조정치 추가)
+    df['DI+'] = np.where(df['Smoothed_TR'] > 0, 100 * (df['Smoothed_DM+'] / df['Smoothed_TR']), 0) + adjust_di_plus
+    df['DI-'] = np.where(df['Smoothed_TR'] > 0, 100 * (df['Smoothed_DM-'] / df['Smoothed_TR']), 0) + adjust_di_minus
+
+    # 5. DX 계산
+    df['DX'] = np.where((df['DI+'] + df['DI-']) > 0,
+                        100 * abs(df['DI+'] - df['DI-']) / (df['DI+'] + df['DI-']),
+                        0)
+
+    # 6. ADX 계산
+    df['ADX'] = df['DX'].rolling(window=adx_period).mean()
+
+
+
 
     # 필요없는 중간 계산 열 삭제
     df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)
 
-    length = 1
+    length = 4
     df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
 
     return df

@@ -1,11 +1,15 @@
 from tqdm import tqdm
 from docs.get_chart import chart_update, chart_update_one
+from docs.cal_chart import process_chart_data
 from docs.cal_position import cal_position
 from docs.get_current import fetch_investment_status
 from docs.making_order import set_leverage, create_order_with_tp_sl, close_position,get_position_amount
+from docs.strategy.adx_di import adx_di_signal
+
 from docs.utility.get_sl import set_sl
 from docs.utility.cal_close import isclowstime
 from docs.current_price import get_current_price
+from docs.utility.load_data import load_data
 from datetime import datetime, timezone, timedelta
 import time
 import json
@@ -101,10 +105,15 @@ signal_save_flag = True
 save_signal = None
 adx_flag_counter = 0
 
+# 백 테스팅 용 차트 로딩 변수 (period : 로딩 갯수, last_day : 최신으로부터 몇개 전 데이터)
+period=300
+last_day=1
+back_testing_count = 300
+
 # while True:
-test_time = 8
-time_range = int(test_time * 60 / time_interval)
-for i in range(time_range):
+for i in range(back_testing_count):
+
+
     # 현재 서버 시간으로 다음 실행 시간을 계산
     server_time = datetime.now(timezone.utc)
     next_run_time = get_next_run_time(server_time, time_interval)
@@ -112,6 +121,7 @@ for i in range(time_range):
 
     print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
 
+    '''
     if wait_seconds > 0:
         with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
             for _ in range(int(wait_seconds)):
@@ -123,9 +133,29 @@ for i in range(time_range):
     # 차트 업데이트
     chart_update_one(set_timevalue, symbol)
     time.sleep(1)
+    '''
+
+    # 차트 데이터 로딩
+    df_rare_chart = load_data(set_timevalue=set_timevalue,period=period,last_day=(back_testing_count-last_day))
+    back_testing_count -= 1
+    
+    # 차트 분석 함수 적용
+    df_calculated = process_chart_data(df_rare_chart)
+
+    # 포지션 오픈 시그널 확인 (Long, Short, Reset, None)
+    start_signal = adx_di_signal(df_calculated)
 
     # position_dict 값 계산
-    start_signal, position, df = cal_position(set_timevalue)
+    position, df = cal_position(df=df_calculated)
+
+    pass
+
+
+
+'''
+    # 신호 나왔을 때, 1틱만 더 기다려보자. 시-종 값 비교해서 50% 이상 반대로 떨어지면 반대 신호 진입 500원
+
+
 
     # save_position_signal = position
 
@@ -282,3 +312,4 @@ for i in range(time_range):
             time.sleep(update_interval)
             pbar.update(update_interval)
 
+'''

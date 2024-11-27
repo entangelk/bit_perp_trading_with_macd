@@ -2,12 +2,12 @@ def flow_line(df, UseATRfilter=True):
     # Follow Line 계산
     if df['close'].iloc[-1] > df['BBUpper'].iloc[-1]:  # 상한선 돌파
         FollowLine = (
-            df['low'].iloc[-1] - df['atr'].iloc[-1] if UseATRfilter else df['low'].iloc[-1]
+            df['low'].iloc[-1] - df['atr_100'].iloc[-1] if UseATRfilter else df['low'].iloc[-1]
         )
         trend = 1  # 상승 추세
     elif df['close'].iloc[-1] < df['BBLower'].iloc[-1]:  # 하한선 돌파
         FollowLine = (
-            df['high'].iloc[-1] + df['atr'].iloc[-1] if UseATRfilter else df['high'].iloc[-1]
+            df['high'].iloc[-1] + df['atr_100'].iloc[-1] if UseATRfilter else df['high'].iloc[-1]
         )
         trend = -1  # 하락 추세
     else:

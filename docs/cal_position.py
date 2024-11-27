@@ -1,39 +1,27 @@
-# import sys
-# import os
-# # 현재 파일이 위치한 경로의 상위 디렉토리를 모듈 경로에 추가
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-
-
-from docs.cal_chart import process_chart_data
-from docs.strategy.ut_bot import calculate_ut_bot_signal
+from docs.strategy.ut_bot import calculate_ut_bot_signals
 from docs.strategy.flow_line import flow_line
-from docs.strategy.adx_di import adx_di_signal
 from docs.strategy.macd_stg import macd_stg
 
 
 
-def cal_position(set_timevalue):
-    # 기본 사용 지표 계산
-    df = process_chart_data(set_timevalue)
+def cal_position(df):
     
-    # 포지션 오픈 시그널 확인
-    start_signal = adx_di_signal(df)
+
 
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
 
     # 각 전략의 포지션 확인
     position_dict['Flow Line'] = flow_line(df)
-    position_dict['ut bot'] = calculate_ut_bot_signal(df)
+    position_dict['ut bot'] = calculate_ut_bot_signals(df)
     position_dict['macd stg'] = macd_stg(df)
 
-    print(f'Flow Line : {position_dict["Flow Line"]}')
-    print(f'ut bot : {position_dict["ut bot"]}')
-    print(f'macd stg : {position_dict["macd stg"]}')
-
+    print(df.index[-1])
+    print(f'Flow Line : {position_dict["Flow Line"]}, ut bot : {position_dict["ut bot"]}, macd stg : {position_dict["macd stg"]}')
 
     # None을 제외한 'Long', 'Short' 포지션의 개수를 계산
     long_count = sum(1 for pos in position_dict.values() if pos == 'Long')
+
     short_count = sum(1 for pos in position_dict.values() if pos == 'Short')
 
     # 가장 많은 포지션을 반환
@@ -45,7 +33,7 @@ def cal_position(set_timevalue):
         final_position = None  # 동률이거나 모든 값이 None일 경우
 
     # 최종 포지션 딕셔너리와 결과 반환
-    return start_signal,final_position,df
+    return final_position,df
 
 
 
