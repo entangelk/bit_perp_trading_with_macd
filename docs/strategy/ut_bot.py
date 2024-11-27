@@ -77,7 +77,28 @@ if __name__ == "__main__":
 
 
 
+'''
+트레일링 스탑 및 신호 계산 과정:
+이전 트레일링 스탑 초기화 및 갱신
 
+xATRTrailingStop은 이전 값(prev_stop)을 이용해 갱신됩니다.
+초기 xATRTrailingStop은 NaN 값에서 시작하고, 특정 규칙에 따라 갱신되죠.
+트레일링 스탑의 갱신 규칙:
+
+상승세: 현재 종가 > 이전 트레일링 스탑인 경우
+curr_stop = max(prev_stop, curr_close - nLoss)
+하락세: 현재 종가 <= 이전 트레일링 스탑인 경우
+curr_stop = min(prev_stop, curr_close + nLoss)
+신호 발생 조건:
+
+Long 신호 조건:
+이전 EMA <= 이전 트레일링 스탑 이고
+현재 EMA > 현재 트레일링 스탑 이며
+현재 종가 > 현재 트레일링 스탑일 때
+Long 신호가 발생
+Short 신호 조건:
+반대로, Short 신호는 EMA와 트레일링 스탑이 반대 조건을 만족할 때 발생
+'''
 
 
 
