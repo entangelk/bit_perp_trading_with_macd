@@ -3,7 +3,6 @@ from docs.strategy.flow_line import flow_line
 from docs.strategy.macd_stg import macd_stg
 
 
-
 def cal_position(df):
     
 
@@ -14,6 +13,10 @@ def cal_position(df):
     # 각 전략의 포지션 확인
     position_dict['Flow Line'] = flow_line(df)
     position_dict['ut bot'] = calculate_ut_bot_signals(df)
+
+    from docs.strategy.ut_bot_copy import ut_bot_alerts
+    position_dict['ut bot'] = ut_bot_alerts(df,atr_period=100,factor=4)
+
     position_dict['macd stg'] = macd_stg(df)
 
     print(df.index[-1])
