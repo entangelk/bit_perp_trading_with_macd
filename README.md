@@ -23,3 +23,7 @@ macd stg : None
 현재 save_signal: Short
 현재 position: Long
 ```
+
+1시간 트렌드라인 유티봇이 기준
+동일 방향이면 길게 이건 어떻게 보지?
+반대 방향이면 짧게 500원 정도.

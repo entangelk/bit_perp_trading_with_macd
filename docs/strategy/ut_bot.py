@@ -1,77 +1,121 @@
 import pandas as pd
 
+def calculate_atr_trailing_stop(src, nLoss, prev_src, prev_stop):
+    """
+    ATR 기반 트레일링 스탑 계산
+    """
+    # 상승 → 하락 전환
+    if (src - nLoss) < prev_stop and prev_src > prev_stop:
+        return (src + nLoss + prev_stop) / 2  # 완화된 전환
+    
+    # 하락 → 상승 전환
+    elif (src + nLoss) > prev_stop and prev_src < prev_stop:
+        return (src - nLoss + prev_stop) / 2  # 완화된 전환
+    
+    # 상승 추세 유지
+    elif src > prev_stop:
+        return max(prev_stop, src - nLoss)
+    
+    # 하락 추세 유지
+    elif src < prev_stop:
+        return min(prev_stop, src + nLoss)
+    
+    # 변동 없음
+    else:
+        return prev_stop
+
+
+def calculate_initial_stop(df, nLoss):
+    if len(df) < 10:
+        raise ValueError("DataFrame must contain at least 10 rows for initial stop calculation.")
+
+    # 마지막 10개 close 값 가져오기
+    recent_closes = df['close'].iloc[-10:]  # Ensure slicing works correctly
+
+    # 상승 추세라면 max를 기준으로, 하락 추세라면 min을 기준으로 초기값 설정
+    if recent_closes.iloc[-1] > recent_closes.iloc[0]:  # 상승 추세
+        baseline_close = recent_closes.max()
+        return baseline_close - nLoss
+    else:  # 하락 추세
+        baseline_close = recent_closes.min()
+        return baseline_close + nLoss
+
+def calculate_trailing_stops(df, a=4, debug=False):
+    nLoss = a * df['atr_100'].iloc[0]  # ATR multiplier
+    trailing_stops = [0.0] * len(df)  # Initialize the list for trailing stops
+
+    # 초기값 설정
+    trailing_stops[9] = calculate_initial_stop(df.iloc[:10], nLoss)
+
+    # 순차적으로 계산
+    for i in range(10, len(df)):
+        curr_close = df['close'].iloc[i]
+        prev_close = df['close'].iloc[i - 1]
+        prev_stop = trailing_stops[i - 1]
+        trailing_stops[i] = calculate_atr_trailing_stop(curr_close, nLoss, prev_close, prev_stop)
+
+        if debug:
+            print(f"Row {i}: src: {curr_close}, prev_src: {prev_close}, prev_stop: {prev_stop}, new_stop: {trailing_stops[i]}")
+
+    return trailing_stops
+
 def calculate_ut_bot_signals(df, a=4, debug=False):
-    """
-    UT Bot Alerts 시그널 계산 (Python 구현). 마지막 시그널만 계산.
+    if len(df) < 10:
+        raise ValueError("DataFrame must contain at least 10 rows for calculations.")
 
-    Parameters:
-        df (DataFrame): OHLC 데이터와 ATR 및 EMA 컬럼을 포함한 DataFrame. 최소 3개의 데이터 필요.
-        a (float): 민감도 값 (기본값: 4).
-        debug (bool): 디버깅 정보 출력 여부.
-
-    Returns:
-        str: 'Long', 'Short', 또는 None.
-    """
-
-
-    # ATR 및 민감도 계산
+    # ATR multiplier
     nLoss = a * df['atr_100'].iloc[-1]
 
-    # 이전 및 현재 값 설정
+    # Calculate trailing stops for the entire DataFrame
+    trailing_stops = calculate_trailing_stops(df, a, debug=debug)
+
+    # 현재와 이전 값을 추출
     prev_close = df['close'].iloc[-2]
     curr_close = df['close'].iloc[-1]
     prev_ema = df['ema'].iloc[-2]
     curr_ema = df['ema'].iloc[-1]
+    prev_stop = trailing_stops[-2]
+    curr_stop = trailing_stops[-1]
 
-    # 이전 트레일링 스탑 계산
-    prev_stop = (
-        df['close'].iloc[-3] - nLoss
-        if df['close'].iloc[-3] > df['close'].iloc[-4]
-        else df['close'].iloc[-3] + nLoss
-    )
+    # 조건 계산
+    condition1 = prev_ema <= prev_stop
+    condition2 = curr_ema > curr_stop
+    condition3 = curr_close > curr_stop
 
-    # 현재 트레일링 스탑 계산
-    curr_stop = (
-        max(prev_stop, curr_close - nLoss)
-        if curr_close > prev_stop
-        else min(prev_stop, curr_close + nLoss)
-    )
-
-    # 디버깅 정보 출력
+    # Debugging output
     if debug:
-        print(f"Previous Stop: {prev_stop}")
-        print(f"Current Stop: {curr_stop}")
-        print(f"Prev EMA vs Stop: {prev_ema} {'>' if prev_ema > prev_stop else '<='} {prev_stop}")
-        print(f"Curr EMA vs Stop: {curr_ema} {'>' if curr_ema > curr_stop else '<='} {curr_stop}")
-        print(f"Price vs Stop: {curr_close} {'>' if curr_close > curr_stop else '<='} {curr_stop}")
+        print("=== DEBUG INFO ===")
+        print(f"Prev Stop: {prev_stop}, Curr Stop: {curr_stop}")
+        print(f"Prev EMA: {prev_ema}, Curr EMA: {curr_ema}")
+        print(f"Condition 1 (Prev EMA <= Prev Stop): {condition1}")
+        print(f"Condition 2 (Curr EMA > Curr Stop): {condition2}")
+        print(f"Condition 3 (Curr Close > Curr Stop): {condition3}")
+        print("==================")
 
-    # Long 신호 조건
-    if prev_ema <= prev_stop and curr_ema > curr_stop and curr_close > curr_stop:
+    # 신호 생성
+    if condition1 and condition2 and condition3:
         return 'Long'
-
-    # Short 신호 조건
-    elif prev_ema >= prev_stop and curr_ema < curr_stop and curr_close < curr_stop:
+    elif not condition1 and not condition2 and not condition3:
         return 'Short'
-
-    # 신호 없음
     return None
 
 
+
 if __name__ == "__main__":
-    import pandas as pd
+    # 샘플 데이터
     data = {
-        'close': [91841.2, 91762.9, 92070.0, 92260.9],
-        'high': [91968.1, 91863.3, 92070.1, 92291.6],
-        'low': [91770.6, 91717.8, 91601.0, 91972.9],
-        'open': [91770.6, 91841.2, 91762.9, 92070.0],
-        'ema': [91841.2, 91762.9, 92070.0, 92260.9],
-        'atr_100': [324.005822, 322.220764, 323.689556, 323.639661]
+        'close': [91841.2, 91762.9, 92070.0, 92260.9, 92150.8, 92310.4, 92420.7, 92250.5, 92050.3, 92150.0, 92260.0],
+        'ema': [91841.2, 91762.9, 92070.0, 92270.0, 92160.0, 92320.0, 92430.0, 92260.0, 92080.0, 92170.0, 92280.0],
+        'atr_100': [324.0] * 11
     }
     df = pd.DataFrame(data)
 
-    # 신호 계산
-    df_with_signals = calculate_ut_bot_signals(df, a=4,debug=True)
-    print(df_with_signals[['close', 'xATRTrailingStop', 'signal']])
+    # Calculate signals
+    signal = calculate_ut_bot_signals(df, a=4, debug=True)
+    print(f"Signal: {signal}")
+
+
+
 
 
 

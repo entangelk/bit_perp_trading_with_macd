@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 초기 설정
 symbol = "BTCUSDT"
-leverage = 1
+leverage = 30
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
 tp_rate = 10000
@@ -108,7 +108,7 @@ adx_flag_counter = 0
 # 백 테스팅 용 차트 로딩 변수 (period : 로딩 갯수, last_day : 최신으로부터 몇개 전 데이터)
 period=300
 last_day=1
-back_testing_count = 300
+back_testing_count = 320
 
 # while True:
 for i in range(back_testing_count):

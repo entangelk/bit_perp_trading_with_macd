@@ -56,15 +56,20 @@ def process_chart_data(df):
     df['rsi_sma'] = df['rsi'].rolling(window=21).mean()
 
     # 3. ATR 계산
-    tr = np.maximum(df['high'] - df['low'], 
-                    np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                            abs(df['low'] - df['close'].shift(1))))
-    df['atr_10'] = wilder_smoothing(tr, 10)
-    df['atr_100'] = wilder_smoothing(tr, 100)
-    df['atr_200'] = wilder_smoothing(tr, 200)
+    df['TR'] = np.maximum(df['high'] - df['low'], 
+                        np.maximum(abs(df['high'] - df['close'].shift(1)), 
+                                    abs(df['low'] - df['close'].shift(1))))
 
+    # 기존 TR을 활용하여 ATR 계산
+    df['atr_10'] = wilder_smoothing(df['TR'], 10)
+    df['atr_100'] = wilder_smoothing(df['TR'], 100)
+    df['atr_200'] = wilder_smoothing(df['TR'], 200)
+   
 
-
+    # 3. Supertrend 계산
+    multiplier = 4
+    df['UpperBand'] = (df['high'] + df['low']) / 2 - multiplier * df['atr_100']
+    df['LowerBand'] = (df['high'] + df['low']) / 2 + multiplier * df['atr_100']
 
 
     # adx di
@@ -74,10 +79,7 @@ def process_chart_data(df):
     adjust_di_plus = 0  # DI+에 추가할 조정치
     adjust_di_minus = 0  # DI-에 추가할 조정치
 
-    # 1. True Range (TR) 계산
-    df['TR'] = np.maximum(df['high'] - df['low'], 
-                        np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                                    abs(df['low'] - df['close'].shift(1))))
+
     df['TR'] = df['TR'].fillna(0)
 
     # 2. Directional Movement (DM+ 및 DM-) 계산
@@ -122,7 +124,15 @@ def process_chart_data(df):
     # 필요없는 중간 계산 열 삭제
     df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)
 
-    length = 4
-    df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
+    # Length 설정
+    length = 1
+
+    # Pine Script와 동일한 동작을 구현
+    if length == 1:
+        # 기간이 1이면 EMA 대신 close 값을 그대로 사용
+        df['ema'] = df['close']
+    else:
+        # 기간이 1이 아니면 ta 라이브러리의 EMA 계산
+        df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
 
     return df

@@ -1,7 +1,7 @@
-from docs.strategy.ut_bot import calculate_ut_bot_signals
+# from docs.strategy.ut_bot import calculate_ut_bot_signals
 from docs.strategy.flow_line import flow_line
 from docs.strategy.macd_stg import macd_stg
-
+from docs.strategy.supertrend import supertrend
 
 def cal_position(df):
     
@@ -12,15 +12,19 @@ def cal_position(df):
 
     # 각 전략의 포지션 확인
     position_dict['Flow Line'] = flow_line(df)
-    position_dict['ut bot'] = calculate_ut_bot_signals(df)
 
-    from docs.strategy.ut_bot_copy import ut_bot_alerts
-    position_dict['ut bot'] = ut_bot_alerts(df,atr_period=100,factor=4)
+
+    # 파이썬의 한계로 유티봇 퇴출
+    # position_dict['ut bot'] = calculate_ut_bot_signals(df)
+    # from docs.strategy.ut_bot_copy import ut_bot_alerts
+    # position_dict['ut bot'] = ut_bot_alerts(df,atr_period=100,factor=4)
+
+    position_dict['super trend'] = supertrend(df)
 
     position_dict['macd stg'] = macd_stg(df)
 
     print(df.index[-1])
-    print(f'Flow Line : {position_dict["Flow Line"]}, ut bot : {position_dict["ut bot"]}, macd stg : {position_dict["macd stg"]}')
+    print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}, macd stg : {position_dict["macd stg"]}')
 
     # None을 제외한 'Long', 'Short' 포지션의 개수를 계산
     long_count = sum(1 for pos in position_dict.values() if pos == 'Long')
