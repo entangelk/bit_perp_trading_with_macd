@@ -22,15 +22,16 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 초기 설정
 symbol = "BTCUSDT"
-leverage = 30
+leverage = 5
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
 tp_rate = 10000
 stop_loss = 500
 
-
+'''
 # 초기 차트 업데이트
 last_time, server_time = chart_update(set_timevalue,symbol)
+
 
 # last_time과 server_time이 튜플의 요소로 반환되었다고 가정
 # UTC로 변환된 시간 사용
@@ -68,7 +69,7 @@ def get_next_run_time(current_time, interval_minutes):
     next_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minute_block)
     # return next_time + timedelta(seconds=10)
     return next_time
-
+'''
 def start_signal_final_check(start_signal, df):
     """
     최종 신호 검증 함수.
@@ -108,12 +109,12 @@ adx_flag_counter = 0
 # 백 테스팅 용 차트 로딩 변수 (period : 로딩 갯수, last_day : 최신으로부터 몇개 전 데이터)
 period=300
 last_day=1
-back_testing_count = 320
+back_testing_count = 290
 
 # while True:
 for i in range(back_testing_count):
 
-
+    '''
     # 현재 서버 시간으로 다음 실행 시간을 계산
     server_time = datetime.now(timezone.utc)
     next_run_time = get_next_run_time(server_time, time_interval)
@@ -121,7 +122,7 @@ for i in range(back_testing_count):
 
     print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
 
-    '''
+    
     if wait_seconds > 0:
         with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
             for _ in range(int(wait_seconds)):
@@ -146,7 +147,7 @@ for i in range(back_testing_count):
     start_signal = adx_di_signal(df_calculated)
 
     # position_dict 값 계산
-    position, df = cal_position(df=df_calculated)
+    # position, df = cal_position(df=df_calculated)
 
     pass
 

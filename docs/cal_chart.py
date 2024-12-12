@@ -60,16 +60,38 @@ def process_chart_data(df):
                         np.maximum(abs(df['high'] - df['close'].shift(1)), 
                                     abs(df['low'] - df['close'].shift(1))))
 
+    '''
     # 기존 TR을 활용하여 ATR 계산
-    df['atr_10'] = wilder_smoothing(df['TR'], 10)
-    df['atr_100'] = wilder_smoothing(df['TR'], 100)
-    df['atr_200'] = wilder_smoothing(df['TR'], 200)
-   
+    # df['atr_10'] = wilder_smoothing(df['TR'], 10)
+    # df['atr_100'] = wilder_smoothing(df['TR'], 100)
+    # df['atr_200'] = wilder_smoothing(df['TR'], 200)
+
+   # 기존 TR을 활용하여 SMA 방식으로 ATR 계산
+    df['atr_10'] = df['TR'].rolling(window=10).mean()
+    df['atr_100'] = df['TR'].rolling(window=100).mean()
+    df['atr_200'] = df['TR'].rolling(window=200).mean()
 
     # 3. Supertrend 계산
     multiplier = 4
-    df['UpperBand'] = (df['high'] + df['low']) / 2 - multiplier * df['atr_100']
-    df['LowerBand'] = (df['high'] + df['low']) / 2 + multiplier * df['atr_100']
+    # df['UpperBand'] = (df['high'] + df['low']) / 2 - multiplier * df['atr_100']
+    # df['LowerBand'] = (df['high'] + df['low']) / 2 + multiplier * df['atr_100']
+
+
+    # ATR 계산 후 UpperBand 및 LowerBand 계산
+    df['UpperBand'] = df['close'] + (multiplier * df['atr_100'])
+    df['LowerBand'] = df['close'] - (multiplier * df['atr_100'])
+
+    # 상한선과 하한선 갱신 로직
+    df['UpperBand'] = np.where(df['close'].shift(1) > df['UpperBand'].shift(1), 
+                                np.maximum(df['UpperBand'], df['UpperBand'].shift(1)), 
+                                df['UpperBand'])
+
+    df['LowerBand'] = np.where(df['close'].shift(1) < df['LowerBand'].shift(1), 
+                                np.minimum(df['LowerBand'], df['LowerBand'].shift(1)), 
+                                df['LowerBand'])
+
+    print(f"upper : {df['UpperBand'].tail(1).values[0]}, lower : {df['LowerBand'].tail(1).values[0]}")
+    '''
 
 
     # adx di

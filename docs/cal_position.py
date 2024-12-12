@@ -10,6 +10,7 @@ def cal_position(df):
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
 
+    '''
     # 각 전략의 포지션 확인
     position_dict['Flow Line'] = flow_line(df)
 
@@ -38,9 +39,9 @@ def cal_position(df):
         final_position = 'Short'
     else:
         final_position = None  # 동률이거나 모든 값이 None일 경우
-
+    '''
     # 최종 포지션 딕셔너리와 결과 반환
-    return final_position,df
+    return df
 
 
 

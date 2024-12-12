@@ -10,10 +10,6 @@ def supertrend(df):
     Returns:
         str: 'Long', 'Short', or None.
     """
-    # 마지막 두 개의 상태를 추적
-    if len(df) < 2:
-        raise ValueError("Not enough data to calculate signals.")
-
     # 이전 값과 현재 값의 상태에 따라 트렌드 갱신
     prev_upper = df['UpperBand'].iloc[-2]
     prev_lower = df['LowerBand'].iloc[-2]
@@ -23,12 +19,29 @@ def supertrend(df):
     curr_lower = df['LowerBand'].iloc[-1]
     curr_close = df['close'].iloc[-1]
 
+    # 상한선과 하한선 갱신
+    if prev_close > prev_upper:
+        curr_upper = max(curr_upper, prev_upper)
+    else:
+        curr_upper = curr_upper  # 그대로 유지
+
+    if prev_close < prev_lower:
+        curr_lower = min(curr_lower, prev_lower)
+    else:
+        curr_lower = curr_lower  # 그대로 유지
+
+    # 트렌드 변수 초기화
+    trend = None  # 초기값 설정
+
     # 판별 조건
-    if curr_close > prev_upper and prev_close <= prev_upper:
-        return "Long"
-    elif curr_close < prev_lower and prev_close >= prev_lower:
-        return "Short"
-    return None
+    if curr_close > curr_upper and prev_close <= curr_upper:
+        trend = "Long"
+    elif curr_close < curr_lower and prev_close >= curr_lower:
+        trend = "Short"
+    else:
+        trend = None  # 추가적으로 포지션이 없을 경우 처리
+
+    return trend
 
 
 # 밴드 값이 다른가? 데이터들이 조금씩 다름 이걸 맞춰야함
