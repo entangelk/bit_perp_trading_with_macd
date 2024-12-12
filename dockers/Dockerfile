@@ -19,8 +19,8 @@ ENV JAVA_HOME /usr/lib/jvm/java-17-openjdk-amd64
 # 작업 디렉토리 설정
 WORKDIR /app
 
-ARG BRANCH_NAME=dibidibi
-ARG DIR_NAME=dibidibi
+ARG BRANCH_NAME=trading_bot
+ARG DIR_NAME=trading_bot
 
 # Clone the Git repository. Here we dynamically specify the repository name using the variable defined earlier.
 RUN git clone https://github.com/entangelk/bit_perp_trading_with_macd ${DIR_NAME}

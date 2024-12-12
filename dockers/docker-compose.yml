@@ -1,13 +1,14 @@
 version: '3.10.7'
 services:  
   mongodb:
-    image: trading_mongo
-    container_name: ${CONTAINER_PREFIX}_mongodb_summery
+    image: mongo:7  # MongoDB 공식 이미지 사용
+    container_name: ${CONTAINER_PREFIX}_mongodb_summary
     restart: always
     ports:
       - 27017:27017
     networks:
       - app-network  
+
 networks:
   app-network:
-    driver: bridge      
+    driver: bridge
