@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.10.7
 
 # OpenJDK 설치 (예시로 OpenJDK 17을 설치)
 RUN apt-get update && \
