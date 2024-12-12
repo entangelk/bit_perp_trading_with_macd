@@ -28,3 +28,4 @@ selenium
 urllib3
 scrapy
 webdriver_manager
+python-dotenv
