@@ -20,10 +20,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 설정값
 # take_profit,stop_loss 전부 달러 기준임.
+# usdt_amount는 0~1 계정 내 사용할 수 있는 USDT양의 퍼센테이지로 설정 1이면 전체체
 TRADING_CONFIG = {
     'symbol': 'BTCUSDT',
     'leverage': 5,
-    'usdt_amount': 10,
+    'usdt_amount': 1,
     'set_timevalue': '5m',
     'take_profit': 500,
     'stop_loss': 500

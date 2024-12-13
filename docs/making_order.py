@@ -5,6 +5,7 @@ import hashlib
 import hmac
 from dotenv import load_dotenv
 import math
+import ccxt
 
 # 환경 변수 로드
 load_dotenv()
@@ -12,6 +13,17 @@ load_dotenv()
 # Bybit API 키와 시크릿 가져오기
 BYBIT_ACCESS_KEY = os.getenv("BYBIT_ACCESS_KEY")
 BYBIT_SECRET_KEY = os.getenv("BYBIT_SECRET_KEY")
+
+# Bybit 거래소 객체 생성
+bybit = ccxt.bybit({
+    'apiKey': BYBIT_ACCESS_KEY,
+    'secret': BYBIT_SECRET_KEY,
+    'options': {
+        'defaultType': 'swap',  # 무기한 선물 (perpetual swap) 용
+        'recvWindow': 10000  # recv_window를 10초로 증가
+    },
+    'enableRateLimit': True  # API 호출 속도 제한 관리 활성화
+})
 
 # Bybit API 서명 생성 함수
 def create_signature(api_key, secret, params):
@@ -156,8 +168,14 @@ def calculate_amount(usdt_amount, leverage, current_price):
 
 def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit):
     try:
+        balance = bybit.fetch_balance()
+
+        current_have = balance['USDT']['free']
+        
+        order_amount = current_have*usdt_amount
+
         # 외부에서 전달된 현재 가격을 기준으로 수량 계산
-        amount = calculate_amount(usdt_amount, leverage, current_price)
+        amount = calculate_amount(order_amount, leverage, current_price)
         if amount is None:
             print("BTC 수량이 유효하지 않습니다. 주문을 생성하지 않습니다.")
             return None
@@ -379,5 +397,5 @@ if __name__ == "__main__":
     # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
-    # get_position_amount(symbol)
-    set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)
+    get_position_amount(symbol)
+    # set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)
