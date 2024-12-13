@@ -6,7 +6,7 @@
 
 from docs.cal_chart import process_chart_data
 from docs.strategy.ut_bot import calculate_ut_bot_signal
-from docs.strategy.flow_line import flow_line
+from docs.strategy.follow_line import flow_line
 from docs.strategy.adx_di import adx_di_signal
 from docs.strategy.macd_stg import macd_stg
 

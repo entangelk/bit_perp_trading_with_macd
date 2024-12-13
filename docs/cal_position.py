@@ -1,37 +1,40 @@
 # from docs.strategy.ut_bot import calculate_ut_bot_signals
-from docs.strategy.flow_line import flow_line
+from docs.strategy.follow_line import follow_line
 from docs.strategy.macd_stg import macd_stg
 from docs.strategy.supertrend import supertrend
 
 def cal_position(df):
+    # 팔로우라인 계산
+    df = follow_line(df)
     
-
-
+    # 슈퍼트랜드 계산
+    df = supertrend(df)
+    
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
-
-    '''
-    # 각 전략의 포지션 확인
-    position_dict['Flow Line'] = flow_line(df)
-
-
-    # 파이썬의 한계로 유티봇 퇴출
-    # position_dict['ut bot'] = calculate_ut_bot_signals(df)
-    # from docs.strategy.ut_bot_copy import ut_bot_alerts
-    # position_dict['ut bot'] = ut_bot_alerts(df,atr_period=100,factor=4)
-
-    position_dict['super trend'] = supertrend(df)
-
-    position_dict['macd stg'] = macd_stg(df)
-
+    
+    # 이전 포지션과 비교하여 변화가 있을 때만 시그널 생성
+    fl_position_changed = df['fl_position'] != df['fl_position'].shift(1)
+    st_position_changed = df['st_position'] != df['st_position'].shift(1)
+    
+    # 포지션이 변경된 경우에만 딕셔너리에 저장
+    if fl_position_changed.iloc[-1]:
+        position_dict['Flow Line'] = df['fl_position'].iloc[-1]
+    else:
+        position_dict['Flow Line'] = None
+        
+    if st_position_changed.iloc[-1]:
+        position_dict['super trend'] = df['st_position'].iloc[-1]
+    else:
+        position_dict['super trend'] = None
+    
     print(df.index[-1])
-    print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}, macd stg : {position_dict["macd stg"]}')
-
+    print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}')
+    
     # None을 제외한 'Long', 'Short' 포지션의 개수를 계산
     long_count = sum(1 for pos in position_dict.values() if pos == 'Long')
-
     short_count = sum(1 for pos in position_dict.values() if pos == 'Short')
-
+    
     # 가장 많은 포지션을 반환
     if long_count > short_count:
         final_position = 'Long'
@@ -39,9 +42,11 @@ def cal_position(df):
         final_position = 'Short'
     else:
         final_position = None  # 동률이거나 모든 값이 None일 경우
-    '''
-    # 최종 포지션 딕셔너리와 결과 반환
-    return df
+    
+    
+
+
+    return final_position, df
 
 
 

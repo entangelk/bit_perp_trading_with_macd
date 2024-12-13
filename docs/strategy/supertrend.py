@@ -1,69 +1,64 @@
 import pandas as pd
+import numpy as np
 
 def supertrend(df):
     """
-    Determine Supertrend signal based on Trend changes.
-
-    Parameters:
-        df (DataFrame): DataFrame with 'UpperBand' and 'LowerBand'.
-
-    Returns:
-        str: 'Long', 'Short', or None.
+    Supertrend 전략 계산
+    :param df: DataFrame (close, atr_100이 포함되어야 함)
+    :return: DataFrame with supertrend signals
     """
-    # 이전 값과 현재 값의 상태에 따라 트렌드 갱신
-    prev_upper = df['UpperBand'].iloc[-2]
-    prev_lower = df['LowerBand'].iloc[-2]
-    prev_close = df['close'].iloc[-2]
-
-    curr_upper = df['UpperBand'].iloc[-1]
-    curr_lower = df['LowerBand'].iloc[-1]
-    curr_close = df['close'].iloc[-1]
-
-    # 상한선과 하한선 갱신
-    if prev_close > prev_upper:
-        curr_upper = max(curr_upper, prev_upper)
+    # 소스는 close 사용
+    src = df['close']
+    atr = df['atr_100']  # 100기간 SMA ATR 사용
+    multiplier = 4
+    
+    # Basic Bands 계산
+    df['basic_upper'] = src - (multiplier * atr)
+    df['basic_lower'] = src + (multiplier * atr)
+    
+    # Final Bands 계산을 위한 초기화
+    df['up'] = df['basic_upper']
+    df['down'] = df['basic_lower']
+    
+    # Final Bands 계산
+    for i in range(1, len(df)):
+        if df['close'].iloc[i-1] > df['up'].iloc[i-1]:
+            df.loc[df.index[i], 'up'] = max(df['basic_upper'].iloc[i], df['up'].iloc[i-1])
+        else:
+            df.loc[df.index[i], 'up'] = df['basic_upper'].iloc[i]
+            
+        if df['close'].iloc[i-1] < df['down'].iloc[i-1]:
+            df.loc[df.index[i], 'down'] = min(df['basic_lower'].iloc[i], df['down'].iloc[i-1])
+        else:
+            df.loc[df.index[i], 'down'] = df['basic_lower'].iloc[i]
+    
+    # Trend 초기화
+    df['st_trend'] = 0
+    
+    # 첫 번째 트렌드 설정
+    if df['close'].iloc[0] > df['down'].iloc[0]:
+        df.loc[df.index[0], 'st_trend'] = 1
     else:
-        curr_upper = curr_upper  # 그대로 유지
-
-    if prev_close < prev_lower:
-        curr_lower = min(curr_lower, prev_lower)
-    else:
-        curr_lower = curr_lower  # 그대로 유지
-
-    # 트렌드 변수 초기화
-    trend = None  # 초기값 설정
-
-    # 판별 조건
-    if curr_close > curr_upper and prev_close <= curr_upper:
-        trend = "Long"
-    elif curr_close < curr_lower and prev_close >= curr_lower:
-        trend = "Short"
-    else:
-        trend = None  # 추가적으로 포지션이 없을 경우 처리
-
-    return trend
-
-
-# 밴드 값이 다른가? 데이터들이 조금씩 다름 이걸 맞춰야함
-
-if __name__ == "__main__":
-    # Provided data
-    data = {
-        'timestamp': [
-            '2024-11-28 09:35:00', '2024-11-28 09:40:00', '2024-11-28 09:45:00',
-            '2024-11-28 09:50:00', '2024-11-28 09:55:00'
-        ],
-        'close': [95396.7, 95272.3, 95268.7, 95177.6, 95029.9],
-        'high': [95396.8, 95494.4, 95316.4, 95285.7, 95206.5],
-        'low': [95278.5, 95250.0, 95225.1, 95176.4, 94992.4],
-        'UpperBand': [96061.734976, 96098.820126, 95993.755925, 95951.197866, 95820.960387],
-        'LowerBand': [94613.565024, 94547.744075, 94510.902134, 94377.939613, 94191.736717]
-    }
-    df = pd.DataFrame(data)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.set_index('timestamp', inplace=True)
-
-    # Calculate Supertrend signals
-    signal = supertrend(df)
-    print(f"Latest Signal: {signal}")
-
+        df.loc[df.index[0], 'st_trend'] = -1
+    
+    # Trend 계산
+    for i in range(1, len(df)):
+        prev_trend = df['st_trend'].iloc[i-1]
+        
+        if prev_trend == -1 and df['close'].iloc[i] > df['down'].iloc[i-1]:
+            curr_trend = 1
+        elif prev_trend == 1 and df['close'].iloc[i] < df['up'].iloc[i-1]:
+            curr_trend = -1
+        else:
+            curr_trend = prev_trend
+            
+        df.loc[df.index[i], 'st_trend'] = curr_trend
+    
+    # Position 시그널 계산
+    df['st_position'] = None
+    trend_change = df['st_trend'] != df['st_trend'].shift(1)
+    
+    df.loc[(trend_change) & (df['st_trend'] == 1), 'st_position'] = 'Long'
+    df.loc[(trend_change) & (df['st_trend'] == -1), 'st_position'] = 'Short'
+    
+    return df

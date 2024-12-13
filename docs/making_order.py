@@ -154,7 +154,7 @@ def calculate_amount(usdt_amount, leverage, current_price):
         print(f"amount 계산 중 오류 발생: {e}")
         return None
 
-def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,tp_rate):
+def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit):
     try:
         # 외부에서 전달된 현재 가격을 기준으로 수량 계산
         amount = calculate_amount(usdt_amount, leverage, current_price)
@@ -197,7 +197,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
 
             if avgPrice:
                 # TP/SL 설정
-                set_tp_sl(symbol,stop_loss,tp_rate,current_price,side)
+                set_tp_sl(symbol,stop_loss,take_profit,current_price,side)
             return order_data
         else:
             print(f"시장가 주문 생성 중 오류 발생: {response.text}")
@@ -207,7 +207,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
         print(f"주문 생성 중 오류 발생: {e}")
         return None
 
-def set_tp_sl(symbol, stop_loss,tp_rate,current_price,side):
+def set_tp_sl(symbol, stop_loss,take_profit,current_price,side):
     try:
         # TP 및 SL 가격 계산
         tp_price = None
@@ -220,9 +220,9 @@ def set_tp_sl(symbol, stop_loss,tp_rate,current_price,side):
             sl_price = current_price - stop_loss
 
         if side == 'Long':
-            tp_price = current_price + tp_rate 
+            tp_price = current_price + take_profit 
         else:
-            tp_price = current_price - tp_rate
+            tp_price = current_price - take_profit
             
 
         server_time = get_server_time()
@@ -374,10 +374,10 @@ if __name__ == "__main__":
     initial_usdt_amount = 1  # 초기 투자금
     side = 'Buy'
     avgPrice=62404.70
-    tp_rate = 0.2
+    take_profit = 0.2
     sl_rate = 0.2
     # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
     # get_position_amount(symbol)
-    set_tp_sl(symbol, side, avgPrice, leverage, tp_rate, sl_rate)
+    set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)

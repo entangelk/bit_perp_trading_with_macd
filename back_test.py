@@ -21,7 +21,7 @@ symbol = "BTCUSDT"
 leverage = 1
 usdt_amount = 10  # 초기 투자금
 set_timevalue = '5m'
-tp_rate = 10000
+take_profit = 10000
 stop_loss = 500
 
 
@@ -240,7 +240,7 @@ for i in range(time_range):
                 leverage=leverage,  # 레버리지 100배
                 current_price=current_price,  # 현재 가격
                 stop_loss = stop_loss,
-                tp_rate = tp_rate
+                take_profit = take_profit
             )
             if order_response is None:
                 print("주문 생성 실패.")
@@ -259,7 +259,7 @@ for i in range(time_range):
                 leverage=leverage,  # 레버리지 100배
                 current_price=current_price,  # 현재 가격
                 stop_loss = stop_loss,
-                tp_rate = tp_rate
+                take_profit = take_profit
             )
             if order_response is None:
                 print("주문 생성 실패.")

@@ -60,7 +60,6 @@ def process_chart_data(df):
                         np.maximum(abs(df['high'] - df['close'].shift(1)), 
                                     abs(df['low'] - df['close'].shift(1))))
 
-    '''
     # 기존 TR을 활용하여 ATR 계산
     # df['atr_10'] = wilder_smoothing(df['TR'], 10)
     # df['atr_100'] = wilder_smoothing(df['TR'], 100)
@@ -71,6 +70,7 @@ def process_chart_data(df):
     df['atr_100'] = df['TR'].rolling(window=100).mean()
     df['atr_200'] = df['TR'].rolling(window=200).mean()
 
+    ''' 수퍼트랜드 계산 파일로 이동동
     # 3. Supertrend 계산
     multiplier = 4
     # df['UpperBand'] = (df['high'] + df['low']) / 2 - multiplier * df['atr_100']
