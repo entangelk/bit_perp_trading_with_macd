@@ -6,6 +6,7 @@ import hmac
 from dotenv import load_dotenv
 import math
 import ccxt
+from datetime import datetime
 
 # 환경 변수 로드
 load_dotenv()
@@ -25,6 +26,17 @@ bybit = ccxt.bybit({
     'enableRateLimit': True  # API 호출 속도 제한 관리 활성화
 })
 
+def sync_time():
+    try:
+        server_time = int(bybit.fetch_time())
+        local_time = int(datetime.now().timestamp() * 1000)
+        time_offset = server_time - local_time
+        bybit.options['timeDifference'] = time_offset
+        return time_offset
+    except Exception as e:
+        print(f"서버 시간 동기화 중 오류 발생: {e}")
+        return None
+    
 # Bybit API 서명 생성 함수
 def create_signature(api_key, secret, params):
     query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
@@ -54,6 +66,7 @@ def get_server_time():
 
 # 현재 레버리지 조회 함수
 def get_leverage(symbol, category='linear'):
+    sync_time()  # 추가
     url = "https://api.bybit.com/v5/position/list"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -91,6 +104,7 @@ def get_leverage(symbol, category='linear'):
 
 # 레버리지 설정 함수 (V5 API)
 def set_leverage(symbol, leverage, category='linear'):
+    sync_time()  # 추가
     # 현재 레버리지 확인
     current_leverage_data = get_leverage(symbol, category)
 
@@ -167,6 +181,7 @@ def calculate_amount(usdt_amount, leverage, current_price):
         return None
 
 def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit):
+    sync_time()  # 추가
     try:
         balance = bybit.fetch_balance()
 
@@ -226,6 +241,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
         return None
 
 def set_tp_sl(symbol, stop_loss,take_profit,current_price,side):
+    sync_time()  # 추가
     try:
         # TP 및 SL 가격 계산
         tp_price = None
@@ -286,6 +302,7 @@ def set_tp_sl(symbol, stop_loss,take_profit,current_price,side):
 
 # 현재 포지션 정보 조회 함수 (Bybit V5 API)
 def get_position_amount(symbol):
+    sync_time()  # 추가
     try:
         url = "https://api.bybit.com/v5/position/list"
         timestamp = int(time.time() * 1000)
@@ -332,6 +349,7 @@ def get_position_amount(symbol):
         return None
 
 def close_position(symbol):
+    sync_time()  # 추가
     try:
         # 현재 포지션의 방향, 수량 조회
         amount,side,avgPrice = get_position_amount(symbol)
@@ -388,14 +406,14 @@ def close_position(symbol):
 if __name__ == "__main__":
     # 초기 설정
     symbol = "BTCUSDT"
-    leverage = 100
+    leverage = 5
     initial_usdt_amount = 1  # 초기 투자금
     side = 'Buy'
     avgPrice=62404.70
     take_profit = 0.2
     sl_rate = 0.2
-    # set_leverage(symbol, leverage)
+    set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
-    get_position_amount(symbol)
+    # get_position_amount(symbol)
     # set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)

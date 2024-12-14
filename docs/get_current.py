@@ -33,11 +33,13 @@ def sync_time():
         print(f"서버 시간 동기화 중 오류 발생: {e}")
         return None
 
-# 서버 시간 동기화 시도
-sync_time()
+
 
 def fetch_investment_status():
+
     try:
+        # 서버 시간 동기화 시도
+        sync_time()
         # 이전 거래 기록 가져오기
         ledger = bybit.fetch_ledger()
 

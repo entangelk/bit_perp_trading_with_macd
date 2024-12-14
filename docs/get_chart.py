@@ -29,6 +29,7 @@ bybit = ccxt.bybit({
     'enableRateLimit': True
 })
 
+
 # Bybit 서버 시간 가져오기
 server_time = bybit.fetch_time() / 1000
 server_datetime = datetime.utcfromtimestamp(server_time)

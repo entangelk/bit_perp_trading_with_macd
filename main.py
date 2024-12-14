@@ -24,7 +24,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 TRADING_CONFIG = {
     'symbol': 'BTCUSDT',
     'leverage': 5,
-    'usdt_amount': 1,
+    'usdt_amount': 0.1,
     'set_timevalue': '5m',
     'take_profit': 500,
     'stop_loss': 500
