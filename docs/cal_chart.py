@@ -141,7 +141,9 @@ def process_chart_data(df):
     df['ADX'] = df['DX'].rolling(window=adx_period).mean()
 
 
-
+    # 7. DI 이동평균선 계산
+    df['DI+_MA7'] = df['DI+'].rolling(window=7).mean()
+    df['DI-_MA7'] = df['DI-'].rolling(window=7).mean()
 
     # 필요없는 중간 계산 열 삭제
     df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)

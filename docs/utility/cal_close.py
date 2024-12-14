@@ -19,4 +19,19 @@ def isclowstime(df, side):
     elif side == 'Short' and current_rsi <= 25:
         close_signal = True
 
+    # 현재와 이전 값을 가져와서 기울기 계산
+    if side == 'Long':
+        current_di = df['DI+_MA7'].iloc[-1]
+        prev_di = df['DI+_MA7'].iloc[-2]
+        # 기울기가 하락할 때 (현재 값이 이전 값보다 작을 때)
+        if current_di < prev_di:
+            close_signal = True
+    
+    elif side == 'Short':
+        current_di = df['DI-_MA7'].iloc[-1]
+        prev_di = df['DI-_MA7'].iloc[-2]
+        # 기울기가 하락할 때 (현재 값이 이전 값보다 작을 때)
+        if current_di < prev_di:
+            close_signal = True
+
     return close_signal
