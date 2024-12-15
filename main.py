@@ -26,7 +26,7 @@ TRADING_CONFIG = {
     'leverage': 5,
     'usdt_amount': 0.1,
     'set_timevalue': '5m',
-    'take_profit': 1000,
+    'take_profit': 500,
     'stop_loss': 500
 }
 
@@ -47,8 +47,8 @@ def get_next_run_time(current_time, interval_minutes):
     next_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minute_block)
     return next_time
 
-def check_adx_di_trigger(df):
-    """ADX/DI 교차 트리거 체크"""
+def check_adx_di_trigger(df, threshold=2.5):  # threshold는 DI 간의 근접 정도를 정의
+    """ADX/DI 교차 또는 근접 트리거 체크"""
     current_di_plus = df['DI+'].iloc[-1]
     current_di_minus = df['DI-'].iloc[-1]
     prev_di_plus = df['DI+'].iloc[-2]
@@ -58,10 +58,14 @@ def check_adx_di_trigger(df):
     prev_adx = df['ADX'].iloc[-2]
     adx_avg = (current_adx + prev_adx) / 2
     
+    # 교차 체크
     di_cross = ((prev_di_plus < prev_di_minus and current_di_plus > current_di_minus) or 
                 (prev_di_plus > prev_di_minus and current_di_plus < current_di_minus))
     
-    if di_cross:
+    # 근접도 체크
+    di_close = abs(current_di_plus - current_di_minus) <= threshold
+    
+    if di_cross or di_close:
         cross_di_avg = (current_di_plus + current_di_minus) / 2
         return adx_avg < cross_di_avg
     return False
@@ -107,34 +111,40 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
 trigger_active = False
 trigger_count = 4
 
-def check_signals_with_trigger(df):
-    """트리거 신호 체크"""
-    global trigger_active, trigger_count
+def check_adx_di_trigger(df, threshold=2.5):
+    """ADX/DI 교차 또는 근접 트리거 체크 (롱/숏 구분)"""
+    current_di_plus = df['DI+'].iloc[-1]
+    current_di_minus = df['DI-'].iloc[-1]
+    prev_di_plus = df['DI+'].iloc[-2]
+    prev_di_minus = df['DI-'].iloc[-2]
     
-    current_cross = check_adx_di_trigger(df)
+    current_adx = df['ADX'].iloc[-1]
+    prev_adx = df['ADX'].iloc[-2]
+    adx_avg = (current_adx + prev_adx) / 2
     
-    if trigger_active:
-        current_adx = (df['ADX'].iloc[-1] + df['ADX'].iloc[-2]) / 2
-        current_di_avg = (df['DI+'].iloc[-1] + df['DI-'].iloc[-1]) / 2
-        
-        if current_cross and current_adx > current_di_avg:
-            trigger_active = False
-            trigger_count = 4
-            return False
-            
-        trigger_count -= 1
-        if trigger_count == 0:
-            trigger_active = False
-            trigger_count = 4
-            return False
-        return True
+    # DI 차이 계산
+    di_diff = current_di_plus - current_di_minus
+    prev_di_diff = prev_di_plus - prev_di_minus
     
-    if current_cross:
-        trigger_active = True
-        trigger_count = 4
-        return True
-            
-    return False
+    # 교차 또는 근접 여부 체크 및 방향 판단
+    long_signal = (
+        (prev_di_diff < 0 and di_diff > 0) or  # 상향 교차
+        (prev_di_diff < 0 and abs(di_diff) <= threshold)  # DI- 우세인 상태에서 근접
+    )
+    
+    short_signal = (
+        (prev_di_diff > 0 and di_diff < 0) or  # 하향 교차
+        (prev_di_diff > 0 and abs(di_diff) <= threshold)  # DI+ 우세인 상태에서 근접
+    )
+    
+    cross_di_avg = (current_di_plus + current_di_minus) / 2
+    adx_condition = adx_avg < cross_di_avg
+    
+    if long_signal and adx_condition:
+        return 'long'
+    elif short_signal and adx_condition:
+        return 'short'
+    return None
 
 def main():
     # 초기 설정
@@ -188,16 +198,21 @@ def main():
             
             # 포지션 시그널 계산
             position, df = cal_position(df=df_calculated)
-            isstart = check_signals_with_trigger(df)
-            
-            # DI 차이 검증
-            if position and isstart:
-                position = validate_di_difference(df, position)
-                
+            trigger_signal = check_adx_di_trigger(df)  # 'long', 'short', None 중 하나 반환
+
+            # 시그널 검증
+            if position and trigger_signal:
+                # position과 trigger_signal의 방향이 일치하는지 확인
+                if ((position == 'Long' and trigger_signal == 'long') or 
+                    (position == 'Short' and trigger_signal == 'short')):
+                    position = validate_di_difference(df, position)
+                else:
+                    position = None  # 방향이 불일치하면 시그널 무시
+
             # 포지션 관리
             balance, positions_json, ledger = fetch_investment_status()
             positions_flag = positions_json != '[]' and positions_json is not None
-            
+
             if positions_flag:
                 positions_data = json.loads(positions_json)
                 check_fee = float(positions_data[0]['info']['curRealisedPnl'])
@@ -217,7 +232,7 @@ def main():
             else:
                 if save_signal != position:
                     position = None
-                    
+                
                 print(f'결정 포지션 : {position}')
                 
                 if position in ['Long', 'Short']:
