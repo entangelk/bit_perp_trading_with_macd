@@ -24,7 +24,7 @@ TRADING_CONFIG = {
     'leverage': 5,
     'usdt_amount': 0.1,
     'set_timevalue': '5m',
-    'take_profit': 500,
+    'take_profit': 1000,
     'stop_loss': 500
 }
 
