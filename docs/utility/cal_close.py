@@ -1,6 +1,6 @@
 def isclowstime(df, side):
     """
-    RSI 기반 청산 조건 확인
+    RSI와 DI 이동평균선을 기반으로 포지션 청산 조건을 확인하는 함수
     :param df: DataFrame
     :param side: 현재 포지션 방향 ('Long' or 'Short')
     :return: bool (청산 여부)
@@ -19,19 +19,25 @@ def isclowstime(df, side):
     elif side == 'Short' and current_rsi <= 25:
         close_signal = True
 
-    # 현재와 이전 값을 가져와서 기울기 계산
+    # DI 이동평균선 기울기 확인
     if side == 'Long':
-        current_di = df['DI+_MA7'].iloc[-1]
-        prev_di = df['DI+_MA7'].iloc[-2]
-        # 기울기가 하락할 때 (현재 값이 이전 값보다 작을 때)
-        if current_di < prev_di:
+        current_di_plus = df['DI+_MA7'].iloc[-1]
+        prev_di_plus = df['DI+_MA7'].iloc[-2]
+        current_di_minus = df['DI-_MA7'].iloc[-1]
+        prev_di_minus = df['DI-_MA7'].iloc[-2]
+        
+        # DI+ 하락하고 DI-는 상승하는 경우에만 청산
+        if current_di_plus < prev_di_plus and current_di_minus >= prev_di_minus:
             close_signal = True
     
     elif side == 'Short':
-        current_di = df['DI-_MA7'].iloc[-1]
-        prev_di = df['DI-_MA7'].iloc[-2]
-        # 기울기가 하락할 때 (현재 값이 이전 값보다 작을 때)
-        if current_di < prev_di:
+        current_di_minus = df['DI-_MA7'].iloc[-1]
+        prev_di_minus = df['DI-_MA7'].iloc[-2]
+        current_di_plus = df['DI+_MA7'].iloc[-1]
+        prev_di_plus = df['DI+_MA7'].iloc[-2]
+        
+        # DI- 하락하고 DI+는 상승하는 경우에만 청산
+        if current_di_minus < prev_di_minus and current_di_plus >= prev_di_plus:
             close_signal = True
 
     return close_signal
