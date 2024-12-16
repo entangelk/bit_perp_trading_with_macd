@@ -179,7 +179,7 @@ def main():
             # 시간 동기화
             server_time = datetime.now(timezone.utc)
             next_run_time = get_next_run_time(server_time, TIME_VALUES[config['set_timevalue']])
-            wait_seconds = (next_run_time - server_time).total_seconds()
+            wait_seconds = (next_run_time - server_time).total_seconds() + 5 # 서버 렉 시간 고려 봉 마감 후 5초 진입입
             
             if wait_seconds > 0:
                 with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100) as pbar:
@@ -188,7 +188,7 @@ def main():
                         pbar.update(1)
             
             # 차트 데이터 업데이트
-            chart_update_one(config['set_timevalue'], config['symbol'])
+            result, update_server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
             df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
                                     period=period, 
                                     last_day=(back_testing_count-last_day))
@@ -284,14 +284,17 @@ def main():
                         position_first_count = 2
                         position_save = None
             
-            # 대기
-            with tqdm(total=270, desc="대기 중", ncols=100) as pbar:
-                for _ in range(270):
-                    time.sleep(1)
-                    pbar.update(1)
-                    
-            back_testing_count -= 1
-            save_signal = position
+            remaining_time = 270 - execution_time
+
+            # 남은 시간이 있다면 대기
+            if remaining_time > 0:
+                with tqdm(total=int(remaining_time), desc="대기 중", ncols=100) as pbar:
+                    for _ in range(int(remaining_time)):
+                        time.sleep(1)
+                        pbar.update(1)
+                                
+                        back_testing_count -= 1
+                        save_signal = position
             
     except Exception as e:
         print(f"오류 발생: {e}")

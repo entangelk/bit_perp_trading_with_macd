@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from pymongo import MongoClient
+import time
 
 # 환경 변수 로드
 load_dotenv()
@@ -110,68 +111,90 @@ def chart_update(update,symbol):
         raise ValueError(f"Invalid update value: {update}")
 
 
-def chart_update_one(update,symbol):
-    def fetch_latest_ohlcv_from_bybit_and_update_db(symbol, timeframe, collection):
-        """Bybit 서버에서 최신 OHLCV 데이터를 가져와 MongoDB에 업데이트하는 함수"""
-        try:
-            # Bybit에서 최신 1개 틱 데이터를 가져옴
-            ohlcv = bybit.fetch_ohlcv(symbol, timeframe, limit=1)
+def fetch_latest_ohlcv_and_update_db(symbol, timeframe, collection, max_check_time=240, check_interval=60):
+    start_time = time.time()
+    last_try_timestamp = None
+    
+    while (time.time() - start_time) < max_check_time:
+        # Bybit에서 최신 1개 틱 데이터를 가져옴
+        ohlcv = bybit.fetch_ohlcv(symbol, timeframe, limit=1)
+        latest_data = ohlcv[-1]
+        timestamp = latest_data[0]
+        dt_object = datetime.utcfromtimestamp(timestamp / 1000)  # UTC 시간으로 변환
+        
+        # 이전 시도와 같은 타임스탬프인지 확인
+        if last_try_timestamp == dt_object:
+            elapsed = time.time() - start_time
+            print(f"아직 새로운 데이터가 없습니다. 경과 시간: {elapsed:.0f}초")
+            time.sleep(check_interval)
+            continue
+        
+        last_try_timestamp = dt_object
+        
+        # 마지막 저장된 데이터와 비교
+        last_record = collection.find_one(sort=[("timestamp", -1)])
+        if last_record and last_record["timestamp"] >= dt_object:
+            elapsed = time.time() - start_time
+            print(f"더 최신 데이터를 기다리는 중... 경과 시간: {elapsed:.0f}초")
+            time.sleep(check_interval)
+            continue
+        
+        # 새로운 데이터인 경우 저장
+        data_dict = {
+            "timestamp": dt_object,
+            "open": latest_data[1],
+            "high": latest_data[2],
+            "low": latest_data[3],
+            "close": latest_data[4],
+            "volume": latest_data[5]
+        }
+        
+        # MongoDB에 데이터 저장
+        collection.update_one(
+            {"timestamp": dt_object}, 
+            {"$set": data_dict}, 
+            upsert=True
+        )
+        
+        print(f"새로운 데이터가 성공적으로 저장되었습니다: {data_dict}")
+        break
+
+def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
+    start_time = time.time()
+    server_time = datetime.utcnow()
+    
+    try:
+        # collection 매핑을 None 비교로 수정
+        collection = None
+        if update == '1m':
+            collection = chart_collection_1m
+        elif update == '3m':
+            collection = chart_collection_3m
+        elif update == '5m':
+            collection = chart_collection_5m
+        elif update == '15m':
+            collection = chart_collection_15m
             
-            # 가장 최근 데이터 추출
-            latest_data = ohlcv[-1]
-            timestamp = latest_data[0]
-            dt_object = datetime.utcfromtimestamp(timestamp / 1000)  # UTC 시간으로 변환
-            open_price = latest_data[1]
-            high_price = latest_data[2]
-            low_price = latest_data[3]
-            close_price = latest_data[4]
-            volume = latest_data[5]
-            
-            # 데이터를 딕셔너리 형태로 변환
-            data_dict = {
-                "timestamp": dt_object,
-                "open": open_price,
-                "high": high_price,
-                "low": low_price,
-                "close": close_price,
-                "volume": volume
-            }
-            
-            # MongoDB에 데이터 저장
-            collection.update_one({"timestamp": dt_object}, {"$set": data_dict}, upsert=True)
-            
-            print(f"Bybit 서버에서 가져온 최신 데이터가 데이터베이스에 업데이트되었습니다: {data_dict}")
-
-        except ccxt.BaseError as e:
-            print(f"Bybit API 오류 발생: {e}")
-
-        # 심볼 설정
-    symbol = symbol
-
-    if update == '1m':
-        # 1분봉 데이터 업데이트
-        fetch_latest_ohlcv_from_bybit_and_update_db(collection=chart_collection_1m, timeframe='1m', symbol=symbol)
-        return chart_collection_1m.find_one(sort=[("timestamp", -1)]), server_time
-
-    elif update == '3m':
-        # 3분봉 데이터 업데이트 (7일치)
-        minutes_per_3m = 3
-        limit_7d = (7 * 24 * 60) // minutes_per_3m
-        fetch_latest_ohlcv_from_bybit_and_update_db(collection=chart_collection_3m, timeframe='3m', symbol=symbol)
-        return chart_collection_3m.find_one(sort=[("timestamp", -1)]), server_time
-
-    elif update == '5m':
-        # 5분봉 (최근 1000틱 데이터 저장 및 업데이트)
-        fetch_latest_ohlcv_from_bybit_and_update_db(collection=chart_collection_5m, timeframe='5m', symbol=symbol)
-        return chart_collection_5m.find_one(sort=[("timestamp", -1)]), server_time
-
-    elif update == '15m':
-        # 15분봉 (최근 3500틱 데이터 저장 및 업데이트)
-        fetch_latest_ohlcv_from_bybit_and_update_db(collection=chart_collection_15m, timeframe='15m', symbol=symbol)
-        return chart_collection_15m.find_one(sort=[("timestamp", -1)]), server_time
-
-    else:
-        raise ValueError(f"Invalid update value: {update}")
+        if collection is None:
+            raise ValueError(f"Invalid update value: {update}")
+        
+        fetch_latest_ohlcv_and_update_db(
+            symbol=symbol,
+            timeframe=update,
+            collection=collection,
+            max_check_time=max_check_time,
+            check_interval=check_interval
+        )
+        
+        result = collection.find_one(sort=[("timestamp", -1)])
+        total_time = time.time() - start_time
+        
+        return result, server_time, total_time
+        
+    except Exception as e:
+        total_time = time.time() - start_time
+        print(f"오류 발생: {e}")
+        return None, server_time, total_time
 
 # 사용 예시
 if __name__ == "__main__":
