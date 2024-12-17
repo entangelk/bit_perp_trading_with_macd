@@ -19,6 +19,7 @@ def isclowstime(df, side):
     elif side == 'Short' and current_rsi <= 25:
         close_signal = True
 
+    '''
     # DI 이동평균선 기울기 확인
     if side == 'Long':
         current_di_plus = df['DI+_MA7'].iloc[-1]
@@ -39,5 +40,5 @@ def isclowstime(df, side):
         # DI- 하락하고 DI+는 상승하는 경우에만 청산
         if current_di_minus < prev_di_minus and current_di_plus >= prev_di_plus:
             close_signal = True
-
+    '''
     return close_signal
