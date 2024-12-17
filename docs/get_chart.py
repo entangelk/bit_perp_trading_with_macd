@@ -116,47 +116,30 @@ def fetch_latest_ohlcv_and_update_db(symbol, timeframe, collection, max_check_ti
     last_try_timestamp = None
     
     while (time.time() - start_time) < max_check_time:
-        # Bybit에서 최신 1개 틱 데이터를 가져옴
-        ohlcv = bybit.fetch_ohlcv(symbol, timeframe, limit=1)
-        latest_data = ohlcv[-1]
-        timestamp = latest_data[0]
+        # Bybit에서 최신 2개 틱 데이터를 가져옴 (최신 것과 그 직전 것)
+        ohlcv = bybit.fetch_ohlcv(symbol, timeframe, limit=2)
+        complete_data = ohlcv[-2]  # 완성된 직전 캔들 선택
+        timestamp = complete_data[0]
         dt_object = datetime.utcfromtimestamp(timestamp / 1000)  # UTC 시간으로 변환
         
-        # 이전 시도와 같은 타임스탬프인지 확인
-        if last_try_timestamp == dt_object:
-            elapsed = time.time() - start_time
-            print(f"아직 새로운 데이터가 없습니다. 경과 시간: {elapsed:.0f}초")
-            time.sleep(check_interval)
-            continue
-        
-        last_try_timestamp = dt_object
-        
-        # 마지막 저장된 데이터와 비교
-        last_record = collection.find_one(sort=[("timestamp", -1)])
-        if last_record and last_record["timestamp"] >= dt_object:
-            elapsed = time.time() - start_time
-            print(f"더 최신 데이터를 기다리는 중... 경과 시간: {elapsed:.0f}초")
-            time.sleep(check_interval)
-            continue
-        
-        # 새로운 데이터인 경우 저장
+        # 새로운 데이터 저장/업데이트
         data_dict = {
             "timestamp": dt_object,
-            "open": latest_data[1],
-            "high": latest_data[2],
-            "low": latest_data[3],
-            "close": latest_data[4],
-            "volume": latest_data[5]
+            "open": complete_data[1],
+            "high": complete_data[2],
+            "low": complete_data[3],
+            "close": complete_data[4],
+            "volume": complete_data[5]
         }
         
-        # MongoDB에 데이터 저장
+        # MongoDB에 데이터 저장 (동일 타임스탬프여도 업데이트)
         collection.update_one(
             {"timestamp": dt_object}, 
             {"$set": data_dict}, 
             upsert=True
         )
         
-        print(f"새로운 데이터가 성공적으로 저장되었습니다: {data_dict}")
+        print(f"데이터가 성공적으로 저장/업데이트되었습니다: {data_dict}")
         break
 
 def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
@@ -195,7 +178,6 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
         total_time = time.time() - start_time
         print(f"오류 발생: {e}")
         return None, server_time, total_time
-
 # 사용 예시
 if __name__ == "__main__":
     update_type = '5m'  # '1m', '3m', '5m', '15m' 중 선택

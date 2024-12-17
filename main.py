@@ -95,6 +95,7 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     ADX/DI 크로스오버 또는 근접 상태를 확인하여 매매 신호를 생성
     """
     if len(df) < lookback:
+        print("데이터 길이 부족")
         return None
         
     # 현재 및 이전 값 가져오기
@@ -103,45 +104,82 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     prev_di_plus = df['DI+'].iloc[-2]
     prev_di_minus = df['DI-'].iloc[-2]
     
+    print(f"\n=== DI 현재값 ===")
+    print(f"DI+ 현재: {current_di_plus:.2f}, DI- 현재: {current_di_minus:.2f}")
+    print(f"DI+ 이전: {prev_di_plus:.2f}, DI- 이전: {prev_di_minus:.2f}")
+    
     current_adx = df['ADX'].iloc[-1]
     prev_adx = df['ADX'].iloc[-2]
+    
+    print(f"\n=== ADX 값 ===")
+    print(f"ADX 현재: {current_adx:.2f}, ADX 이전: {prev_adx:.2f}")
     
     # 평균값 계산
     adx_avg = (current_adx + prev_adx) / 2
     current_di_avg = (current_di_plus + current_di_minus) / 2
     
+    print(f"\n=== 평균값 ===")
+    print(f"ADX 평균: {adx_avg:.2f}")
+    print(f"현재 DI 평균: {current_di_avg:.2f}")
+    
     # DI 차이 계산
     di_diff = current_di_plus - current_di_minus
     prev_di_diff = prev_di_plus - prev_di_minus
+    
+    print(f"\n=== DI 차이 ===")
+    print(f"현재 DI 차이: {di_diff:.2f}")
+    print(f"이전 DI 차이: {prev_di_diff:.2f}")
     
     # 교차 상태 확인
     crossover_long = prev_di_diff < 0 and di_diff > 0
     crossover_short = prev_di_diff > 0 and di_diff < 0
     
+    print(f"\n=== 교차 상태 ===")
+    print(f"롱 크로스오버: {crossover_long}")
+    print(f"숏 크로스오버: {crossover_short}")
+    
     # DI 근접 상태 확인
     proximity_long = prev_di_diff < 0 and abs(di_diff) <= di_threshold
     proximity_short = prev_di_diff > 0 and abs(di_diff) <= di_threshold
+    
+    print(f"\n=== 근접 상태 ===")
+    print(f"롱 근접: {proximity_long} (임계값: {di_threshold})")
+    print(f"숏 근접: {proximity_short} (임계값: {di_threshold})")
     
     # 교차와 근접 상황에 따른 ADX 조건 확인
     if crossover_long or crossover_short:
         cross_point = min(current_di_plus, current_di_minus)
         adx_condition = abs(adx_avg - cross_point) <= adx_threshold
+        print(f"\n=== ADX 교차 조건 ===")
+        print(f"교차 지점: {cross_point:.2f}")
+        print(f"ADX-교차점 차이: {abs(adx_avg - cross_point):.2f} (임계값: {adx_threshold})")
     else:
         adx_condition = abs(adx_avg - current_di_avg) <= adx_threshold
+        print(f"\n=== ADX 일반 조건 ===")
+        print(f"ADX-DI평균 차이: {abs(adx_avg - current_di_avg):.2f} (임계값: {adx_threshold})")
+    
+    print(f"ADX 조건 충족: {adx_condition}")
     
     # 트렌드 확인
     if lookback > 2:
         di_diffs = [df['DI+'].iloc[i] - df['DI-'].iloc[i] for i in range(-lookback, -1)]
         trend_consistent = all(d < 0 for d in di_diffs) if (crossover_long or proximity_long) else all(d > 0 for d in di_diffs)
+        print(f"\n=== 트렌드 확인 ===")
+        print(f"이전 {lookback}틱 DI 차이: {[f'{d:.2f}' for d in di_diffs]}")
     else:
         trend_consistent = True
     
+    print(f"트렌드 일관성: {trend_consistent}")
+    
     # 신호 생성
     if (crossover_long or proximity_long) and adx_condition and trend_consistent:
+        print("\n=== 최종 신호: LONG ===")
         return 'long'
     elif (crossover_short or proximity_short) and adx_condition and trend_consistent:
+        print("\n=== 최종 신호: SHORT ===")
         return 'short'
     
+    print("\n=== 신호 없음 ===")
     return None
 
 def main():
@@ -220,29 +258,34 @@ def main():
 
             else:  # 포지션이 없는 경우
                 # 케이스 1: 트리거 시그널 선행 (4틱)
-                if trigger_signal:
+                if trigger_signal and not trigger_first_active:  
                     print("트리거 조건 충족, 카운트다운 시작")
                     trigger_first_active = True
                     trigger_first_count = 4
+                    trigger_signal_type = trigger_signal  # 'long' 또는 'short'
 
                 if trigger_first_active:
-                    trigger_first_count -= 1
                     print(f"트리거 선행 카운트다운: {trigger_first_count}틱 남음")
                     
-                    if position:
+                    if position:  # position은 'Long' 또는 'Short'
                         validated_position = validate_di_difference(df, position)
-                        if validated_position:
-                            print(f"트리거 창 내 포지션 발생: {validated_position} 포지션 실행")
-                            execute_order(
-                                symbol=config['symbol'],
-                                position=validated_position,  # validated_position 사용
-                                usdt_amount=config['usdt_amount'],
-                                leverage=config['leverage'],
-                                stop_loss=config['stop_loss'],
-                                take_profit=config['take_profit']
-                            )
-                            trigger_first_active = False
-                            trigger_first_count = 4
+                        if validated_position:  # validated_position은 'Long' 또는 'Short' 또는 None
+                            # 대소문자를 맞춰서 비교
+                            if ((trigger_signal_type == 'long' and validated_position == 'Long') or 
+                                (trigger_signal_type == 'short' and validated_position == 'Short')):
+                                print(f"트리거 창 내 포지션 발생: {validated_position} 포지션 실행")
+                                execute_order(
+                                    symbol=config['symbol'],
+                                    position=validated_position,  # 'Long' 또는 'Short' 전달
+                                    usdt_amount=config['usdt_amount'],
+                                    leverage=config['leverage'],
+                                    stop_loss=config['stop_loss'],
+                                    take_profit=config['take_profit']
+                                )
+                                trigger_first_active = False
+                                trigger_first_count = 4
+                    
+                    trigger_first_count -= 1  
                     
                     if trigger_first_count <= 0:
                         print("트리거 선행 윈도우 종료")
