@@ -93,6 +93,7 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
 def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     """
     ADX/DI 크로스오버 또는 근접 상태를 확인하여 매매 신호를 생성
+    정확한 교차점 계산 로직 포함
     """
     if len(df) < lookback:
         print("데이터 길이 부족")
@@ -148,16 +149,28 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     
     # 교차와 근접 상황에 따른 ADX 조건 확인
     if crossover_long or crossover_short:
-        cross_point = min(current_di_plus, current_di_minus)
+        # 두 직선의 교점 계산
+        di_plus_slope = current_di_plus - prev_di_plus
+        di_minus_slope = current_di_minus - prev_di_minus
+        x_intersect = (prev_di_minus - prev_di_plus) / (di_plus_slope - di_minus_slope)
+        y_intersect = (di_plus_slope * x_intersect) + prev_di_plus
+        
+        cross_point = y_intersect
         adx_condition = abs(adx_avg - cross_point) <= adx_threshold
         print(f"\n=== ADX 교차 조건 ===")
         print(f"교차 지점: {cross_point:.2f}")
+        print(f"교차 시점: {x_intersect:.3f}")
         print(f"ADX-교차점 차이: {abs(adx_avg - cross_point):.2f} (임계값: {adx_threshold})")
+    elif proximity_long or proximity_short:
+        # 근접 상태일 때는 더 큰 DI 값 사용
+        cross_point = max(current_di_plus, current_di_minus)
+        adx_condition = abs(adx_avg - cross_point) <= adx_threshold
+        print(f"\n=== ADX 근접 조건 ===")
+        print(f"근접 지점: {cross_point:.2f}")
+        print(f"ADX-근접점 차이: {abs(adx_avg - cross_point):.2f} (임계값: {adx_threshold})")
     else:
-        adx_condition = abs(adx_avg - current_di_avg) <= adx_threshold
-        print(f"\n=== ADX 일반 조건 ===")
-        print(f"ADX-DI평균 차이: {abs(adx_avg - current_di_avg):.2f} (임계값: {adx_threshold})")
-    
+        adx_condition = False
+
     print(f"ADX 조건 충족: {adx_condition}")
     
     # 트렌드 확인
@@ -181,6 +194,7 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     
     print("\n=== 신호 없음 ===")
     return None
+
 
 def main():
     # 초기 설정
