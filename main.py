@@ -283,20 +283,8 @@ def main():
                 current_amount, current_side, current_avgPrice = get_position_amount(config['symbol'])
                 current_side = 'Long' if current_side == 'Buy' else 'Short'
                 
-                # 포지션 종료 조건 체크
-                if should_close_position(current_side, position) or isclowstime(df, current_side):
-                    close_position(symbol=config['symbol'])
-                    print("포지션 종료")
-                    # 트리거 상태 초기화
-                    is_hma_trade = False
-                    trigger_first_active = False
-                    trigger_first_count = 4
-                    position_first_active = False
-                    position_first_count = 2
-                    position_save = None
-
                     # HMA 거래 중 일반 시그널 체크
-                elif is_hma_trade:
+                if is_hma_trade:
                     if trigger_signal and not trigger_first_active:  
                         print("트리거 조건 충족, 카운트다운 시작")
                         trigger_first_active = True
@@ -371,6 +359,17 @@ def main():
                     
                     is_hma_trade = False # 세팅 후 플래그 초기화
 
+                # 포지션 종료 조건 체크
+                elif should_close_position(current_side, position) or isclowstime(df, current_side):
+                    close_position(symbol=config['symbol'])
+                    print("포지션 종료")
+                    # 트리거 상태 초기화
+                    is_hma_trade = False
+                    trigger_first_active = False
+                    trigger_first_count = 4
+                    position_first_active = False
+                    position_first_count = 2
+                    position_save = None
 
             else:  # 포지션이 없는 경우
                 # 케이스 1: 트리거 시그널 선행 (4틱)
