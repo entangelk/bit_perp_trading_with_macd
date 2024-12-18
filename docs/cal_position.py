@@ -73,8 +73,20 @@ def cal_position(df):
                 
         # 모든 조건 확인
         if macd_aligned and momentum_aligned and strong_squeeze:
+            print("\n[디버그] 포지션 결정 조건 확인:")
+            print(f"1. MACD 정렬 상태: {macd_aligned} (현재 MACD 차이: {current['macd_diff']})")
+            print(f"2. 모멘텀 방향 정렬: {momentum_aligned} (현재 색상: {current['squeeze_color']})")
+            print(f"3. 스퀴즈 강도: {strong_squeeze} (현재 상태: {current['squeeze_state']})")
+            print(f"최종 포지션: hma_{signal}")
+            
             final_position = 'hma_' + signal
         else:
+            print("\n[디버그] 포지션 결정 조건 불충족:")
+            print(f"1. MACD 정렬 상태: {macd_aligned} (현재 MACD 차이: {current['macd_diff']})")
+            print(f"2. 모멘텀 방향 정렬: {momentum_aligned} (현재 색상: {current['squeeze_color']})")
+            print(f"3. 스퀴즈 강도: {strong_squeeze} (현재 상태: {current['squeeze_state']})")
+            print("최종 포지션: None")
+            
             final_position = None
 
     return final_position, df
