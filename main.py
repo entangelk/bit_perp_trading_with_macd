@@ -222,7 +222,8 @@ def main():
     save_signal = None
     global trigger_first_active, trigger_first_count, position_first_active, position_first_count, position_save
     is_hma_trade = False  # HMA 단타 플래그
-    
+    squeeze_active = False  # 새로운 플래그
+
     try:
         # 초기 차트 동기화
         last_time, server_time = chart_update(config['set_timevalue'], config['symbol'])
@@ -446,7 +447,13 @@ def main():
                 # 케이스 3: hma 단타
                 if position in ['hma_Long','hma_Short']:
                     is_hma_trade = True  # HMA 단타 플래그
+
+                    if squeeze_active:  # 이미 스퀴즈 거래가 활성화되어 있으면 스킵
+                        print("스퀴즈 거래가 한번 진행되었습니다.")
+                        continue
+
                     hma_position = position[4:]
+                    squeeze_active = True  # 스퀴즈 거래 활성화
                     execute_order(
                                 symbol=config['symbol'],
                                 position=hma_position,  # position_save 사용
@@ -456,6 +463,9 @@ def main():
                                 take_profit=400
                             )
                     pass
+                else:
+                    # HMA 신호가 없는 경우 스퀴즈 플래그 리셋
+                    squeeze_active = False
 
             remaining_time = 270 - execution_time
 

@@ -37,21 +37,7 @@ def cal_position(df):
     
     # 순차적으로 포지션 덮어쓰기
     final_position = None
-    
-    # Flow Line 신호가 있으면 적용
-    if position_dict['Flow Line'] is not None:
-        final_position = position_dict['Flow Line']
-    
-    # Super Trend 신호가 있으면 적용
-    if position_dict['super trend'] is not None:
-        final_position = position_dict['super trend']
-        
-    # Flow Line과 Super Trend가 다른 방향을 가리키면 포지션 없음
-    if (position_dict['Flow Line'] is not None and 
-        position_dict['super trend'] is not None and 
-        position_dict['Flow Line'] != position_dict['super trend']):
-        final_position = None
-    
+
     # HMA 신호가 있으면 마지막으로 적용
     if position_dict['hma_signal'] is not None:
         df = check_squeeze_signals(df)
@@ -88,6 +74,21 @@ def cal_position(df):
             print("최종 포지션: None")
             
             final_position = None
+
+    # Flow Line 신호가 있으면 적용
+    if position_dict['Flow Line'] is not None:
+        final_position = position_dict['Flow Line']
+    
+    # Super Trend 신호가 있으면 적용
+    if position_dict['super trend'] is not None:
+        final_position = position_dict['super trend']
+        
+    # Flow Line과 Super Trend가 다른 방향을 가리키면 포지션 없음
+    if (position_dict['Flow Line'] is not None and 
+        position_dict['super trend'] is not None and 
+        position_dict['Flow Line'] != position_dict['super trend']):
+        final_position = None
+    
 
     return final_position, df
 
