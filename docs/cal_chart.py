@@ -146,7 +146,7 @@ def process_chart_data(df):
     df['DI-_MA7'] = df['DI-'].rolling(window=7).mean()
 
     # 필요없는 중간 계산 열 삭제
-    df.drop(columns=['TR', 'DM+', 'DM-', 'DX'], inplace=True)
+    df.drop(columns=['DM+', 'DM-', 'DX'], inplace=True)
 
     # Length 설정
     length = 1
@@ -158,5 +158,94 @@ def process_chart_data(df):
     else:
         # 기간이 1이 아니면 ta 라이브러리의 EMA 계산
         df['ema'] = ta.trend.ema_indicator(df['close'], window=length)
+
+    # HMA (Hull Moving Average) 계산 추가
+    def weighted_moving_average(series, period):
+        weights = np.arange(1, period + 1)
+        wma = series.rolling(window=period).apply(
+            lambda x: np.sum(weights * x) / weights.sum(), raw=True
+        )
+        return wma
+
+    def hull_moving_average(series, period):
+        wma_half_period = weighted_moving_average(series, period // 2)
+        wma_full_period = weighted_moving_average(series, period)
+        hull = 2 * wma_half_period - wma_full_period
+        hma = weighted_moving_average(hull, int(np.sqrt(period)))
+        return hma
+
+    # Intraday HMA 계산
+    df['hma1'] = hull_moving_average(df['close'], 20)
+    df['hma2'] = hull_moving_average(df['close'], 50)
+    df['hma3'] = hull_moving_average(df['close'], 100)
+
+    # HMA 신호 계산
+    df['hma_buy_signal'] = (df['hma3'] < df['hma2']) & \
+                          (df['hma3'] < df['hma1']) & \
+                          (df['hma1'] > df['hma2'])
+    
+    df['hma_sell_signal'] = (df['hma3'] > df['hma2']) & \
+                           (df['hma3'] > df['hma1']) & \
+                           (df['hma2'] > df['hma1'])
+
+
+    # Squeeze Momentum Oscillator 계산 추가
+    momentum_length = 12
+    swing_length = 20
+    squeeze_period = 14
+    squeeze_smooth = 7
+    squeeze_length = 20
+    hyper_squeeze_length = 5
+    
+    # ATR 관련 계산은 기존 코드 활용
+    # TR은 이미 계산되어 있으므로 재사용
+    
+   
+    
+    # ATR과 EMA 계산
+    df['squeeze_atr'] = df['TR'].ewm(span=squeeze_period, adjust=False).mean()
+    df['squeeze_atr_ema'] = df['squeeze_atr'].ewm(span=squeeze_period*2, adjust=False).mean()
+    df['volatility'] = df['squeeze_atr_ema'] - df['squeeze_atr']
+    
+    df['high_low_diff'] = df['high'] - df['low']
+    df['ema_hl_diff'] = df['high_low_diff'].ewm(span=squeeze_period*2, adjust=False).mean()
+    df['squeeze_value'] = (df['volatility'] / df['ema_hl_diff'] * 100).ewm(span=squeeze_smooth, adjust=False).mean()
+    df['squeeze_ma'] = df['squeeze_value'].ewm(span=squeeze_length, adjust=False).mean()  # 여기서 20 사용
+    
+    # Hyper squeeze 계산
+    df['rising_squeeze'] = df['squeeze_value'].diff(hyper_squeeze_length) > 0
+    df['hypersqueeze'] = (df['squeeze_value'] > 0) & df['rising_squeeze']
+    
+    # 모멘텀 오실레이터 계산
+    df['lowest'] = df['low'].rolling(window=momentum_length).min()
+    df['highest'] = df['high'].rolling(window=momentum_length).max()
+    df['ema_lowest'] = df['lowest'].ewm(span=momentum_length, adjust=False).mean()
+    df['ema_highest'] = df['highest'].ewm(span=momentum_length, adjust=False).mean()
+    
+    # Direction 계산
+    df['squeeze_d'] = 0
+    df.loc[df['close'] > df['ema_highest'], 'squeeze_d'] = 1
+    df.loc[df['close'] < df['ema_lowest'], 'squeeze_d'] = -1
+    
+    # Value 계산
+    df['squeeze_val'] = np.where(df['squeeze_d'] == 1, df['ema_lowest'], df['ema_highest'])
+    df['squeeze_val1'] = df['close'] - df['squeeze_val']
+    
+    # Hull Moving Average는 이미 구현되어 있으므로 재사용
+    df['squeeze_val2'] = hull_moving_average(df['squeeze_val1'], momentum_length)
+    df['squeeze_vf'] = (df['squeeze_val2'] / (df['high_low_diff'].ewm(span=momentum_length*2, adjust=False).mean()) * 100) / 8
+    
+    # Z-score 계산
+    df['squeeze_basis'] = df['squeeze_vf'].rolling(window=swing_length).mean()
+    df['squeeze_stdev'] = df['squeeze_vf'].rolling(window=swing_length).std()
+    df['squeeze_zscore'] = ((df['squeeze_vf'] - df['squeeze_basis']) / df['squeeze_stdev']) * 66
+    df['squeeze_zscore'] = df['squeeze_zscore'].ewm(span=swing_length, adjust=False).mean()
+    
+    # 불필요한 중간 계산 컬럼 제거
+    squeeze_cols_to_drop = ['lowest', 'highest', 'ema_lowest', 'ema_highest', 
+                           'squeeze_d', 'squeeze_val', 'squeeze_val1', 
+                           'squeeze_basis', 'squeeze_stdev']
+    df.drop(columns=squeeze_cols_to_drop, inplace=True)
+
 
     return df

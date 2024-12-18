@@ -1,51 +1,86 @@
 from docs.strategy.follow_line import follow_line
 from docs.strategy.supertrend import supertrend
+from docs.strategy.hma_strategy import check_hma_signals
+from docs.strategy.squeeze_strategy import check_squeeze_signals
 
 def cal_position(df):
-   # 팔로우라인 계산
-   df = follow_line(df)
-   
-   # 슈퍼트랜드 계산
-   df = supertrend(df)
-   
-   # 포지션 결과를 저장할 딕셔너리 생성
-   position_dict = {}
-   
-   # 이전 포지션과 비교하여 변화가 있을 때만 시그널 생성
-   fl_position_changed = df['fl_position'] != df['fl_position'].shift(1)
-   st_position_changed = df['st_position'] != df['st_position'].shift(1)
-   
-   # 포지션이 변경된 경우에만 딕셔너리에 저장
-   if fl_position_changed.iloc[-1]:
-       position_dict['Flow Line'] = df['fl_position'].iloc[-1]
-   else:
-       position_dict['Flow Line'] = None
-       
-   if st_position_changed.iloc[-1]:
-       position_dict['super trend'] = df['st_position'].iloc[-1]
-   else:
-       position_dict['super trend'] = None
-   
-   print(df.index[-1])
-   print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}')
-   
-   # position_dict의 값들을 리스트로 가져오기
-   positions = list(position_dict.values())
-   
-   # 두 값이 같은 경우
-   if positions[0] == positions[1]:
-       final_position = positions[0]
-   # Flow Line이 None인 경우 super trend 따름
-   elif positions[0] is None:
-       final_position = positions[1]
-   # super trend가 None인 경우 Flow Line 따름
-   elif positions[1] is None:
-       final_position = positions[0]
-   # 서로 다른 포지션인 경우(Long vs Short)
-   else:
-       final_position = None
+    # 각 전략 계산
+    df = follow_line(df)
+    df = supertrend(df)
+    df = check_hma_signals(df)
+    
+    # 포지션 결과를 저장할 딕셔너리 생성
+    position_dict = {}
+    
+    # 이전 포지션과 비교하여 변화가 있을 때만 시그널 생성
+    fl_position_changed = df['fl_position'] != df['fl_position'].shift(1)
+    st_position_changed = df['st_position'] != df['st_position'].shift(1)
+    hma_position_changed = df['signal_hma'] != df['signal_hma'].shift(1)
+    
+    # 포지션이 변경된 경우에만 딕셔너리에 저장
+    if fl_position_changed.iloc[-1]:
+        position_dict['Flow Line'] = df['fl_position'].iloc[-1]
+    else:
+        position_dict['Flow Line'] = None
+        
+    if st_position_changed.iloc[-1]:
+        position_dict['super trend'] = df['st_position'].iloc[-1]
+    else:
+        position_dict['super trend'] = None
 
-   return final_position, df
+    if hma_position_changed.iloc[-1]:
+        position_dict['hma_signal'] = df['signal_hma'].iloc[-1]
+    else:
+        position_dict['hma_signal'] = None
+    
+    print(df.index[-1])
+    print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}, HMA : {position_dict["hma_signal"]}')
+    
+    # 순차적으로 포지션 덮어쓰기
+    final_position = None
+    
+    # Flow Line 신호가 있으면 적용
+    if position_dict['Flow Line'] is not None:
+        final_position = position_dict['Flow Line']
+    
+    # Super Trend 신호가 있으면 적용
+    if position_dict['super trend'] is not None:
+        final_position = position_dict['super trend']
+        
+    # Flow Line과 Super Trend가 다른 방향을 가리키면 포지션 없음
+    if (position_dict['Flow Line'] is not None and 
+        position_dict['super trend'] is not None and 
+        position_dict['Flow Line'] != position_dict['super trend']):
+        final_position = None
+    
+    # HMA 신호가 있으면 마지막으로 적용
+    if position_dict['hma_signal'] is not None:
+        squeeze_signals = check_squeeze_signals(df)
+        current = df.iloc[-1]
+        
+        # 기본 신호 준비
+        signal = position_dict['hma_signal']  # 'Long' 또는 'Short'
+                
+        # 1. MACD 방향 확인
+        macd_aligned = (signal == 'Long' and current['macd_diff'] > 0) or \
+                    (signal == 'Short' and current['macd_diff'] < 0)
+        
+        # 2. 스퀴즈 방향 확인
+        momentum_aligned = (signal == 'Long' and squeeze_signals['momentum']['color'] == 'EMERALD') or \
+                        (signal == 'Short' and squeeze_signals['momentum']['color'] == 'RED')
+        
+        # 3. 스퀴즈 강도 확인
+        strong_squeeze = squeeze_signals['squeeze']['state'] == 'YELLOW'
+        
+        # 모든 조건 확인
+        if macd_aligned and momentum_aligned and strong_squeeze:
+            final_position = 'hma_' + signal
+        else:
+            final_position = None
+
+    return final_position, df
+
+
 
 if __name__ == "__main__":
    from pymongo import MongoClient

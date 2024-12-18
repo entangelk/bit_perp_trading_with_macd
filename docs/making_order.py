@@ -230,7 +230,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
 
             if avgPrice:
                 # TP/SL 설정
-                set_tp_sl(symbol,stop_loss,take_profit,current_price,side)
+                set_tp_sl(symbol,stop_loss,take_profit,avgPrice,side)
             return order_data
         else:
             print(f"시장가 주문 생성 중 오류 발생: {response.text}")
@@ -248,14 +248,11 @@ def set_tp_sl(symbol, stop_loss,take_profit,current_price,side):
         # sl_price = stop_loss
         sl_price = None
 
-        if side == 'Long':
-            sl_price = current_price + stop_loss 
-        else:
-            sl_price = current_price - stop_loss
-
-        if side == 'Long':
-            tp_price = current_price + take_profit 
-        else:
+        if side == 'Buy':
+            sl_price = current_price - stop_loss  
+            tp_price = current_price + take_profit
+        else:  # Sell
+            sl_price = current_price + stop_loss  
             tp_price = current_price - take_profit
             
 
@@ -412,8 +409,9 @@ if __name__ == "__main__":
     avgPrice=62404.70
     take_profit = 0.2
     sl_rate = 0.2
-    set_leverage(symbol, leverage)
+    # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
-    # get_position_amount(symbol)
+    amount,side,avgPrice = get_position_amount(symbol)
     # set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)
+    pass

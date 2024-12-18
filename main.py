@@ -1,4 +1,5 @@
 from tqdm import tqdm
+from docs.making_order import set_tp_sl
 from docs.get_chart import chart_update, chart_update_one
 from docs.cal_chart import process_chart_data
 from docs.cal_position import cal_position
@@ -90,7 +91,7 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
         print(f"주문 실행 중 오류 발생: {e}")
         return False
 
-def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
+def check_adx_di_trigger(df, di_threshold=3, adx_threshold=2.5, lookback=2):
     """
     ADX/DI 크로스오버 또는 근접 상태를 확인하여 매매 신호를 생성
     정확한 교차점 계산 로직 포함
@@ -98,7 +99,7 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     if len(df) < lookback:
         print("데이터 길이 부족")
         return None
-        
+    
     # 현재 및 이전 값 가져오기
     current_di_plus = df['DI+'].iloc[-1]
     current_di_minus = df['DI-'].iloc[-1]
@@ -147,27 +148,45 @@ def check_adx_di_trigger(df, di_threshold=2.5, adx_threshold=2.5, lookback=2):
     print(f"롱 근접: {proximity_long} (임계값: {di_threshold})")
     print(f"숏 근접: {proximity_short} (임계값: {di_threshold})")
     
-    # 교차와 근접 상황에 따른 ADX 조건 확인
+    # ADX 조건 확인 (수정된 로직)
     if crossover_long or crossover_short:
-        # 두 직선의 교점 계산
+        # 교차 상황일 때
         di_plus_slope = current_di_plus - prev_di_plus
         di_minus_slope = current_di_minus - prev_di_minus
         x_intersect = (prev_di_minus - prev_di_plus) / (di_plus_slope - di_minus_slope)
         y_intersect = (di_plus_slope * x_intersect) + prev_di_plus
         
         cross_point = y_intersect
-        adx_condition = abs(adx_avg - cross_point) <= adx_threshold
+        
+        # ADX 평균값이 교차점보다 낮으면 바로 트리거
+        if adx_avg <= cross_point:
+            adx_condition = True
+        # ADX 평균값이 교차점보다 높으면 2.5 이내일 때만 트리거
+        else:
+            adx_condition = abs(adx_avg - cross_point) <= adx_threshold
+            
         print(f"\n=== ADX 교차 조건 ===")
         print(f"교차 지점: {cross_point:.2f}")
         print(f"교차 시점: {x_intersect:.3f}")
-        print(f"ADX-교차점 차이: {abs(adx_avg - cross_point):.2f} (임계값: {adx_threshold})")
+        print(f"ADX 평균값: {adx_avg:.2f}")
+        print(f"ADX-교차점 차이: {abs(adx_avg - cross_point):.2f}")
+        
     elif proximity_long or proximity_short:
-        # 근접 상태일 때는 더 큰 DI 값 사용
-        cross_point = max(current_di_plus, current_di_minus)
-        adx_condition = abs(adx_avg - cross_point) <= adx_threshold
+        # 근접 상황일 때
+        higher_di = max(current_di_plus, current_di_minus)
+        
+        # 현재 ADX값이 큰 DI값보다 낮으면 바로 트리거
+        if current_adx <= higher_di:
+            adx_condition = True
+        # 현재 ADX값이 큰 DI값보다 높으면 2.5 이내일 때만 트리거
+        else:
+            adx_condition = abs(current_adx - higher_di) <= adx_threshold
+            
         print(f"\n=== ADX 근접 조건 ===")
-        print(f"근접 지점: {cross_point:.2f}")
-        print(f"ADX-근접점 차이: {abs(adx_avg - cross_point):.2f} (임계값: {adx_threshold})")
+        print(f"큰 DI값: {higher_di:.2f}")
+        print(f"현재 ADX값: {current_adx:.2f}")
+        print(f"ADX-DI 차이: {abs(current_adx - higher_di):.2f}")
+    
     else:
         adx_condition = False
 
@@ -201,6 +220,7 @@ def main():
     config = TRADING_CONFIG
     save_signal = None
     global trigger_first_active, trigger_first_count, position_first_active, position_first_count, position_save
+    is_hma_trade = False  # HMA 단타 플래그
     
     try:
         # 초기 차트 동기화
@@ -247,7 +267,11 @@ def main():
             df_calculated = process_chart_data(df_rare_chart)
             
             # 시그널 체크 먼저 수행
-            position, df = cal_position(df=df_calculated)
+            position, df = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
+
+
+
+
             trigger_signal = check_adx_di_trigger(df)
 
             # 포지션 상태 확인
@@ -264,11 +288,89 @@ def main():
                     close_position(symbol=config['symbol'])
                     print("포지션 종료")
                     # 트리거 상태 초기화
+                    is_hma_trade = False
                     trigger_first_active = False
                     trigger_first_count = 4
                     position_first_active = False
                     position_first_count = 2
                     position_save = None
+
+                    # HMA 거래 중 일반 시그널 체크
+                elif is_hma_trade:
+                    if trigger_signal and not trigger_first_active:  
+                        print("트리거 조건 충족, 카운트다운 시작")
+                        trigger_first_active = True
+                        trigger_first_count = 4
+                        trigger_signal_type = trigger_signal  # 'long' 또는 'short'
+
+                    if trigger_first_active:
+                        print(f"트리거 선행 카운트다운: {trigger_first_count}틱 남음")
+                        
+                        if position:  # position은 'Long' 또는 'Short'
+                            validated_position = validate_di_difference(df, position)
+                            if validated_position:  # validated_position은 'Long' 또는 'Short' 또는 None
+                                # 대소문자를 맞춰서 비교
+                                if ((trigger_signal_type == 'long' and validated_position == 'Long') or 
+                                    (trigger_signal_type == 'short' and validated_position == 'Short')):
+                                    print(f"HMA 포지션 중 스탠다드 시그널 감지: SL/TP 조정")
+                                                # 포지션 정보 조회
+                                    amount, side, avgPrice = get_position_amount(symbol=config['symbol'])
+                                    set_tp_sl(
+                                        symbol=config['symbol'], 
+                                        stop_loss=config['stop_loss'],
+                                        take_profit=config['take_profit'], 
+                                        avgPrice=avgPrice,  # Correctly named parameter
+                                        side=side  # Include side parameter if required by the function
+                                        )
+                                    trigger_first_active = False
+                                    trigger_first_count = 4
+                    
+                    trigger_first_count -= 1  
+                    
+                    if trigger_first_count <= 0:
+                        print("트리거 선행 윈도우 종료")
+                        trigger_first_active = False
+                        trigger_first_count = 4
+
+
+                    # 케이스 2: 포지션 신호 선행 (2틱)  
+                    if position and not position_first_active and not trigger_first_active:  # 트리거 선행이 없을 때만
+                        validated_position = validate_di_difference(df, position)
+                        if validated_position:
+                            print("포지션 신호 발생, 카운트다운 시작 (2틱)")
+                            position_first_active = True
+                            position_first_count = 2
+                            position_save = validated_position
+
+                    if position_first_active:
+                        position_first_count -= 1
+                        print(f"포지션 선행 카운트다운: {position_first_count}틱 남음")
+                        
+                        if trigger_signal:
+                            if ((position_save == 'Long' and trigger_signal == 'long') or 
+                                (position_save == 'Short' and trigger_signal == 'short')):
+                                print(f"HMA 포지션 중 스탠다드 시그널 감지: SL/TP 조정")
+                                
+                                amount, side, avgPrice = get_position_amount(symbol=config['symbol'])
+                                set_tp_sl(
+                                    symbol=config['symbol'], 
+                                    stop_loss=config['stop_loss'],
+                                    take_profit=config['take_profit'], 
+                                    avgPrice=avgPrice,  # Correctly named parameter
+                                    side=side  # Include side parameter if required by the function
+                                    )
+                                position_first_active = False
+                                position_first_count = 2
+                                position_save = None
+                        
+                        if position_first_count <= 0:
+                            print("포지션 선행 윈도우 종료")
+                            position_first_active = False
+                            position_first_count = 2
+                            position_save = None
+                    
+                    is_hma_trade = False # 세팅 후 플래그 초기화
+
 
             else:  # 포지션이 없는 경우
                 # 케이스 1: 트리거 시그널 선행 (4틱)
@@ -340,7 +442,21 @@ def main():
                         position_first_active = False
                         position_first_count = 2
                         position_save = None
-            
+                
+                # 케이스 3: hma 단타
+                if position in ['hma_Long','hma_Short']:
+                    is_hma_trade = True  # HMA 단타 플래그
+                    hma_position = position[4:]
+                    execute_order(
+                                symbol=config['symbol'],
+                                position=hma_position,  # position_save 사용
+                                usdt_amount=config['usdt_amount'],
+                                leverage=config['leverage'],
+                                stop_loss=300,
+                                take_profit=400
+                            )
+                    pass
+
             remaining_time = 270 - execution_time
 
             # 남은 시간이 있다면 대기
