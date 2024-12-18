@@ -141,8 +141,9 @@ def check_adx_di_trigger(df, di_threshold=3, adx_threshold=2.5, lookback=2):
     print(f"숏 크로스오버: {crossover_short}")
     
     # DI 근접 상태 확인
-    proximity_long = (prev_di_plus < prev_di_minus) and abs(current_di_plus - current_di_minus) <= di_threshold
-    proximity_short = (prev_di_plus > prev_di_minus) and abs(current_di_plus - current_di_minus) <= di_threshold
+    # DI 근접 상태 확인
+    proximity_long = (prev_di_plus > prev_di_minus) and abs(current_di_plus - current_di_minus) <= di_threshold
+    proximity_short = (prev_di_plus < prev_di_minus) and abs(current_di_plus - current_di_minus) <= di_threshold
     
     print(f"\n=== 근접 상태 ===")
     print(f"롱 근접: {proximity_long} (임계값: {di_threshold})")
