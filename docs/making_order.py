@@ -182,10 +182,14 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
     sync_time()  # 추가
     try:
         balance = bybit.fetch_balance()
-
         current_have = balance['USDT']['free']
         
-        order_amount = current_have*usdt_amount
+        # 투자 금액 검증
+        if usdt_amount <= 0 or usdt_amount > 1:
+            print(f"잘못된 투자 비율: {usdt_amount}. 0과 1 사이의 값이어야 합니다.")
+            return None
+        
+        order_amount = current_have * usdt_amount
 
         # 외부에서 전달된 현재 가격을 기준으로 수량 계산
         amount = calculate_amount(order_amount, leverage, current_price)
@@ -200,13 +204,11 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,st
 
         # 시장가 주문 기본 파라미터
         params = {
-            'api_key': BYBIT_ACCESS_KEY,
+            'category': 'linear',
             'symbol': symbol,
             'side': side.capitalize(),
             'orderType': 'Market',
-            'qty': amount,
-            'category': 'linear',
-            'leverage': leverage,
+            'qty': str(amount),
             'timestamp': timestamp,
             'recv_window': 5000
         }
@@ -258,9 +260,8 @@ def set_tp_sl(symbol, stop_loss,take_profit,current_price,side):
         timestamp = server_time if server_time else int(time.time() * 1000)
         # TP/SL 설정 파라미터
         tp_sl_params = {
-            'api_key': BYBIT_ACCESS_KEY,
-            'symbol': symbol,
             'category': 'linear',  # USDT perpetual 기준
+            'symbol': symbol,
             'tpslMode': 'Full',  # 전체 포지션에 대해 TP/SL 설정
             'positionIdx': 0,  # 기본 포지션 모드 설정
             'timestamp': timestamp,
