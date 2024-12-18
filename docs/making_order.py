@@ -42,18 +42,16 @@ def create_signature(api_key, secret, params):
     query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
     return hmac.new(bytes(secret, 'utf-8'), bytes(query_string, 'utf-8'), hashlib.sha256).hexdigest()
 
-# Bybit V2 API 서버 시간 조회 함수
+# Bybit V5 API 서버 시간 조회 함수
 def get_server_time():
     try:
-        url = "https://api.bybit.com/v2/public/time"
+        url = "https://api.bybit.com/v5/market/time"
         response = requests.get(url)
         
-        pass
         if response.status_code == 200:
-            server_time = response.json()['time_now']
-            server_time_ms = int(float(server_time) * 1000)
-            print(f"서버 시간: {server_time_ms}")
-            return server_time_ms
+            server_time = response.json()['time']  # 밀리초 단위 시간 사용
+            print(f"서버 시간: {server_time}")
+            return server_time
         else:
             print(f"서버 시간 조회 중 오류 발생: {response.status_code}, {response.text}")
             return None
@@ -410,8 +408,8 @@ if __name__ == "__main__":
     take_profit = 0.2
     sl_rate = 0.2
     # set_leverage(symbol, leverage)
-    # get_server_time()
+    get_server_time()
     # close_position(symbol)
-    amount,side,avgPrice = get_position_amount(symbol)
+    # amount,side,avgPrice = get_position_amount(symbol)
     # set_tp_sl(symbol, side, avgPrice, leverage, take_profit, sl_rate)
     pass
