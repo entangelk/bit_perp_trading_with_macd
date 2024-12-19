@@ -310,7 +310,7 @@ def process_chart_data(df):
     squeeze_cols_to_drop = ['lowest', 'highest', 'ema_lowest', 'ema_highest', 
                            'squeeze_d', 'squeeze_val', 'squeeze_val1', 
                            'squeeze_basis', 'squeeze_stdev']
-    # df.drop(columns=squeeze_cols_to_drop, inplace=True)
+    df.drop(columns=squeeze_cols_to_drop, inplace=True)
 
 
     '''
