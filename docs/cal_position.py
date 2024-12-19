@@ -37,10 +37,11 @@ def cal_position(df):
     
     # 순차적으로 포지션 덮어쓰기
     final_position = None
+    
+    df = check_squeeze_signals(df)
 
     # HMA 신호가 있으면 마지막으로 적용
     if position_dict['hma_signal'] is not None:
-        df = check_squeeze_signals(df)
         current = df.iloc[-1]
                 
         # 기본 신호 준비

@@ -264,17 +264,28 @@ def process_chart_data(df):
     df['ema_highest'] = precise_pine_ema(df['highest'], momentum_length)
 
     # Direction 계산
-    df['squeeze_d'] = 0
-    df.loc[df['close'] > df['ema_highest'], 'squeeze_d'] = 1
-    df.loc[df['close'] < df['ema_lowest'], 'squeeze_d'] = -1
+    df['squeeze_d'] = 0  # 초기화
 
-    # Value 계산 
+    # crossover/crossunder 감지
+    crossover = (df['close'] > df['ema_highest']) & (df['close'].shift(1) <= df['ema_highest'].shift(1))
+    crossunder = (df['close'] < df['ema_lowest']) & (df['close'].shift(1) >= df['ema_lowest'].shift(1))
+
+    # d값 설정
+    df.loc[crossover, 'squeeze_d'] = 1
+    df.loc[crossunder, 'squeeze_d'] = -1
+
+    # 이전 값 유지를 위한 forward fill
+    df['squeeze_d'] = df['squeeze_d'].replace(0, np.nan).ffill().fillna(0)
+
     df['squeeze_val'] = np.where(df['squeeze_d'] == 1, df['ema_lowest'], df['ema_highest'])
     df['squeeze_val1'] = df['close'] - df['squeeze_val']
 
     df['squeeze_val2'] = hull_moving_average(df['squeeze_val1'], momentum_length)  # 기존에 정의된 hull_moving_average 함수 사용
     df['squeeze_vf'] = (df['squeeze_val2'] / df['high_low_diff'].ewm(span=momentum_length*2, adjust=False).mean() * 100) / 8
 
+   
+   
+   
     # SMA로 basis 계산
     df['squeeze_basis'] = df['squeeze_vf'].rolling(window=swing_length).mean()
 
@@ -299,7 +310,7 @@ def process_chart_data(df):
     squeeze_cols_to_drop = ['lowest', 'highest', 'ema_lowest', 'ema_highest', 
                            'squeeze_d', 'squeeze_val', 'squeeze_val1', 
                            'squeeze_basis', 'squeeze_stdev']
-    df.drop(columns=squeeze_cols_to_drop, inplace=True)
+    # df.drop(columns=squeeze_cols_to_drop, inplace=True)
 
 
     '''
@@ -353,59 +364,65 @@ def process_chart_data(df):
 
 
 if __name__ == "__main__":
+
+
     set_timevalue = '5m'
-    period=300
-    last_day=0
+    period = 300  # 전체 데이터 수
+    start_from = 85  # 과거 n번째 데이터 (뒤에서부터)
+    slice_size = 300  # 슬라이싱할 데이터 개수 m
+    total_ticks = 85
 
     from pymongo import MongoClient
-
     # MongoDB에 접속
     mongoClient = MongoClient("mongodb://localhost:27017")
     database = mongoClient["bitcoin"]
 
     # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
-    if set_timevalue == '1m':
-        chart_collection = database['chart_1m']
-    elif set_timevalue == '3m':
-        chart_collection = database['chart_3m']
-    elif set_timevalue == '5m':
-        chart_collection = database["chart_5m"]
-    elif set_timevalue == '15m':
-        chart_collection = database['chart_15m']
-    elif set_timevalue == '1h':
-        chart_collection = database['chart_1h']
-    elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
-        chart_collection = database['chart_30d']
-    else:
+    chart_collections = {
+        '1m': 'chart_1m',
+        '3m': 'chart_3m',
+        '5m': 'chart_5m',
+        '15m': 'chart_15m',
+        '1h': 'chart_1h',
+        '30d': 'chart_30d'
+    }
+    
+    if set_timevalue not in chart_collections:
         raise ValueError(f"Invalid time value: {set_timevalue}")
+    
+    chart_collection = database[chart_collections[set_timevalue]]    
 
-    # 최신 데이터부터 과거 데이터까지 모두 가져오기
-    data_cursor = chart_collection.find().sort("timestamp", -1)
-    data_list = list(data_cursor)
 
-    # MongoDB 데이터를 DataFrame으로 변환
-    df = pd.DataFrame(data_list)
+    for start_from in range(start_from, 0, -1):
+        
 
-    # 타임스탬프를 datetime 형식으로 변환
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # 최신 데이터부터 과거 데이터까지 모두 가져오기
+        data_cursor = chart_collection.find().sort("timestamp", -1)
+        data_list = list(data_cursor)
 
-    # 불필요한 ObjectId 필드 제거
-    if '_id' in df.columns:
-        df.drop('_id', axis=1, inplace=True)
+        # MongoDB 데이터를 DataFrame으로 변환
+        df = pd.DataFrame(data_list)
 
-    # 인덱스를 타임스탬프로 설정
-    df.set_index('timestamp', inplace=True)
+        # 타임스탬프를 datetime 형식으로 변환
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-    # 시간순으로 정렬 (오름차순으로 변환)
-    df.sort_index(inplace=True)
+        # 불필요한 ObjectId 필드 제거
+        if '_id' in df.columns:
+            df.drop('_id', axis=1, inplace=True)
 
-    # `last_day`와 `period`에 따라 데이터 슬라이싱
-    if last_day > 0:
-        # 끝 데이터를 기준으로 과거로 `period`만큼 가져옴
-        df = df.iloc[-(last_day + period):-last_day]
-    else:
-        # 최신 데이터에서 과거로 `period`만큼 가져옴
-        df = df.iloc[-period:]
+        # 인덱스를 타임스탬프로 설정
+        df.set_index('timestamp', inplace=True)
 
-    df = process_chart_data(df)
-    pass
+        # 시간순으로 정렬 (오름차순으로 변환)
+        df.sort_index(inplace=True)
+
+        # 과거 n번째 데이터부터 m개의 데이터 슬라이싱
+        if start_from > len(df):
+            raise ValueError(f"start_from ({start_from}) is larger than available data length ({len(df)})")
+        
+        df = df.iloc[-(start_from + slice_size):-start_from]
+
+        df = process_chart_data(df)
+        
+        print(df['squeeze_vf'].tail(1))
+        pass

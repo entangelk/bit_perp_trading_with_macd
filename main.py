@@ -459,8 +459,8 @@ def main():
                                 position=hma_position,  # position_save 사용
                                 usdt_amount=config['usdt_amount'],
                                 leverage=config['leverage'],
-                                stop_loss=300,
-                                take_profit=400
+                                stop_loss=400,
+                                take_profit=300
                             )
                     pass
                 else:
