@@ -23,6 +23,98 @@ def process_chart_data(df):
     df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
     df['macd_diff'] = df['macd'] - df['macd_signal']
 
+    # STC는 조금더 연구해 본 이후 사용용
+    '''
+    df['STC_fast_ma'] = df['close'].ewm(span=fast_length, adjust=False).mean()
+    df['STC_slow_ma'] = df['close'].ewm(span=slow_length, adjust=False).mean()
+    df['STC_macd'] = df['STC_fast_ma'] - df['STC_slow_ma']
+    
+    
+
+    # STC 파라미터 설정
+    stc_length = 12           # Stochastic 계산 기간
+    stc_fast_length = 26      # 빠른 EMA 기간
+    stc_slow_length = 50      # 느린 EMA 기간
+    stc_smooth_constant = 0.5 # 스무딩 상수
+
+    # Fast & Slow EMA 계산
+    df['STC_fast_ma'] = df['close'].ewm(span=stc_fast_length, adjust=False).mean()
+    df['STC_slow_ma'] = df['close'].ewm(span=stc_slow_length, adjust=False).mean()
+    df['STC_macd'] = df['STC_fast_ma'] - df['STC_slow_ma']
+
+    # 첫 번째 Stochastic
+    df['STC_stoch1'] = 0.0
+    for i in range(stc_length-1, len(df)):
+        window = df['STC_macd'].iloc[i-stc_length+1:i+1]
+        lowest_low = window.min()
+        highest_high = window.max()
+        
+        if highest_high - lowest_low > 0:
+            df.iloc[i, df.columns.get_loc('STC_stoch1')] = (
+                (df['STC_macd'].iloc[i] - lowest_low) / (highest_high - lowest_low) * 100
+            )
+        else:
+            df.iloc[i, df.columns.get_loc('STC_stoch1')] = df['STC_stoch1'].iloc[i-1] if i > 0 else 0
+
+    # 첫 번째 Smoothing
+    df['STC_stoch1_smooth'] = 0.0
+    for i in range(len(df)):
+        if i == 0:
+            df.iloc[i, df.columns.get_loc('STC_stoch1_smooth')] = df['STC_stoch1'].iloc[i]
+        else:
+            prev_smooth = df['STC_stoch1_smooth'].iloc[i-1]
+            current_value = df['STC_stoch1'].iloc[i]
+            df.iloc[i, df.columns.get_loc('STC_stoch1_smooth')] = (
+                prev_smooth + stc_smooth_constant * (current_value - prev_smooth)
+            )
+
+    # 두 번째 Stochastic
+    df['STC_stoch2'] = 0.0
+    for i in range(stc_length-1, len(df)):
+        window = df['STC_stoch1_smooth'].iloc[i-stc_length+1:i+1]
+        lowest_low = window.min()
+        highest_high = window.max()
+        
+        if highest_high - lowest_low > 0:
+            df.iloc[i, df.columns.get_loc('STC_stoch2')] = (
+                (df['STC_stoch1_smooth'].iloc[i] - lowest_low) / (highest_high - lowest_low) * 100
+            )
+        else:
+            df.iloc[i, df.columns.get_loc('STC_stoch2')] = df['STC_stoch2'].iloc[i-1] if i > 0 else 0
+
+    # 최종 STC (두 번째 Smoothing)
+    df['STC'] = 0.0
+    for i in range(len(df)):
+        if i == 0:
+            df.iloc[i, df.columns.get_loc('STC')] = df['STC_stoch2'].iloc[i]
+        else:
+            prev_smooth = df['STC'].iloc[i-1]
+            current_value = df['STC_stoch2'].iloc[i]
+            df.iloc[i, df.columns.get_loc('STC')] = (
+                prev_smooth + stc_smooth_constant * (current_value - prev_smooth)
+            )
+
+    # 매수/매도 신호 생성
+    df['STC_signal'] = 'none'
+    for i in range(3, len(df)):
+        # 매수 신호: 25 이하에서 상승 반전
+        if (df['STC'].iloc[i-3] >= df['STC'].iloc[i-2] and 
+            df['STC'].iloc[i-2] < df['STC'].iloc[i-1] and 
+            df['STC'].iloc[i] < 25):
+            df.iloc[i, df.columns.get_loc('STC_signal')] = 'buy'
+        
+        # 매도 신호: 75 이상에서 하락 반전
+        elif (df['STC'].iloc[i-3] <= df['STC'].iloc[i-2] and 
+                df['STC'].iloc[i-2] > df['STC'].iloc[i-1] and 
+                df['STC'].iloc[i] > 75):
+            df.iloc[i, df.columns.get_loc('STC_signal')] = 'sell'
+
+    # 중간 계산 컬럼 삭제
+    columns_to_drop = ['STC_fast_ma', 'STC_slow_ma', 'STC_macd', 'STC_stoch1', 
+                    'STC_stoch1_smooth', 'STC_stoch2']
+    df.drop(columns=columns_to_drop, inplace=True)
+    '''
+
 
     # 1++ MACD stragy 용 계산 (사용자 정의 파라미터 적용)
 

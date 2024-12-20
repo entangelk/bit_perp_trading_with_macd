@@ -395,20 +395,173 @@ def analyze_histogram_ma_strategy(df, lookback=1, tp_long=200, sl_long=300, tp_s
     print(f"테스트 기간: {df.index[0]} ~ {df.index[-1]}")
     return results
 
+def analyze_di_histogram_strategy(df, lookback=2, tp_long=200, sl_long=300, tp_short=200, sl_short=300, 
+                                 fee_rate=0.00011, investment_usdt=1):
+    """
+    DI 기울기 히스토그램의 연속적인 변화를 이용한 전략
+    
+    Parameters:
+    df : DataFrame - 'timestamp', 'close', 'high', 'low', 'DI_slope_diff' 컬럼 포함
+    lookback : int - 연속 상승/하락을 확인할 기간 수
+    """
+    MIN_BTC = 0.001
+    
+    # 데이터 시간순 정렬
+    df = df.sort_values('timestamp').reset_index(drop=True)
+    
+    results = {
+        'long_win': 0, 'long_loss': 0,
+        'short_win': 0, 'short_loss': 0,
+        'total_long_profit': 0,
+        'total_long_loss': 0,
+        'total_short_profit': 0,
+        'total_short_loss': 0,
+        'total_fees': 0,
+        'max_profit': float('-inf'),
+        'max_loss': float('inf'),
+        'all_trades': []
+    }
+    
+    in_position = False
+    position_type = None
+    entry_price = 0
+    entry_index = 0
+    
+    for i in range(lookback, len(df)):
+        current_price = df['close'].iloc[i]
+        min_investment_usdt = MIN_BTC * current_price
+        actual_investment = max(investment_usdt, min_investment_usdt)
+        
+        # 최근 lookback+1개의 히스토그램 값 가져오기
+        histogram_values = [df['DI_slope_diff'].iloc[i-j] for j in range(lookback+1)]
+        
+        # 연속 상승/하락 확인
+        is_increasing = True
+        is_decreasing = True
+        
+        for j in range(lookback):
+            if histogram_values[j] <= histogram_values[j+1]:
+                is_increasing = False
+            if histogram_values[j] >= histogram_values[j+1]:
+                is_decreasing = False
+        
+        if not in_position:
+            if is_increasing:  # 연속 상승
+                in_position = True
+                position_type = 'long'
+                entry_price = current_price
+                entry_index = i
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+                
+            elif is_decreasing:  # 연속 하락
+                in_position = True
+                position_type = 'short'
+                entry_price = current_price
+                entry_index = i
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+        
+        elif in_position:
+            high_diff = df['high'].iloc[i] - entry_price
+            low_diff = df['low'].iloc[i] - entry_price
+            
+            if position_type == 'long':
+                if high_diff >= tp_long:
+                    profit_usdt = (tp_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)
+                    
+                    results['long_win'] += 1
+                    results['total_long_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+                elif low_diff <= -sl_long:
+                    loss_usdt = (sl_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))
+                    
+                    results['long_loss'] += 1
+                    results['total_long_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+            elif position_type == 'short':
+                if low_diff <= -tp_short:
+                    profit_usdt = (tp_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)
+                    
+                    results['short_win'] += 1
+                    results['total_short_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+                elif high_diff >= sl_short:
+                    loss_usdt = (sl_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))
+                    
+                    results['short_loss'] += 1
+                    results['total_short_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+    
+    # 결과 집계
+    results['total_trades'] = results['long_win'] + results['long_loss'] + results['short_win'] + results['short_loss']
+    results['total_profit_only'] = results['total_long_profit'] + results['total_short_profit']
+    results['total_loss_only'] = results['total_long_loss'] + results['total_short_loss']
+    results['net_profit'] = results['total_profit_only'] + results['total_loss_only']
+    
+    if results['total_trades'] > 0:
+        results['win_rate'] = (results['long_win'] + results['short_win']) / results['total_trades'] * 100
+        results['avg_profit_per_trade'] = results['net_profit'] / results['total_trades']
+    
+    print(f"\n=== DI 히스토그램 전략 분석 결과 (연속 {lookback}회) ===")
+    print(f"설정값: TP롱/숏 {tp_long}/{tp_short}, SL롱/숏 {sl_long}/{sl_short}")
+    print(f"총 거래 횟수: {results['total_trades']}")
+    print(f"롱 포지션: 성공 {results['long_win']}, 실패 {results['long_loss']}")
+    print(f"숏 포지션: 성공 {results['short_win']}, 실패 {results['short_loss']}")
+    print(f"전체 승률: {results.get('win_rate', 0):.2f}%")
+    print("\n수익/손실 내역 (USDT):")
+    print(f"총 수수료 지출: -{results['total_fees']:.6f}")
+    print(f"롱 포지션 수익: +{results['total_long_profit']:.6f}")
+    print(f"롱 포지션 손실: {results['total_long_loss']:.6f}")
+    print(f"숏 포지션 수익: +{results['total_short_profit']:.6f}")
+    print(f"숏 포지션 손실: {results['total_short_loss']:.6f}")
+    print(f"\n전체 수익: +{results['total_profit_only']:.6f}")
+    print(f"전체 손실: {results['total_loss_only']:.6f}")
+    print(f"최종 순수익: {results['net_profit']:.6f}")
+    print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
+    print(f"단일 최대 수익: {results['max_profit']:.6f}")
+    print(f"단일 최대 손실: {results['max_loss']:.6f}")
+    
+    return results
+
 
 if __name__ == "__main__":
 
     # results = analyze_histogram_ma_strategy(df,lookback=1, tp_long=200, sl_long=300, tp_short=200, sl_short=300)
 
+    results = analyze_di_histogram_strategy(df, lookback=1)
 
     # TP/SL 값을 다르게 설정하여 테스트
-    results, debug_info = analyze_macd_consecutive_drops(
-        df, 
-        lookback=2,
-        tp_long=200,   # 롱 포지션 이익실현
-        sl_long=300,   # 롱 포지션 손절
-        tp_short=200,  # 숏 포지션 이익실현
-        sl_short=300   # 숏 포지션 손절
-    )
+    # results, debug_info = analyze_macd_consecutive_drops(
+    #     df, 
+    #     lookback=2,
+    #     tp_long=200,   # 롱 포지션 이익실현
+    #     sl_long=300,   # 롱 포지션 손절
+    #     tp_short=200,  # 숏 포지션 이익실현
+    #     sl_short=300   # 숏 포지션 손절
+    # )
 
     pass
