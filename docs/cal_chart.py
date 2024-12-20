@@ -159,8 +159,24 @@ def process_chart_data(df):
     df['DI+_MA7'] = df['DI+'].rolling(window=7).mean()
     df['DI-_MA7'] = df['DI-'].rolling(window=7).mean()
 
+    slope_len = 12
+    di_dff_ma = 12
+
+    # DI 기울기 계산
+    df['DI+_slope'] = df['DI+'] - df['DI+'].shift(slope_len)
+    df['DI-_slope'] = df['DI-'] - df['DI-'].shift(slope_len)
+
+    # 기울기 차이 계산 (DI+ 기울기 - DI- 기울기)
+    df['DI_slope_diff'] = df['DI+_slope'] - df['DI-_slope']
+
+    # 히스토그램 차이 계산 (현재 히스토그램 값 - 이전 히스토그램 값)
+    df['histogram_diff'] = df['DI_slope_diff'] - df['DI_slope_diff'].shift(1)
+
+    # 히스토그램 차이값의 이동평균 계산 
+    df['histogram_diff_MA'] = df['histogram_diff'].rolling(window=di_dff_ma).mean()
+
     # 필요없는 중간 계산 열 삭제
-    df.drop(columns=['DM+', 'DM-', 'DX'], inplace=True)
+    df.drop(columns=['DI+_slope', 'DI-_slope'], inplace=True)
 
     # Length 설정
     length = 1

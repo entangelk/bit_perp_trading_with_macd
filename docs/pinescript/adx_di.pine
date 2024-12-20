@@ -1,0 +1,59 @@
+//@version=4
+study("ADX and DI for v4")
+len = input(14)
+th = input(20)
+ma_len = input(20, title="MA Length") // 이동평균선의 기간 설정
+slope_len = input(1, title="Slope Length") // 기울기 계산 기간
+hist_ma_len = input(10, title="Histogram MA Length") // 히스토그램 차이값의 이동평균 기간
+
+TrueRange = max(max(high-low, abs(high-nz(close[1]))), abs(low-nz(close[1])))
+DirectionalMovementPlus = high-nz(high[1]) > nz(low[1])-low ? max(high-nz(high[1]), 0): 0
+DirectionalMovementMinus = nz(low[1])-low > high-nz(high[1]) ? max(nz(low[1])-low, 0): 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - (nz(SmoothedTrueRange[1])/len) + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - (nz(SmoothedDirectionalMovementPlus[1])/len) + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - (nz(SmoothedDirectionalMovementMinus[1])/len) + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+DX = abs(DIPlus-DIMinus) / (DIPlus+DIMinus)*100
+ADX = sma(DX, len)
+
+// DI+ 와 DI- 의 이동평균 계산
+DIPlus_MA = sma(DIPlus, ma_len)
+DIMinus_MA = sma(DIMinus, ma_len)
+
+// DI 기울기 계산
+DIPlus_slope = DIPlus - DIPlus[slope_len]
+DIMinus_slope = DIMinus - DIMinus[slope_len]
+
+// 기울기 차이 계산 (DI+ 기울기 - DI- 기울기)
+slope_diff = DIPlus_slope - DIMinus_slope
+
+// 히스토그램 차이 계산 (현재 히스토그램 값 - 이전 히스토그램 값)
+histogram_diff = slope_diff - nz(slope_diff[1])
+
+// 히스토그램 차이값의 이동평균 계산
+histogram_diff_ma = sma(histogram_diff, hist_ma_len)
+
+// 기존 플롯
+plot(DIPlus, color=color.green, title="DI+")
+plot(DIMinus, color=color.red, title="DI-")
+plot(ADX, color=color.navy, title="ADX")
+plot(DIPlus_MA, color=color.green, linewidth=1, style=3, title="DI+ MA")
+plot(DIMinus_MA, color=color.red, linewidth=1, style=3, title="DI- MA")
+hline(th, color=color.black)
+
+// 기울기 차이 히스토그램 플롯
+plot(slope_diff, style=plot.style_histogram, color=slope_diff > 0 ? color.green : color.red, title="DI Slope Difference")
+
+// 히스토그램 차이값을 선으로 플롯
+plot(histogram_diff, color=color.blue, linewidth=1, title="Histogram Difference")
+
+// 히스토그램 차이값의 이동평균선 플롯
+plot(histogram_diff_ma, color=color.orange, linewidth=1, style=3, title="Histogram Difference MA")

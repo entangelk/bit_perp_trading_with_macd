@@ -1,271 +1,414 @@
-from tqdm import tqdm
-from docs.get_chart import chart_update, chart_update_one
-from docs.cal_position import cal_position
-from docs.get_current import fetch_investment_status
-from docs.making_order import set_leverage, create_order_with_tp_sl, close_position,get_position_amount
-from docs.utility.get_sl import set_sl
-from docs.utility.cal_close import isclowstime
-from docs.current_price import get_current_price
-from datetime import datetime, timezone, timedelta
-import time
-import json
-import sys
-import os
+from pymongo import MongoClient
+import pandas as pd
+import numpy as np
+from docs.cal_chart import process_chart_data
 
-# 프로젝트의 루트 디렉토리를 sys.path에 추가
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# MongoDB에 접속
+mongoClient = MongoClient("mongodb://localhost:27017")
+database = mongoClient["bitcoin"]
 
-
-# 초기 설정
-symbol = "BTCUSDT"
-leverage = 1
-usdt_amount = 10  # 초기 투자금
-set_timevalue = '5m'
-take_profit = 10000
-stop_loss = 500
-
-
-# 초기 차트 업데이트
-last_time, server_time = chart_update(set_timevalue,symbol)
-
-# last_time과 server_time이 튜플의 요소로 반환되었다고 가정
-# UTC로 변환된 시간 사용
-last_time = last_time['timestamp']
-server_time = datetime.fromtimestamp(server_time, timezone.utc)  # server_time을 UTC로 변환
-
-# 분 단위를 설정 (예: '1m' => 1분, '5m' => 5분)
-time_values = {
-    '1m': 1,
-    '3m': 3,
-    '5m': 5,
-    '15m': 15
+# set_timevalue 값에 따라 적절한 차트 컬렉션 선택
+chart_collections = {
+    '1m': 'chart_1m',
+    '3m': 'chart_3m',
+    '5m': 'chart_5m',
+    '15m': 'chart_15m',
+    '1h': 'chart_1h',
+    '30d': 'chart_30d'
 }
-time_interval = time_values[set_timevalue]
+set_timevalue = '5m'
 
-def get_time_block(dt, interval):
-    """datetime 객체를 interval 분 단위로 표현하는 함수"""
-    return (dt.year, dt.month, dt.day, dt.hour, (dt.minute // interval) * interval)
+if set_timevalue not in chart_collections:
+    raise ValueError(f"Invalid time value: {set_timevalue}")
 
-# 서버 시간과 마지막 업데이트 시간이 time_interval 블록으로 일치하는지 확인
-while get_time_block(server_time, time_interval) != get_time_block(last_time, time_interval):
-    print(f"{set_timevalue} 차트 업데이트 중...")
-    last_time, server_time = chart_update(set_timevalue,symbol)  # 차트 업데이트 함수 호출
-    last_time = last_time['timestamp'].astimezone(timezone.utc)  # last_time을 UTC로 변환
-    server_time = datetime.fromtimestamp(server_time, timezone.utc)  # server_time을 UTC로 변환
-    time.sleep(60)  # 1분 대기 (API 요청 빈도 조절)
-    # time.sleep(1)
+chart_collection = database[chart_collections[set_timevalue]] 
 
-print(f"{set_timevalue} 차트 업데이트 완료. 서버 시간과 일치합니다.")
+# 최신 데이터부터 과거 데이터까지 모두 가져오기
+data_cursor = chart_collection.find().sort("timestamp", -1)
+data_list = list(data_cursor)
 
-def get_next_run_time(current_time, interval_minutes):
-    """현재 시간을 interval 분 단위로 맞추고 10초 후 실행 시간을 반환"""
-    # 현재 분을 interval에 맞춰 올림한 분으로 설정
-    minute_block = (current_time.minute // interval_minutes + 1) * interval_minutes
-    next_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minute_block)
-    # return next_time + timedelta(seconds=10)
-    return next_time
+# MongoDB 데이터를 DataFrame으로 변환
+df = pd.DataFrame(data_list)
 
-def start_signal_final_check(start_signal, df):
+df = process_chart_data(df)
+
+
+def analyze_macd_consecutive_drops(df, lookback=2, tp_long=200, sl_long=300, tp_short=300, sl_short=200, 
+                                 fee_rate=0.00011, investment_usdt=1):
     """
-    최종 신호 검증 함수.
-    start_signal이 'Long', 'Short', 또는 'None' 중 하나일 때,
-    추가 조건을 확인하고 신호를 검증합니다.
-    """
-    # DI+와 DI- 차이 계산
-    di_difference = abs(df['DI+'].iloc[-1] - df['DI-'].iloc[-1])
-
-    # 조건에 따라 신호 검증
-    if start_signal == 'Long':
-        # DI 차이가 10 이상이고, RSI 이동 평균이 양의 기울기인지 확인
-        rsi_slope = df['rsi_sma'].iloc[-1] - df['rsi_sma'].iloc[-2]
-        if di_difference >= 10 and rsi_slope > 0:
-            return "Long"  # 조건 충족 시 최종 'Long' 신호 반환
-    elif start_signal == 'Short':
-        # DI 차이가 10 이상이고, RSI 이동 평균이 음의 기울기인지 확인
-        rsi_slope = df['rsi_sma'].iloc[-1] - df['rsi_sma'].iloc[-2]
-        if di_difference >= 10 and rsi_slope < 0:
-            return "Short"  # 조건 충족 시 최종 'Short' 신호 반환
+    MACD 연속 변화 전략 분석 함수
     
-    # 조건에 맞지 않으면 None 반환
-    return None
-
-
-# 초기 레버리지 설정
-leverage_response = set_leverage(symbol, leverage)
-if leverage_response is None:
-    print("레버리지 설정 실패. api 확인 요망")
-
-signal_save_list = [None, None, None]
-first_time_run_flag = True
-signal_save_flag = False
-save_signal = None
-adx_flag_counter = 0
-
-# while True:
-test_time = 8
-time_range = int(test_time * 60 / time_interval)
-for i in range(time_range):
-    # 현재 서버 시간으로 다음 실행 시간을 계산
-    server_time = datetime.now(timezone.utc)
-    next_run_time = get_next_run_time(server_time, time_interval)
-    wait_seconds = (next_run_time - server_time).total_seconds()
-
-    print(f"다음 실행 시간: {next_run_time} (대기 시간: {wait_seconds:.1f}초)")
-
-    if wait_seconds > 0:
-        with tqdm(total=int(wait_seconds), desc="싱크 조절 중", ncols=100, leave=True, dynamic_ncols=True) as pbar:
-            for _ in range(int(wait_seconds)):
-                time.sleep(1)
-                pbar.update(1)
-
-    time.sleep(1)
-
-    # 차트 업데이트
-    chart_update_one(set_timevalue, symbol)
-    time.sleep(1)
-
-    # position_dict 값 계산
-    start_signal, position, df = cal_position(set_timevalue)
-
-    # save_position_signal = position
-
-    # 현재 start_signal이 None이면서 position에 신호가 발생한 경우
-    if position:
-        # 포지션 시그널 저장
-        signal_save_list.pop(0)
-        signal_save_list.append(position)
-    else:
-        # 포지션 시그널 저장
-        signal_save_list.pop(0)
-        signal_save_list.append(None)
-
-    # start_signal에 따라 save_signal 값을 업데이트
-    if start_signal is not None and start_signal != 'Reset':
-        save_signal = start_signal
-    elif start_signal == 'Reset':
-        save_signal = None
-    # None일 경우 이전에 저장된 save_signal 값을 그대로 유지
-
-    print(f"현재 save_signal: {save_signal}")
-    print(f"현재 position: {position}")
-
-
-    # 조건 확인 및 유효 신호 확인
-    if start_signal is not None and start_signal != 'Reset' and position is None:
-        for signal in reversed(signal_save_list):
-            if signal == start_signal:
-                position = save_signal
-                print(f"유효 신호 감지: Position '{position}' 후 Start Signal '{save_signal}' 발생")
-                break
-            elif position == 'Long' and signal == 'Short':
-                position = None
-                break
-            elif position == 'Short' and signal == 'Long':
-                position = None
-                break
-
-
-    # 내 포지션 정보 가져오기
-    balance, positions_json, ledger = fetch_investment_status()
-
-    # 포지션 상태 저장 (포지션이 open 상태일경우 True)
-    positions_flag = True
-    if positions_json == '[]' or positions_json is None:
-        print('포지션 없음 -> 포지션 오픈 결정 단계 진행')
-        positions_flag = False
-
-
-    # 포지션이 있을경우 패스
-    if positions_flag:
-        # 포지션이 있을 경우 이익 또는 손실을 확인
-        positions_data = json.loads(positions_json)
-        check_fee = float(positions_data[0]['info']['curRealisedPnl'])
-        check_nowPnL = float(positions_data[0]['info']['unrealisedPnl'])
-        total_pnl = check_nowPnL + (check_fee * 2)
-
-        print(f"현재 포지셔닝 중입니다. Pnl : {total_pnl}")
-
-        current_amount,current_side,current_avgPrice = get_position_amount(symbol)
-
-        # 포지션 값 설정
-        if current_side == 'Buy':
-            current_side = 'Long'
-        elif current_side == 'Sell':
-            current_side = 'Short'
-
-        # 현 포지션과 반대 포지션 시그널 진입 시 청산
-        if (current_side == 'Long' and position == 'Short') or \
-        (current_side == 'Short' and position == 'Long'):
-            close_position(symbol=symbol)
-
-        # 조건에 의한 adx 상승까지 waiting flag 설정
-        adx_flag = False
-
-        adx_flag = df['ADX'].iloc[-1] > df['ADX'].iloc[-2]
-
-
-        if adx_flag:
-            adx_flag_counter += 1
-            if adx_flag_counter >= 1:
-                close_signal = False
-                close_signal = isclowstime(df,current_side)
+    Parameters:
+    df : DataFrame - 'timestamp', 'close', 'high', 'low', 'macd_diff' 컬럼 포함
+    lookback : int - 몇 단계 이전까지 비교할지 설정
+    tp_long : float - 롱 포지션 이익실현 지점 (BTC 가격 변동폭)
+    sl_long : float - 롱 포지션 손절 지점 (BTC 가격 변동폭)
+    tp_short : float - 숏 포지션 이익실현 지점 (BTC 가격 변동폭)
+    sl_short : float - 숏 포지션 손절 지점 (BTC 가격 변동폭)
+    fee_rate : float - 거래 수수료율 (기본값: 0.011%)
+    investment_usdt : float - 목표 투자금액 (USDT)
+    """
+    MIN_BTC = 0.001  # 최소 BTC 주문 수량
+    
+    # 먼저 데이터를 시간순으로 정렬
+    df = df.sort_values('timestamp').reset_index(drop=True)
+    
+    results = {
+        'long_win': 0, 'long_loss': 0,
+        'short_win': 0, 'short_loss': 0,
+        'total_long_profit': 0,
+        'total_long_loss': 0,
+        'total_short_profit': 0,
+        'total_short_loss': 0,
+        'total_fees': 0,
+        'max_profit': float('-inf'),
+        'max_loss': float('inf'),
+        'all_trades': []
+    }
+    
+    debug_info = []
+    in_position = False
+    position_type = None
+    entry_price = 0
+    entry_index = 0
+    
+    for i in range(lookback, len(df)):
+        current = df['macd_diff'].iloc[i]
+        prev_values = [df['macd_diff'].iloc[i-j] for j in range(1, lookback+1)]
+        current_price = df['close'].iloc[i]
         
-        if close_signal:
-            adx_flag_counter = 0
-            adx_flag = False
-            close_position(symbol=symbol)
-            print("포지션 종료 성공")
-        else:
-            print("최적 포지션 미도달, Stay")
-    else:
+        # 현재 가격에서 0.001 BTC의 USDT 가치 계산
+        min_investment_usdt = MIN_BTC * current_price
+        # 실제 투자금액 결정 (목표 투자금액과 최소 투자금액 중 큰 값)
+        actual_investment = max(investment_usdt, min_investment_usdt)
+        
+        debug_point = {
+            'timestamp': df['timestamp'].iloc[i],
+            'current_macd': current,
+            'prev_values': prev_values,
+            'close_price': current_price,
+            'actual_investment': actual_investment
+        }
+        
+        if not in_position:
+            is_decreasing = True
+            for j in range(len(prev_values)-1):
+                if prev_values[j] >= prev_values[j+1]:
+                    is_decreasing = False
+                    break
+            is_decreasing = is_decreasing and (current < prev_values[0])
+            
+            is_increasing = True
+            for j in range(len(prev_values)-1):
+                if prev_values[j] <= prev_values[j+1]:
+                    is_increasing = False
+                    break
+            is_increasing = is_increasing and (current > prev_values[0])
+            
+            debug_point['is_decreasing'] = is_decreasing
+            debug_point['is_increasing'] = is_increasing
+            
+            if is_decreasing:
+                in_position = True
+                position_type = 'short'
+                entry_price = current_price
+                entry_index = i
+                # 진입 수수료 계산 (USDT)
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+                debug_point['action'] = f'Enter Short with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
+            elif is_increasing:
+                in_position = True
+                position_type = 'long'
+                entry_price = current_price
+                entry_index = i
+                # 진입 수수료 계산 (USDT)
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+                debug_point['action'] = f'Enter Long with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
+        
+        elif in_position:
+            high_diff = df['high'].iloc[i] - entry_price
+            low_diff = df['low'].iloc[i] - entry_price
+            
+            if position_type == 'long':
+                if high_diff >= tp_long:
+                    # BTC 가격 변동을 USDT 수익으로 변환
+                    profit_usdt = (tp_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)  # 진입/청산 수수료
+                    
+                    results['long_win'] += 1
+                    results['total_long_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    debug_point['action'] = f'Long Win +{profit_after_fees:.6f} USDT (Fee: {exit_fee:.6f} USDT)'
+                elif low_diff <= -sl_long:
+                    # BTC 가격 변동을 USDT 손실로 변환
+                    loss_usdt = (sl_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))  # 진입/청산 수수료
+                    
+                    results['long_loss'] += 1
+                    results['total_long_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    debug_point['action'] = f'Long Loss {loss_after_fees:.6f} USDT (Fee: {exit_fee:.6f} USDT)'
+            elif position_type == 'short':
+                if low_diff <= -tp_short:
+                    # BTC 가격 변동을 USDT 수익으로 변환
+                    profit_usdt = (tp_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)  # 진입/청산 수수료
+                    
+                    results['short_win'] += 1
+                    results['total_short_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    debug_point['action'] = f'Short Win +{profit_after_fees:.6f} USDT (Fee: {exit_fee:.6f} USDT)'
+                elif high_diff >= sl_short:
+                    # BTC 가격 변동을 USDT 손실로 변환
+                    loss_usdt = (sl_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))  # 진입/청산 수수료
+                    
+                    results['short_loss'] += 1
+                    results['total_short_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    debug_point['action'] = f'Short Loss {loss_after_fees:.6f} USDT (Fee: {exit_fee:.6f} USDT)'
+        
+        debug_point['in_position'] = in_position
+        debug_point['position_type'] = position_type
+        debug_info.append(debug_point)
+    
+    # 결과 집계
+    results['total_trades'] = results['long_win'] + results['long_loss'] + results['short_win'] + results['short_loss']
+    
+    # 수익/손실 계산
+    results['total_long_net'] = results['total_long_profit'] + results['total_long_loss']
+    results['total_short_net'] = results['total_short_profit'] + results['total_short_loss']
+    results['total_profit_only'] = results['total_long_profit'] + results['total_short_profit']
+    results['total_loss_only'] = results['total_long_loss'] + results['total_short_loss']
+    results['net_profit'] = results['total_profit_only'] + results['total_loss_only']
+    
+    if results['total_trades'] > 0:
+        results['win_rate'] = (results['long_win'] + results['short_win']) / results['total_trades'] * 100
+        results['avg_profit_per_trade'] = results['net_profit'] / results['total_trades']
+    
+    # 처음 10개의 중요 시그널 출력
+    print("\n처음 10개의 중요 시그널:")
+    signal_count = 0
+    for info in debug_info:
+        if 'action' in info:
+            print(f"\n시간: {info['timestamp']}")
+            print(f"현재 MACD: {info['current_macd']:.6f}")
+            print(f"이전 값들: {[f'{x:.6f}' for x in info['prev_values']]}")
+            print(f"행동: {info['action']}")
+            print(f"가격: {info['close_price']}")
+            print(f"실제 투자금액: {info.get('actual_investment', 0):.6f} USDT")
+            signal_count += 1
+            if signal_count >= 10:
+                break
+    
+    print(f"\n수익성 분석 (목표 투자금액: {investment_usdt} USDT, 최소 BTC: {MIN_BTC}):")
+    print(f"설정값: TP롱 {tp_long}, SL롱 {sl_long}, TP숏 {tp_short}, SL숏 {sl_short}")
+    print(f"총 거래 횟수: {results['total_trades']}")
+    print(f"롱 포지션: 성공 {results['long_win']}, 실패 {results['long_loss']}")
+    print(f"숏 포지션: 성공 {results['short_win']}, 실패 {results['short_loss']}")
+    print(f"전체 승률: {results.get('win_rate', 0):.2f}%")
+    print("\n수익/손실 내역 (USDT):")
+    print(f"총 수수료 지출: -{results['total_fees']:.6f}")
+    print(f"롱 포지션 수익: +{results['total_long_profit']:.6f}")
+    print(f"롱 포지션 손실: {results['total_long_loss']:.6f}")
+    print(f"롱 포지션 순수익: {results['total_long_net']:.6f}")
+    print(f"숏 포지션 수익: +{results['total_short_profit']:.6f}")
+    print(f"숏 포지션 손실: {results['total_short_loss']:.6f}")
+    print(f"숏 포지션 순수익: {results['total_short_net']:.6f}")
+    print(f"\n전체 수익: +{results['total_profit_only']:.6f}")
+    print(f"전체 손실: {results['total_loss_only']:.6f}")
+    print(f"최종 순수익: {results['net_profit']:.6f}")
+    print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
+    print(f"단일 최대 수익: {results['max_profit']:.6f}")
+    print(f"단일 최대 손실: {results['max_loss']:.6f}")
+    
+    return results, debug_info
 
-        # 세이브된 시그널과 포지션이 서로 다를 경우 주문 생성 중지
-        if save_signal != position:
-            position = None  
+def analyze_histogram_ma_strategy(df, lookback=1, tp_long=200, sl_long=300, tp_short=200, sl_short=300, 
+                               fee_rate=0.00011, investment_usdt=1):
+    """
+    히스토그램 차이값 MA의 방향성을 이용한 전략 분석
+    
+    Parameters:
+    df : DataFrame - 'timestamp', 'close', 'high', 'low', 'histogram_diff_MA' 컬럼 포함
+    lookback : int - 몇 단계 이전과 비교할지 설정
+    """
+    MIN_BTC = 0.001  # 최소 BTC 주문 수량
+    
+    # 먼저 데이터를 시간순으로 정렬
+    df = df.sort_values('timestamp').reset_index(drop=True)
+    
+    results = {
+        'long_win': 0, 'long_loss': 0,
+        'short_win': 0, 'short_loss': 0,
+        'total_long_profit': 0,  # 롱 수익
+        'total_long_loss': 0,    # 롱 손실
+        'total_short_profit': 0,  # 숏 수익
+        'total_short_loss': 0,    # 숏 손실
+        'total_fees': 0,
+        'max_profit': float('-inf'),
+        'max_loss': float('inf'),
+        'all_trades': []
+    }
+    
+    in_position = False
+    position_type = None
+    entry_price = 0
+    entry_index = 0
+    
+    for i in range(1, len(df)):  # 1부터 시작하여 이전값과 비교
+        current_price = df['close'].iloc[i]
+        
+        # 현재 가격에서 0.001 BTC의 USDT 가치 계산
+        min_investment_usdt = MIN_BTC * current_price
+        # 실제 투자금액 결정 (목표 투자금액과 최소 투자금액 중 큰 값)
+        actual_investment = max(investment_usdt, min_investment_usdt)
+        
+        current_ma = df['histogram_diff_MA'].iloc[i]
+        lookback_ma = df['histogram_diff_MA'].iloc[i-lookback]
+        
+        if not in_position:
+            # MA가 상승하면 롱 진입
+            if current_ma > lookback_ma:
+                in_position = True
+                position_type = 'long'
+                entry_price = current_price
+                entry_index = i
+                # 진입 수수료 계산
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+                
+            # MA가 하락하면 숏 진입
+            elif current_ma < lookback_ma:
+                in_position = True
+                position_type = 'short'
+                entry_price = current_price
+                entry_index = i
+                # 진입 수수료 계산
+                entry_fee = actual_investment * fee_rate
+                results['total_fees'] += entry_fee
+        
+        elif in_position:
+            high_diff = df['high'].iloc[i] - entry_price
+            low_diff = df['low'].iloc[i] - entry_price
+            
+            if position_type == 'long':
+                if high_diff >= tp_long:
+                    # BTC 가격 변동을 USDT 수익으로 변환
+                    profit_usdt = (tp_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)
+                    
+                    results['long_win'] += 1
+                    results['total_long_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+                elif low_diff <= -sl_long:
+                    # BTC 가격 변동을 USDT 손실로 변환
+                    loss_usdt = (sl_long / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))
+                    
+                    results['long_loss'] += 1
+                    results['total_long_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+            elif position_type == 'short':
+                if low_diff <= -tp_short:
+                    # BTC 가격 변동을 USDT 수익으로 변환
+                    profit_usdt = (tp_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    profit_after_fees = profit_usdt - (2 * exit_fee)
+                    
+                    results['short_win'] += 1
+                    results['total_short_profit'] += profit_after_fees
+                    results['all_trades'].append(profit_after_fees)
+                    results['max_profit'] = max(results['max_profit'], profit_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+                    
+                elif high_diff >= sl_short:
+                    # BTC 가격 변동을 USDT 손실로 변환
+                    loss_usdt = (sl_short / entry_price) * actual_investment
+                    exit_fee = actual_investment * fee_rate
+                    loss_after_fees = -(loss_usdt + (2 * exit_fee))
+                    
+                    results['short_loss'] += 1
+                    results['total_short_loss'] += loss_after_fees
+                    results['all_trades'].append(loss_after_fees)
+                    results['max_loss'] = min(results['max_loss'], loss_after_fees)
+                    results['total_fees'] += exit_fee
+                    in_position = False
+    
+    # 결과 집계
+    results['total_trades'] = results['long_win'] + results['long_loss'] + results['short_win'] + results['short_loss']
+    results['total_profit_only'] = results['total_long_profit'] + results['total_short_profit']
+    results['total_loss_only'] = results['total_long_loss'] + results['total_short_loss']
+    results['net_profit'] = results['total_profit_only'] + results['total_loss_only']
+    
+    if results['total_trades'] > 0:
+        results['win_rate'] = (results['long_win'] + results['short_win']) / results['total_trades'] * 100
+        results['avg_profit_per_trade'] = results['net_profit'] / results['total_trades']
+    
+    print("\n=== 히스토그램 MA 전략 분석 결과 ===")
+    print(f"설정값: TP롱/숏 {tp_long}/{tp_short}, SL롱/숏 {sl_long}/{sl_short}")
+    print(f"총 거래 횟수: {results['total_trades']}")
+    print(f"롱 포지션: 성공 {results['long_win']}, 실패 {results['long_loss']}")
+    print(f"숏 포지션: 성공 {results['short_win']}, 실패 {results['short_loss']}")
+    print(f"전체 승률: {results.get('win_rate', 0):.2f}%")
+    print("\n수익/손실 내역 (USDT):")
+    print(f"총 수수료 지출: -{results['total_fees']:.6f}")
+    print(f"롱 포지션 수익: +{results['total_long_profit']:.6f}")
+    print(f"롱 포지션 손실: {results['total_long_loss']:.6f}")
+    print(f"숏 포지션 수익: +{results['total_short_profit']:.6f}")
+    print(f"숏 포지션 손실: {results['total_short_loss']:.6f}")
+    print(f"\n전체 수익: +{results['total_profit_only']:.6f}")
+    print(f"전체 손실: {results['total_loss_only']:.6f}")
+    print(f"최종 순수익: {results['net_profit']:.6f}")
+    print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
+    print(f"단일 최대 수익: {results['max_profit']:.6f}")
+    print(f"단일 최대 손실: {results['max_loss']:.6f}")
+    print(f"테스트 기간: {df.index[0]} ~ {df.index[-1]}")
+    return results
 
-        print(f'결정 포지션 : {position}')
 
-        if position == "Long":
+if __name__ == "__main__":
 
-            # 스탑 로스는 오더 주문에서 설정
-            # stop_loss = set_sl(df,position)
-
-            # 주문 생성 함수 호출
-            current_price = get_current_price(symbol=symbol)
-
-            order_response = create_order_with_tp_sl(
-                symbol=symbol,  # 거래할 심볼 (예: 'BTC/USDT')
-                side="Buy",  # 'buy' 또는 'sell'
-                usdt_amount=usdt_amount,  # 주문 수량
-                leverage=leverage,  # 레버리지 100배
-                current_price=current_price,  # 현재 가격
-                stop_loss = stop_loss,
-                take_profit = take_profit
-            )
-            if order_response is None:
-                print("주문 생성 실패.")
-            else:
-                print(f"주문 성공: {order_response}")
-
-        elif position == "Short":
-            # stop_loss = set_sl(df,position)
-            # 주문 생성 함수 호출
-            current_price = get_current_price(symbol=symbol)
-
-            order_response = create_order_with_tp_sl(
-                symbol=symbol,  # 거래할 심볼 (예: 'BTC/USDT')
-                side="Sell",  # 'buy' 또는 'sell'
-                usdt_amount=usdt_amount,  # 주문 수량
-                leverage=leverage,  # 레버리지 100배
-                current_price=current_price,  # 현재 가격
-                stop_loss = stop_loss,
-                take_profit = take_profit
-            )
-            if order_response is None:
-                print("주문 생성 실패.")
-            else:
-                print(f"주문 성공: {order_response}")
-        else:
-            pass
+    # results = analyze_histogram_ma_strategy(df,lookback=1, tp_long=200, sl_long=300, tp_short=200, sl_short=300)
 
 
+    # TP/SL 값을 다르게 설정하여 테스트
+    results, debug_info = analyze_macd_consecutive_drops(
+        df, 
+        lookback=2,
+        tp_long=200,   # 롱 포지션 이익실현
+        sl_long=300,   # 롱 포지션 손절
+        tp_short=200,  # 숏 포지션 이익실현
+        sl_short=300   # 숏 포지션 손절
+    )
+
+    pass
