@@ -1,17 +1,30 @@
-def macd_stg(df):
+def check_trade_signal(df):
     """
-    가장 최근의 'Long', 'Short', 또는 'None' 신호를 반환합니다.
-    macd_diff가 0을 상향 돌파할 때 'Long', 하향 돌파할 때 'Short', 그렇지 않으면 'None'을 반환합니다.
-    """
-    if len(df) < 2:
-        return None  # 데이터가 부족할 경우 신호를 None으로 반환
+    MACD 변화량 기반 매매 신호 체크 함수
     
-    # 마지막 두 행에서 macd_diff 비교
-    if (df['macd_diff_stg'].iloc[-1] > 0) and (df['macd_diff_stg'].iloc[-2] <= 0):
-        signal = "Long"
-    elif (df['macd_diff_stg'].iloc[-1] < 0) and (df['macd_diff_stg'].iloc[-2] >= 0):
-        signal = "Short"
-    else:
-        signal = None
+    Parameters:
+    df : DataFrame - 'macd_diff' 컬럼이 포함된 데이터프레임
+    
+    Returns:
+    str - 'long', 'short', or None
+    """
+    # 마지막 두 개의 MACD 값 가져오기
+    current = df['macd_diff'].iloc[-1]
+    prev = df['macd_diff'].iloc[-2]
+    
+    check_diff = 35
 
-    return signal
+    # MACD 변화량 계산
+    macd_change = current - prev
+    print(f'macd 변화량 : {macd_change}')
+    # 변화량이 35 이상일 때 신호 발생
+    if abs(macd_change) >= check_diff:
+        if macd_change > 0:  # MACD가 크게 상승
+            print('포지션 결정 : Long')
+            return 'Long'
+        else:  # MACD가 크게 하락
+            print('포지션 결정 : Short')
+            return 'Short'
+    
+    print(f'변화량이 {check_diff}보다 낮으므로 포지션 생성 없음음')
+    return None

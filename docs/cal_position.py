@@ -2,13 +2,23 @@ from docs.strategy.follow_line import follow_line
 from docs.strategy.supertrend import supertrend
 from docs.strategy.hma_strategy import check_hma_signals
 from docs.strategy.squeeze_strategy import check_squeeze_signals
+from docs.strategy.macd_stg import check_trade_signal
 
 def cal_position(df):
     # 각 전략 계산
-    df = follow_line(df)
-    df = supertrend(df)
-    df = check_hma_signals(df)
     
+    # df = follow_line(df)
+    # df = supertrend(df)
+    # df = check_hma_signals(df)
+    
+    macd_position = check_trade_signal(df)
+
+    '''
+    macd 전략 테스트를 위해 macd 포지션만 리턴
+    
+
+
+
     # 포지션 결과를 저장할 딕셔너리 생성
     position_dict = {}
     
@@ -89,9 +99,9 @@ def cal_position(df):
         position_dict['super trend'] is not None and 
         position_dict['Flow Line'] != position_dict['super trend']):
         final_position = None
-    
+    '''
 
-    return final_position, df
+    return macd_position, df
 
 
 

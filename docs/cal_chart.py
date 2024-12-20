@@ -22,6 +22,13 @@ def process_chart_data(df):
     df['macd'] = df['EMA_fast'] - df['EMA_slow']
     df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
     df['macd_diff'] = df['macd'] - df['macd_signal']
+    
+    # 2. RSI (Relative Strength Index)
+    df['rsi'] = ta.momentum.rsi(df['close'], window=14).fillna(50)
+
+    # 여기부터 macd 전략을 위한 생략
+    """
+
 
     # STC는 조금더 연구해 본 이후 사용용
     '''
@@ -130,8 +137,7 @@ def process_chart_data(df):
     def wilder_smoothing(series, period):
         return series.ewm(alpha=1/period, adjust=False).mean()
 
-    # 2. RSI (Relative Strength Index)
-    df['rsi'] = ta.momentum.rsi(df['close'], window=14).fillna(50)
+
 
     # Bollinger Bands
     df['BBUpper'] = (df['close'].rolling(window=21).mean() + 
@@ -467,6 +473,8 @@ def process_chart_data(df):
     df = analyze_state_transitions(df)
     '''
 
+    
+    """ # macd 전략을 위한 생략 여기까지지
 
     return df
 

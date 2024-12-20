@@ -23,10 +23,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 TRADING_CONFIG = {
     'symbol': 'BTCUSDT',
     'leverage': 5,
-    'usdt_amount': 0.1,
+    'usdt_amount': 0.3,
     'set_timevalue': '5m',
-    'take_profit': 500,
-    'stop_loss': 600
+    'take_profit': 400,
+    'stop_loss': 400
 }
 
 TIME_VALUES = {
@@ -274,7 +274,9 @@ def main():
 
 
 
-            trigger_signal = check_adx_di_trigger(df)
+            # trigger_signal = check_adx_di_trigger(df)
+
+
 
             # 포지션 상태 확인
             balance, positions_json, ledger = fetch_investment_status()
@@ -285,6 +287,7 @@ def main():
                 current_amount, current_side, current_avgPrice = get_position_amount(config['symbol'])
                 current_side = 'Long' if current_side == 'Buy' else 'Short'
                 
+                '''
                     # HMA 거래 중 일반 시그널 체크
                 if is_hma_trade:
                     if trigger_signal and not trigger_first_active:  
@@ -360,9 +363,11 @@ def main():
                             position_save = None
                     
                     is_hma_trade = False # 세팅 후 플래그 초기화
-
+                '''
+                
                 # 포지션 종료 조건 체크
-                elif should_close_position(current_side, position) or isclowstime(df, current_side):
+                # should_close_position(current_side, position) or 
+                if isclowstime(df, current_side):
                     close_position(symbol=config['symbol'])
                     print("포지션 종료")
                     # 트리거 상태 초기화
@@ -374,6 +379,20 @@ def main():
                     position_save = None
 
             else:  # 포지션이 없는 경우
+                if position:
+                    execute_order(
+                        symbol=config['symbol'],
+                        position=position,  # position_save 사용
+                        usdt_amount=config['usdt_amount'],
+                        leverage=config['leverage'],
+                        stop_loss=config['stop_loss'],
+                        take_profit=config['take_profit']
+                    )
+                    position_first_active = False
+                    position_first_count = 2
+                    position_save = None
+                                
+                '''
                 # 케이스 1: 트리거 시그널 선행 (4틱)
                 if trigger_signal and not trigger_first_active:  
                     print("트리거 조건 충족, 카운트다운 시작")
@@ -466,7 +485,7 @@ def main():
                 else:
                     # HMA 신호가 없는 경우 스퀴즈 플래그 리셋
                     squeeze_active = False
-
+            '''
             remaining_time = 270 - execution_time
 
             # 남은 시간이 있다면 대기

@@ -30,11 +30,21 @@ data_list = list(data_cursor)
 # MongoDB 데이터를 DataFrame으로 변환
 df = pd.DataFrame(data_list)
 
+# 타임스탬프를 datetime 형식으로 변환
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+# 불필요한 ObjectId 필드 제거
+if '_id' in df.columns:
+    df.drop('_id', axis=1, inplace=True)
+
+# 인덱스를 타임스탬프로 설정
+# df.set_index('timestamp', inplace=True)
+
 df = process_chart_data(df)
 
 
-def analyze_macd_consecutive_drops(df, lookback=2, tp_long=200, sl_long=300, tp_short=300, sl_short=200, 
-                                 fee_rate=0.00011, investment_usdt=1):
+def analyze_macd_consecutive_drops(df, lookback=2, tp_long=400, sl_long=400, tp_short=400, sl_short=400, 
+                                 fee_rate=0.00044, investment_usdt=1):
     """
     MACD 연속 변화 전략 분석 함수
     
@@ -91,41 +101,32 @@ def analyze_macd_consecutive_drops(df, lookback=2, tp_long=200, sl_long=300, tp_
         }
         
         if not in_position:
-            is_decreasing = True
-            for j in range(len(prev_values)-1):
-                if prev_values[j] >= prev_values[j+1]:
-                    is_decreasing = False
-                    break
-            is_decreasing = is_decreasing and (current < prev_values[0])
+            # 이전 값과의 차이 계산
+            prev_macd = df['macd_diff'].iloc[i-1]
+            current = df['macd_diff'].iloc[i]
+            macd_change = current - prev_macd
             
-            is_increasing = True
-            for j in range(len(prev_values)-1):
-                if prev_values[j] <= prev_values[j+1]:
-                    is_increasing = False
-                    break
-            is_increasing = is_increasing and (current > prev_values[0])
+            debug_point['macd_change'] = macd_change
             
-            debug_point['is_decreasing'] = is_decreasing
-            debug_point['is_increasing'] = is_increasing
-            
-            if is_decreasing:
-                in_position = True
-                position_type = 'short'
-                entry_price = current_price
-                entry_index = i
-                # 진입 수수료 계산 (USDT)
-                entry_fee = actual_investment * fee_rate
-                results['total_fees'] += entry_fee
-                debug_point['action'] = f'Enter Short with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
-            elif is_increasing:
-                in_position = True
-                position_type = 'long'
-                entry_price = current_price
-                entry_index = i
-                # 진입 수수료 계산 (USDT)
-                entry_fee = actual_investment * fee_rate
-                results['total_fees'] += entry_fee
-                debug_point['action'] = f'Enter Long with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
+                
+            # MACD 변화량이 10 이상일 때만 거래
+            if abs(macd_change) >= 35:
+                if macd_change < 0:  # MACD가 크게 하락
+                    in_position = True
+                    position_type = 'short'
+                    entry_price = current_price
+                    # 진입 수수료 계산 (USDT)
+                    entry_fee = actual_investment * fee_rate
+                    results['total_fees'] += entry_fee
+                    debug_point['action'] = f'Enter Short with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
+                elif macd_change > 0:  # MACD가 크게 상승
+                    in_position = True
+                    position_type = 'long'
+                    entry_price = current_price
+                    # 진입 수수료 계산 (USDT)
+                    entry_fee = actual_investment * fee_rate
+                    results['total_fees'] += entry_fee
+                    debug_point['action'] = f'Enter Long with {actual_investment:.6f} USDT (Fee: {entry_fee:.6f} USDT)'
         
         elif in_position:
             high_diff = df['high'].iloc[i] - entry_price
@@ -239,11 +240,12 @@ def analyze_macd_consecutive_drops(df, lookback=2, tp_long=200, sl_long=300, tp_
     print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
     print(f"단일 최대 수익: {results['max_profit']:.6f}")
     print(f"단일 최대 손실: {results['max_loss']:.6f}")
+    print(f"테스트 기간: {df['timestamp'].iloc[0]} ~ {df['timestamp'].iloc[-1]}")
     
     return results, debug_info
 
 def analyze_histogram_ma_strategy(df, lookback=1, tp_long=200, sl_long=300, tp_short=200, sl_short=300, 
-                               fee_rate=0.00011, investment_usdt=1):
+                               fee_rate=0.00044, investment_usdt=1):
     """
     히스토그램 차이값 MA의 방향성을 이용한 전략 분석
     
@@ -392,11 +394,12 @@ def analyze_histogram_ma_strategy(df, lookback=1, tp_long=200, sl_long=300, tp_s
     print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
     print(f"단일 최대 수익: {results['max_profit']:.6f}")
     print(f"단일 최대 손실: {results['max_loss']:.6f}")
-    print(f"테스트 기간: {df.index[0]} ~ {df.index[-1]}")
+    print(f"테스트 기간: {df['timestamp'].iloc[0]} ~ {df['timestamp'].iloc[-1]}")
+
     return results
 
 def analyze_di_histogram_strategy(df, lookback=2, tp_long=200, sl_long=300, tp_short=200, sl_short=300, 
-                                 fee_rate=0.00011, investment_usdt=1):
+                                 fee_rate=0.00044, investment_usdt=1):
     """
     DI 기울기 히스토그램의 연속적인 변화를 이용한 전략
     
@@ -544,6 +547,8 @@ def analyze_di_histogram_strategy(df, lookback=2, tp_long=200, sl_long=300, tp_s
     print(f"거래당 평균 수익: {results.get('avg_profit_per_trade', 0):.6f}")
     print(f"단일 최대 수익: {results['max_profit']:.6f}")
     print(f"단일 최대 손실: {results['max_loss']:.6f}")
+    print(f"테스트 기간: {df['timestamp'].iloc[0]} ~ {df['timestamp'].iloc[-1]}")
+
     
     return results
 
@@ -552,16 +557,16 @@ if __name__ == "__main__":
 
     # results = analyze_histogram_ma_strategy(df,lookback=1, tp_long=200, sl_long=300, tp_short=200, sl_short=300)
 
-    results = analyze_di_histogram_strategy(df, lookback=1)
+    # results = analyze_di_histogram_strategy(df, lookback=1)
 
     # TP/SL 값을 다르게 설정하여 테스트
-    # results, debug_info = analyze_macd_consecutive_drops(
-    #     df, 
-    #     lookback=2,
-    #     tp_long=200,   # 롱 포지션 이익실현
-    #     sl_long=300,   # 롱 포지션 손절
-    #     tp_short=200,  # 숏 포지션 이익실현
-    #     sl_short=300   # 숏 포지션 손절
-    # )
+    results, debug_info = analyze_macd_consecutive_drops(
+        df, 
+        lookback=2,
+        tp_long=300,   # 롱 포지션 이익실현
+        sl_long=400,   # 롱 포지션 손절
+        tp_short=300,  # 숏 포지션 이익실현
+        sl_short=400   # 숏 포지션 손절
+    )
 
     pass
