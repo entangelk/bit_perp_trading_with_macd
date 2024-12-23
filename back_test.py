@@ -23,6 +23,17 @@ if set_timevalue not in chart_collections:
 
 chart_collection = database[chart_collections[set_timevalue]] 
 
+# MongoDB 쿼리 단계에서 필터링
+start_date = pd.Timestamp('2024-11-11')
+end_date = pd.Timestamp('2024-12-22')
+
+data_cursor = chart_collection.find({
+    "timestamp": {
+        "$gte": start_date.to_pydatetime(),
+        "$lte": end_date.to_pydatetime()
+    }
+}).sort("timestamp", -1)
+
 # 최신 데이터부터 과거 데이터까지 모두 가져오기
 data_cursor = chart_collection.find().sort("timestamp", -1)
 data_list = list(data_cursor)

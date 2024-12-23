@@ -1,0 +1,126 @@
+//@version=4
+strategy("DI Slope Direction Strategy with MACD and Loss Recovery", overlay=false)
+
+// 기본 파라미터
+len = input(14, title="ADX/DI Length")
+slope_len = input(1, title="Slope Length")
+entry_threshold = input(0.5, title="Entry Point Threshold")
+use_recovery = input(true, title="Use Loss Recovery Signal")
+
+// MACD 파라미터
+fast_length = input(12, title="MACD Fast Length")
+slow_length = input(26, title="MACD Slow Length")
+signal_length = input(9, title="MACD Signal Length")
+
+// Risk Management
+tp_points = input(100, title="Take Profit (Points)")
+sl_points = input(50, title="Stop Loss (Points)")
+
+// 변수 선언
+var entry_price = 0.0
+var bool recovery_mode = false
+var bool need_recovery = false
+var float last_position_size = 0.0
+
+// MACD 계산
+[macd, signal, hist] = macd(close, fast_length, slow_length, signal_length)
+isStrong_Bullish = hist > 0 and hist > hist[1]
+isStrong_Bearish = hist < 0 and hist < hist[1]
+
+// ADX/DI 계산
+TrueRange = max(max(high-low, abs(high-nz(close[1]))), abs(low-nz(close[1])))
+DirectionalMovementPlus = high-nz(high[1]) > nz(low[1])-low ? max(high-nz(high[1]), 0): 0
+DirectionalMovementMinus = nz(low[1])-low > high-nz(high[1]) ? max(nz(low[1])-low, 0): 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - (nz(SmoothedTrueRange[1])/len) + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - (nz(SmoothedDirectionalMovementPlus[1])/len) + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - (nz(SmoothedDirectionalMovementMinus[1])/len) + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+
+// DI 기울기 계산
+DIPlus_slope = DIPlus - DIPlus[slope_len]
+DIMinus_slope = DIMinus - DIMinus[slope_len]
+
+// 기울기 차이 계산
+slope_diff = DIPlus_slope - DIMinus_slope
+
+// 진입 조건
+longCondition = slope_diff > entry_threshold and isStrong_Bullish
+shortCondition = slope_diff < -entry_threshold and isStrong_Bearish
+
+// 포지션 종료 시 리커버리 체크
+if (strategy.position_size == 0 and last_position_size != 0)
+    if (close < entry_price and use_recovery)
+        need_recovery := true
+        recovery_mode := true
+    
+last_position_size := strategy.position_size
+
+// 리커버리 신호 생성
+recovery_long = need_recovery and last_position_size[1] < 0
+recovery_short = need_recovery and last_position_size[1] > 0
+
+// 리커버리 모드 진입
+if (recovery_mode)
+    if (recovery_long and strategy.position_size <= 0)
+        entry_price := close
+        strategy.entry("Recovery Long", strategy.long)
+        strategy.exit("Recovery Long TP/SL", "Recovery Long", limit=close + tp_points, stop=close - sl_points)
+        need_recovery := false
+        recovery_mode := false
+
+    if (recovery_short and strategy.position_size >= 0)
+        entry_price := close
+        strategy.entry("Recovery Short", strategy.short)
+        strategy.exit("Recovery Short TP/SL", "Recovery Short", limit=close - tp_points, stop=close - sl_points)
+        need_recovery := false
+        recovery_mode := false
+
+// 일반 모드 진입
+if (not recovery_mode)
+    if (longCondition and strategy.position_size <= 0)
+        entry_price := close
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Long TP/SL", "Long", limit=close + tp_points, stop=close - sl_points)
+
+    if (shortCondition and strategy.position_size >= 0)
+        entry_price := close
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Short TP/SL", "Short", limit=close - tp_points, stop=close - sl_points)
+
+// === 플롯 ===
+// DI 관련 플롯
+plot(DIPlus, color=color.green, title="DI+")
+plot(DIMinus, color=color.red, title="DI-")
+plot(slope_diff, style=plot.style_columns, color=slope_diff > 0 ? color.green : color.red, title="DI Slope Difference")
+
+// MACD 히스토그램 플롯
+plot(hist, style=plot.style_columns, color=
+     hist > 0 ? 
+         (hist > hist[1] ? color.green : color.new(color.green, 50)) : 
+         (hist < hist[1] ? color.red : color.new(color.red, 50)), 
+     title="MACD Histogram")
+
+// 기준선
+hline(entry_threshold, color=color.green, linestyle=hline.style_dashed)
+hline(-entry_threshold, color=color.red, linestyle=hline.style_dashed)
+hline(0, color=color.gray, linestyle=hline.style_dotted)
+
+// 모든 신호 표시
+plotshape(longCondition, title="Long Signal", 
+         style=shape.triangleup, location=location.bottom, color=color.green, size=size.small)
+plotshape(shortCondition, title="Short Signal", 
+         style=shape.triangledown, location=location.top, color=color.red, size=size.small)
+
+// 리커버리 신호 표시
+plotshape(recovery_long, title="Recovery Long", style=shape.diamond, location=location.bottom, 
+         color=color.new(color.green, 0), size=size.small)
+plotshape(recovery_short, title="Recovery Short", style=shape.diamond, location=location.top, 
+         color=color.new(color.red, 0), size=size.small)
