@@ -4,13 +4,13 @@ import numpy as np
 def supertrend(df):
     """
     Supertrend 전략 계산
-    :param df: DataFrame (close, atr_100이 포함되어야 함)
+    :param df: DataFrame (close, atr_35이 포함되어야 함)
     :return: DataFrame with supertrend signals
     """
     # 소스는 close 사용
     src = df['close']
-    atr = df['atr_100']  # 100기간 SMA ATR 사용
-    multiplier = 4
+    atr = df['atr_35']  # 35기간 SMA ATR 사용
+    multiplier = 6
     
     # Basic Bands 계산
     df['basic_upper'] = src - (multiplier * atr)

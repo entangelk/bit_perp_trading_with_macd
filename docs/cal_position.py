@@ -8,22 +8,56 @@ from docs.strategy.macd_size_di import generate_macd_size_signal
 
 def cal_position(df):
     # 각 전략 계산
-    
-    # df = follow_line(df)
-    # df = supertrend(df)
     # df = check_hma_signals(df)
     
-    # macd_position = check_trade_signal(df)
-    slop_position = generate_macd_di_rsi_signal(df,debug=True)
-    size_position = generate_macd_size_signal(df,debug=True)
+    # df = follow_line(df)
+    df = supertrend(df)
+    print("\n===== 포지션 계산 디버깅 =====")
+    print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
 
-    if slop_position:
-        position = slop_position
-    elif size_position:
-        position = size_position
+    # 슈퍼트랜드 필터링 적용
+
+    # DI 차이와 4기간 평균
+    df['di_diff'] = df['DI+'] - df['DI-']
+    df['avg_di_diff'] = df['di_diff'].rolling(window=4).mean()
+
+    print(f"\n===== DI 지표 =====")
+    print(f"DI+ 값: {df['DI+'].iloc[-1]:.2f}")
+    print(f"DI- 값: {df['DI-'].iloc[-1]:.2f}")
+    print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
+    print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
+
+    # 시그널 필터링 (DI difference threshold: 17)
+    df['filtered_position'] = None
+    
+    long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > 17)
+    short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -17)
+    
+    df.loc[long_condition, 'filtered_position'] = 'Long'
+    df.loc[short_condition, 'filtered_position'] = 'Short'
+
+    st_position = df['st_position'].iloc[-1]
+    print(f"\n===== 필터링 결과 =====")
+    print(f"DI 필터 적용 포지션: {df['filtered_position'].iloc[-1]}")
+
+    if not st_position:
+        print("\n===== 대체 시그널 확인 =====")
+        # macd_position = check_trade_signal(df)
+        slop_position = generate_macd_di_rsi_signal(df,debug=True)
+        size_position = generate_macd_size_signal(df,debug=True)
+        print(f"MACD-DI-RSI 시그널: {slop_position}")
+        print(f"MACD 크기 시그널: {size_position}")
+        if slop_position:
+            position = slop_position
+        elif size_position:
+            position = size_position
+        else:
+            position = None
     else:
-        position = None
+        position = 'st_'+ st_position
 
+    print(f"\n===== 최종 포지션 =====")
+    print(f"결정된 포지션: {position}")
 
     '''
     macd 전략 테스트를 위해 macd 포지션만 리턴

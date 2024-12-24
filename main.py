@@ -380,13 +380,22 @@ def main():
 
             else:  # 포지션이 없는 경우
                 if position:
+                    stop_loss = config['stop_loss']
+                    take_profit = config['take_profit']
+
+                    if position[:3] == 'st_': # 슈퍼 트랜드일시 특별 tpsl사용용
+                        position = position[3:]
+                        stop_loss = 700
+                        take_profit = 700
+
+
                     execute_order(
                         symbol=config['symbol'],
                         position=position,  # position_save 사용
                         usdt_amount=config['usdt_amount'],
                         leverage=config['leverage'],
-                        stop_loss=config['stop_loss'],
-                        take_profit=config['take_profit']
+                        stop_loss=stop_loss,
+                        take_profit=take_profit
                     )
                     position_first_active = False
                     position_first_count = 2

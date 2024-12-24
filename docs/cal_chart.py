@@ -170,6 +170,7 @@ def process_chart_data(df):
 
    # 기존 TR을 활용하여 SMA 방식으로 ATR 계산
     df['atr_10'] = df['TR'].rolling(window=10).mean()
+    df['atr_35'] = df['TR'].rolling(window=35).mean()
     df['atr_100'] = df['TR'].rolling(window=100).mean()
     df['atr_200'] = df['TR'].rolling(window=200).mean()
 
