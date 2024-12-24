@@ -3,14 +3,14 @@ def check_trade_signal(df):
     MACD 변화량 기반 매매 신호 체크 함수
     
     Parameters:
-    df : DataFrame - 'macd_diff' 컬럼이 포함된 데이터프레임
+    df : DataFrame - 'hist' 컬럼이 포함된 데이터프레임
     
     Returns:
     str - 'long', 'short', or None
     """
     # 마지막 두 개의 MACD 값 가져오기
-    current = df['macd_diff'].iloc[-1]
-    prev = df['macd_diff'].iloc[-2]
+    current = df['hist'].iloc[-1]
+    prev = df['hist'].iloc[-2]
     
     check_diff = 35
 

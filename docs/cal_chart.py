@@ -16,19 +16,25 @@ def process_chart_data(df):
     fast_period = 12
     slow_period = 26
     signal_period = 9
+    size_ratio = 1.2
 
     df['EMA_fast'] = ema_with_sma_init(df['close'], fast_period)
     df['EMA_slow'] = ema_with_sma_init(df['close'], slow_period)
     df['macd'] = df['EMA_fast'] - df['EMA_slow']
     df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
-    df['macd_diff'] = df['macd'] - df['macd_signal']
+    df['hist'] = df['macd'] - df['macd_signal']
     
-    # 2. RSI (Relative Strength Index)
-    df['rsi'] = ta.momentum.rsi(df['close'], window=14).fillna(50)
 
-    # 여기부터 macd 전략을 위한 생략
-    """
+    # MACD Size 분석
+    df['hist_size'] = abs(df['hist'])
+    df['candle_size'] = abs(df['close'] - df['open'])
+    df['candle_size_ma'] = df['candle_size'].rolling(window=slow_period).mean()
+    df['normalized_candle_size'] = df['candle_size'] / df['candle_size_ma']
+    df['hist_size_ma'] = df['hist_size'].rolling(window=slow_period).mean()
+    df['normalized_hist_size'] = df['hist_size'] / df['hist_size_ma']
 
+    # === 두 번째 전략 추가 계산 (MACD Direction) ===
+    df['hist_direction'] = df['hist'] - df['hist'].shift(1)
 
     # STC는 조금더 연구해 본 이후 사용용
     '''
@@ -122,17 +128,7 @@ def process_chart_data(df):
     df.drop(columns=columns_to_drop, inplace=True)
     '''
 
-
-    # 1++ MACD stragy 용 계산 (사용자 정의 파라미터 적용)
-
-    fast_length=4
-    slow_length=100
-    macd_length=21
-
-    df['macd_stg'] = ta.trend.ema_indicator(df['close'], window=fast_length) - ta.trend.ema_indicator(df['close'], window=slow_length)
-    df['macd_signal_stg'] = ta.trend.ema_indicator(df['macd'], window=macd_length)
-    df['macd_diff_stg'] = df['macd'] - df['macd_signal']
-
+ 
     # Wilder 방식 스무딩 함수
     def wilder_smoothing(series, period):
         return series.ewm(alpha=1/period, adjust=False).mean()
@@ -149,9 +145,18 @@ def process_chart_data(df):
     df['maFast'] = df['close'].rolling(window=50).mean().bfill()
     df['maSlow'] = df['close'].rolling(window=200).mean().bfill()
 
+    # 2. RSI (Relative Strength Index)
+    rsi_length = 14
+    df['rsi'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
 
     # 2. RSI의 21기간 SMA
     df['rsi_sma'] = df['rsi'].rolling(window=21).mean()
+
+
+    # === DI Calculation ===
+    len_di = 14
+    slope_len = 4
+    min_slope_threshold = 12
 
     # 3. ATR 계산
     df['TR'] = np.maximum(df['high'] - df['low'], 
@@ -193,11 +198,7 @@ def process_chart_data(df):
 
 
     # adx di
-    adx_period = 14
-
-    # 조정치 정의
-    adjust_di_plus = 0  # DI+에 추가할 조정치
-    adjust_di_minus = 0  # DI-에 추가할 조정치
+    len_di = 14
 
 
     df['TR'] = df['TR'].fillna(0)
@@ -236,13 +237,22 @@ def process_chart_data(df):
         
         return pd.Series(smoothed, index=series.index)
 
-    df['Smoothed_TR'] = wilder_smoothing(df['TR'], adx_period)
-    df['Smoothed_DM+'] = wilder_smoothing(df['DM+'], adx_period)
-    df['Smoothed_DM-'] = wilder_smoothing(df['DM-'], adx_period)
+    df['Smoothed_TR'] = wilder_smoothing(df['TR'], len_di)
+    df['Smoothed_DM+'] = wilder_smoothing(df['DM+'], len_di)
+    df['Smoothed_DM-'] = wilder_smoothing(df['DM-'], len_di)
 
-    # 4. DI+ 및 DI- 계산 (조정치 추가)
-    df['DI+'] = np.where(df['Smoothed_TR'] > 0, 100 * (df['Smoothed_DM+'] / df['Smoothed_TR']), 0) + adjust_di_plus
-    df['DI-'] = np.where(df['Smoothed_TR'] > 0, 100 * (df['Smoothed_DM-'] / df['Smoothed_TR']), 0) + adjust_di_minus
+    # DI+ 및 DI- 계산
+    df['DI+'] = 100 * (df['Smoothed_DM+'] / df['Smoothed_TR'])
+    df['DI-'] = 100 * (df['Smoothed_DM-'] / df['Smoothed_TR'])
+
+    # DI Slopes
+    df['DIPlus_slope1'] = df['DI+'] - df['DI+'].shift(slope_len)
+    df['DIMinus_slope1'] = df['DI-'] - df['DI-'].shift(slope_len)
+    
+    # === 두 번째 전략의 DI Slope (slope_len=3) ===
+    df['DIPlus_slope2'] = df['DI+'] - df['DI+'].shift(3)
+    df['DIMinus_slope2'] = df['DI-'] - df['DI-'].shift(3)
+    df['slope_diff'] = df['DIPlus_slope2'] - df['DIMinus_slope2']
 
     # 5. DX 계산
     df['DX'] = np.where((df['DI+'] + df['DI-']) > 0,
@@ -250,32 +260,16 @@ def process_chart_data(df):
                         0)
 
     # 6. ADX 계산
-    df['ADX'] = df['DX'].rolling(window=adx_period).mean()
+    df['ADX'] = df['DX'].rolling(window=len_di).mean()
 
 
-    # 7. DI 이동평균선 계산
-    df['DI+_MA7'] = df['DI+'].rolling(window=7).mean()
-    df['DI-_MA7'] = df['DI-'].rolling(window=7).mean()
-
-    slope_len = 12
-    di_dff_ma = 12
-
-    # DI 기울기 계산
-    df['DI+_slope'] = df['DI+'] - df['DI+'].shift(slope_len)
-    df['DI-_slope'] = df['DI-'] - df['DI-'].shift(slope_len)
-
-    # 기울기 차이 계산 (DI+ 기울기 - DI- 기울기)
-    df['DI_slope_diff'] = df['DI+_slope'] - df['DI-_slope']
-
-    # 히스토그램 차이 계산 (현재 히스토그램 값 - 이전 히스토그램 값)
-    df['histogram_diff'] = df['DI_slope_diff'] - df['DI_slope_diff'].shift(1)
-
-    # 히스토그램 차이값의 이동평균 계산 
-    df['histogram_diff_MA'] = df['histogram_diff'].rolling(window=di_dff_ma).mean()
-
-    # 필요없는 중간 계산 열 삭제
-    df.drop(columns=['DI+_slope', 'DI-_slope'], inplace=True)
-
+    # 불필요한 중간 계산 컬럼 제거
+    columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR', 'Smoothed_DM+', 'Smoothed_DM-']
+    df.drop(columns=columns_to_drop, inplace=True)
+    
+    
+    
+    '''
     # Length 설정
     length = 1
 
@@ -316,7 +310,7 @@ def process_chart_data(df):
                            (df['hma3'] > df['hma1']) & \
                            (df['hma2'] > df['hma1'])
 
-
+    
     # Squeeze Momentum Oscillator 계산 추가
     momentum_length = 12
     swing_length = 20
@@ -427,7 +421,7 @@ def process_chart_data(df):
     df.drop(columns=squeeze_cols_to_drop, inplace=True)
 
 
-    '''
+    
     current = df.iloc[-1]
 
     # 2. 스퀴즈 상태 체크를 위한 값들 출력
@@ -473,8 +467,7 @@ def process_chart_data(df):
     df = analyze_state_transitions(df)
     '''
 
-    
-    """ # macd 전략을 위한 생략 여기까지지
+
 
     return df
 
@@ -540,5 +533,4 @@ if __name__ == "__main__":
 
         df = process_chart_data(df)
         
-        print(df['squeeze_vf'].tail(1))
         pass

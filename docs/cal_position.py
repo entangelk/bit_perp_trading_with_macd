@@ -3,6 +3,8 @@ from docs.strategy.supertrend import supertrend
 from docs.strategy.hma_strategy import check_hma_signals
 from docs.strategy.squeeze_strategy import check_squeeze_signals
 from docs.strategy.macd_stg import check_trade_signal
+from docs.strategy.macd_di_slop import generate_macd_di_rsi_signal
+from docs.strategy.macd_size_di import generate_macd_size_signal
 
 def cal_position(df):
     # 각 전략 계산
@@ -11,7 +13,17 @@ def cal_position(df):
     # df = supertrend(df)
     # df = check_hma_signals(df)
     
-    macd_position = check_trade_signal(df)
+    # macd_position = check_trade_signal(df)
+    slop_position = generate_macd_di_rsi_signal(df,debug=True)
+    size_position = generate_macd_size_signal(df,debug=True)
+
+    if slop_position:
+        position = slop_position
+    elif size_position:
+        position = size_position
+    else:
+        position = None
+
 
     '''
     macd 전략 테스트를 위해 macd 포지션만 리턴
@@ -101,7 +113,7 @@ def cal_position(df):
         final_position = None
     '''
 
-    return macd_position, df
+    return position, df
 
 
 
