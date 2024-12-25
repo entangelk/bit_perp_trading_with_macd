@@ -169,10 +169,23 @@ def process_chart_data(df):
     # df['atr_200'] = wilder_smoothing(df['TR'], 200)
 
    # 기존 TR을 활용하여 SMA 방식으로 ATR 계산
-    df['atr_10'] = df['TR'].rolling(window=10).mean()
-    df['atr_35'] = df['TR'].rolling(window=35).mean()
-    df['atr_100'] = df['TR'].rolling(window=100).mean()
-    df['atr_200'] = df['TR'].rolling(window=200).mean()
+    # df['atr_10'] = df['TR'].rolling(window=10).mean()
+    # df['atr_35'] = df['TR'].rolling(window=35).mean()
+    # df['atr_100'] = df['TR'].rolling(window=100).mean()
+    # df['atr_200'] = df['TR'].rolling(window=200).mean()
+
+
+    # RMA 함수 정의
+    def rma(series, period):
+        alpha = 1/period
+        return series.ewm(alpha=alpha, adjust=False).mean()
+
+    # 기존 TR을 활용하여 ATR 계산 (SMA와 RMA 모두)
+    df['atr_10'] = rma(df['TR'], 10)  # RMA로 변경
+    df['atr_35'] = rma(df['TR'], 35)  # RMA로 변경
+    df['atr_100'] = rma(df['TR'], 100)  # RMA로 변경
+    df['atr_200'] = rma(df['TR'], 200)  # RMA로 변경
+
 
     ''' 수퍼트랜드 계산 파일로 이동동
     # 3. Supertrend 계산
@@ -477,7 +490,7 @@ if __name__ == "__main__":
 
 
     set_timevalue = '5m'
-    period = 300  # 전체 데이터 수
+    period = 700  # 전체 데이터 수
     start_from = 85  # 과거 n번째 데이터 (뒤에서부터)
     slice_size = 300  # 슬라이싱할 데이터 개수 m
     total_ticks = 85
@@ -534,4 +547,8 @@ if __name__ == "__main__":
 
         df = process_chart_data(df)
         
+        from strategy.supertrend import supertrend
+
+        df = supertrend(df)
+
         pass
