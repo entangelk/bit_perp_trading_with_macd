@@ -54,7 +54,12 @@ def cal_position(df):
         else:
             position = None
     else:
-        position = 'st_'+ st_position
+        # filtered_position을 확인하고 최종 포지션 결정
+        filtered_position = df['filtered_position'].iloc[-1]
+        if filtered_position:  # None이 아닌 경우에만 st_ 포지션 사용
+            position = 'st_' + filtered_position
+        else:
+            position = None  # 또는 다른 대체 로직
 
     print(f"\n===== 최종 포지션 =====")
     print(f"결정된 포지션: {position}")
