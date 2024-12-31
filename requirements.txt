@@ -13,3 +13,4 @@ scrapy
 webdriver_manager
 python-dotenv
 tqdm
+ccxt
