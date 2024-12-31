@@ -15,7 +15,13 @@ import time
 import json
 import sys
 import os
+import logging
 
+logging.basicConfig(
+    filename='trading_bot.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -84,11 +90,16 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
         
         if order_response:
             print(f"주문 성공: {order_response}")
+            logging.info(f"주문 성공: {order_response}")
             return True
         print("주문 생성 실패")
+        logging.info(f"주문 실패")
+
         return False
     except Exception as e:
         print(f"주문 실행 중 오류 발생: {e}")
+        logging.info(f"주문 실행 중 오류 발생: {e}")
+
         return False
 
 def check_adx_di_trigger(df, di_threshold=3, adx_threshold=2.5, lookback=2):
@@ -238,9 +249,12 @@ def main():
             time.sleep(60)
             
         print(f"{config['set_timevalue']} 차트 업데이트 완료")
+        logging.info(f"{config['set_timevalue']} 차트 업데이트 완료")
         
         # 레버리지 설정
         if not set_leverage(config['symbol'], config['leverage']):
+            logging.info(f"레버리지 설정 실패")
+
             raise Exception("레버리지 설정 실패")
             
         # 백테스팅 설정
@@ -369,6 +383,8 @@ def main():
                 # should_close_position(current_side, position) or 
                 if isclowstime(df, current_side):
                     close_position(symbol=config['symbol'])
+                    logging.info(f"포지션 종료")
+
                     print("포지션 종료")
                     # 트리거 상태 초기화
                     is_hma_trade = False
@@ -509,6 +525,7 @@ def main():
             
     except Exception as e:
         print(f"오류 발생: {e}")
+        logging.info(f"오류 발생: {e}")
         return False
 if __name__ == "__main__":
     main()
