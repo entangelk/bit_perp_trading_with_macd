@@ -5,6 +5,7 @@ from docs.strategy.squeeze_strategy import check_squeeze_signals
 from docs.strategy.macd_stg import check_trade_signal
 from docs.strategy.macd_di_slop import generate_macd_di_rsi_signal
 from docs.strategy.macd_size_di import generate_macd_size_signal
+from docs.strategy.macd_divergence import generate_macd_dive_signal
 
 def cal_position(df):
     # 각 전략 계산
@@ -36,30 +37,30 @@ def cal_position(df):
     df.loc[long_condition, 'filtered_position'] = 'Long'
     df.loc[short_condition, 'filtered_position'] = 'Short'
 
-    st_position = df['st_position'].iloc[-1]
+    st_position = df['filtered_position'].iloc[-1]
     print(f"\n===== 필터링 결과 =====")
     print(f"DI 필터 적용 포지션: {df['filtered_position'].iloc[-1]}")
 
     if not st_position:
         print("\n===== 대체 시그널 확인 =====")
         # macd_position = check_trade_signal(df)
+        dive_position = generate_macd_dive_signal(df)
         slop_position = generate_macd_di_rsi_signal(df,debug=True)
         size_position = generate_macd_size_signal(df,debug=True)
         print(f"MACD-DI-RSI 시그널: {slop_position}")
         print(f"MACD 크기 시그널: {size_position}")
+        print(f"MACD 다이버전스스 시그널: {dive_position}")
+
         if slop_position:
             position = slop_position
         elif size_position:
             position = size_position
+        elif dive_position:
+            position = dive_position
         else:
             position = None
     else:
-        # filtered_position을 확인하고 최종 포지션 결정
-        filtered_position = df['filtered_position'].iloc[-1]
-        if filtered_position:  # None이 아닌 경우에만 st_ 포지션 사용
-            position = 'st_' + filtered_position
-        else:
-            position = None  # 또는 다른 대체 로직
+        position = 'st_' + st_position
 
     print(f"\n===== 최종 포지션 =====")
     print(f"결정된 포지션: {position}")

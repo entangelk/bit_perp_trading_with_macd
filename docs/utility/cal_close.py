@@ -12,11 +12,11 @@ def isclowstime(df, side):
     current_rsi = df['rsi'].iloc[-1]
 
     # Long 포지션: RSI가 75 이상일 때 청산
-    if side == 'Long' and current_rsi >= 75:
+    if side == 'Long' and current_rsi >= 85:
         close_signal = True
     
     # Short 포지션: RSI가 25 이하일 때 청산
-    elif side == 'Short' and current_rsi <= 25:
+    elif side == 'Short' and current_rsi <= 15:
         close_signal = True
 
     '''
