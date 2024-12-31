@@ -36,7 +36,7 @@ def back_testing():
     chart_update()
 
     # MongoDB에 접속하여 데이터 로드
-    mongoClient = MongoClient("mongodb://localhost:27017")
+    mongoClient = MongoClient("mongodb://mongodb:27017")
     database = mongoClient["bitcoin"]
     chart_collection_3m = database['chart_3m']
     chart_collection_1m = database['chart_1m']

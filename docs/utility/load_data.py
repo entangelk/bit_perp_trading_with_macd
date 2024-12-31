@@ -3,7 +3,7 @@ import pandas as pd
 
 def load_data(set_timevalue, period=300, last_day=0):
     # MongoDB에 접속
-    mongoClient = MongoClient("mongodb://localhost:27017")
+    mongoClient = MongoClient("mongodb://mongodb:27017")
     database = mongoClient["bitcoin"]
 
     # set_timevalue 값에 따라 적절한 차트 컬렉션 선택

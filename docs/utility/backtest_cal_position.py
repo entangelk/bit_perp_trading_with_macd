@@ -62,7 +62,7 @@ if __name__ == "__main__":
     set_timevalue = '5m'
 
     # 데이터베이스 연결
-    mongoClient = MongoClient("mongodb://localhost:27017")
+    mongoClient = MongoClient("mongodb://mongodb:27017")
     # 'bitcoin' 데이터베이스 연결
     database = mongoClient["bitcoin"]
 

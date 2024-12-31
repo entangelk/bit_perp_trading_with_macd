@@ -6,7 +6,7 @@ import numpy as np
 def process_chart_data(set_timevalue):
 
     # MongoDB에 접속
-    mongoClient = MongoClient("mongodb://localhost:27017")
+    mongoClient = MongoClient("mongodb://mongodb:27017")
     database = mongoClient["bitcoin"]
 
     # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
