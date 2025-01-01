@@ -1,6 +1,6 @@
 FROM python:3.10.7
 
-# OpenJDK 설치 (예시로 OpenJDK 17을 설치)
+# OpenJDK 설치
 RUN apt-get update && \
     apt-get install -y openjdk-17-jdk fonts-nanum && \
     apt-get clean && \
@@ -22,14 +22,14 @@ WORKDIR /app
 ARG BRANCH_NAME=trading_bot
 ARG DIR_NAME=trading_bot
 
-# Clone the Git repository. Here we dynamically specify the repository name using the variable defined earlier.
+# tmp 디렉토리 생성 및 권한 설정
+RUN mkdir -p /tmp && chmod 777 /tmp
+
+# Clone the Git repository
 RUN git clone https://github.com/entangelk/bit_perp_trading_with_macd ${DIR_NAME}
 
-# Changes the working directory to /app/${REPO_NAME}. This uses the variable to dynamically set the directory path.
+# Change working directory
 WORKDIR /app/${DIR_NAME}
 
-# RUN pip install --no-cache-dir -r ./requirements.txt
-COPY requirements.txt .
-RUN pip install -r ./requirements.txt
-
-# RUN rm -rf .git
+# Install requirements
+RUN pip install --no-cache-dir -r requirements.txt
