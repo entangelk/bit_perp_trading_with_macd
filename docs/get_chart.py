@@ -15,6 +15,26 @@ BYBIT_SECRET_KEY = os.getenv("BYBIT_SECRET_KEY")
 # MongoDB에 접속
 mongoClient = MongoClient("mongodb://mongodb:27017")
 database = mongoClient["bitcoin"]
+# Capped Collections 초기화
+collections_config = {
+    'chart_1m': {'size': 200 * 1500, 'max': 1500},
+    'chart_3m': {'size': 200 * 1500, 'max': 1500},
+    'chart_5m': {'size': 200 * 1500, 'max': 1500},
+    'chart_15m': {'size': 200 * 1500, 'max': 1500}
+}
+# 컬렉션 초기화
+for collection_name, config in collections_config.items():
+    if collection_name not in database.list_collection_names():
+        database.create_collection(
+            collection_name,
+            capped=True,
+            size=config['size'],
+            max=config['max']
+        )
+        print(f"{collection_name} Capped Collection 생성됨")
+    else:
+        print(f"{collection_name} 컬렉션이 이미 존재함")
+
 chart_collection_1m = database['chart_1m']
 chart_collection_3m = database['chart_3m']
 chart_collection_5m = database['chart_5m']
@@ -40,47 +60,37 @@ print(f"서버 시간 (UTC): {server_datetime}")
 def chart_update(update,symbol):
     """차트를 업데이트하고 MongoDB에 저장"""
     def fetch_and_store_ohlcv(collection, timeframe, symbol, limit, minutes_per_unit, time_description):
-        # MongoDB에서 마지막으로 저장된 데이터의 타임스탬프 찾기
+        # 기존 코드와 동일하지만 update_one 대신 insert_one 사용
         last_saved_data = collection.find_one(sort=[("timestamp", -1)])
         if last_saved_data:
             last_timestamp = last_saved_data["timestamp"]
             print(f"{time_description} 마지막으로 저장된 데이터 시점: {last_timestamp}")
         else:
-            # 저장된 데이터가 없으면 기본값을 과거로 설정 (ex: 7일 전)
             last_timestamp = server_datetime - timedelta(minutes=minutes_per_unit * limit)
             print(f"{time_description} 저장된 데이터가 없습니다. {limit}틱 전 시점부터 데이터를 가져옵니다.")
 
-        since_timestamp = int(last_timestamp.timestamp() * 1000)  # 밀리초 단위 타임스탬프 변환
+        since_timestamp = int(last_timestamp.timestamp() * 1000)
 
-        # 데이터 가져오기 (Bybit 서버 시간 기반으로)
         try:
             ohlcv = bybit.fetch_ohlcv(symbol, timeframe, since=since_timestamp, limit=limit)
         except ccxt.InvalidNonce as e:
             print(f"InvalidNonce 오류 발생: {e}")
             return
 
-        # MongoDB에 데이터 저장
         for data in ohlcv:
-            timestamp = data[0]  # 타임스탬프 (밀리초)
-            dt_object = datetime.utcfromtimestamp(timestamp / 1000)  # UTC 시간으로 변환
-            open_price = data[1]
-            high_price = data[2]
-            low_price = data[3]
-            close_price = data[4]
-            volume = data[5]
-            
-            # 데이터 포맷
+            timestamp = data[0]
+            dt_object = datetime.utcfromtimestamp(timestamp / 1000)
             data_dict = {
                 "timestamp": dt_object,
-                "open": open_price,
-                "high": high_price,
-                "low": low_price,
-                "close": close_price,
-                "volume": volume
+                "open": data[1],
+                "high": data[2],
+                "low": data[3],
+                "close": data[4],
+                "volume": data[5]
             }
 
-            collection.update_one({"timestamp": dt_object}, {"$set": data_dict}, upsert=True)
-            print(f"{time_description} 저장된 데이터: {dt_object} - O: {open_price}, H: {high_price}, L: {low_price}, C: {close_price}, V: {volume}")
+            collection.insert_one(data_dict)  # update_one 대신 insert_one 사용
+            print(f"{time_description} 저장된 데이터: {dt_object} - O: {data[1]}, H: {data[2]}, L: {data[3]}, C: {data[4]}, V: {data[5]}")
 
     # 심볼 설정
     symbol = symbol

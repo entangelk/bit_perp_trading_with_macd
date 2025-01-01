@@ -1,16 +1,10 @@
-fastapi
-uvicorn
 pyarrow
 numpy
 wget
 pymongo
-pyLDAvis
 requests
 pandas
-selenium
 urllib3
-scrapy
-webdriver_manager
 python-dotenv
 tqdm
 ccxt

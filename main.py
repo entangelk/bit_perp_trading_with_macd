@@ -16,12 +16,15 @@ import json
 import sys
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 
-logging.basicConfig(
+handler = RotatingFileHandler(
     filename='trading_bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=0,
+    encoding='utf-8'
 )
+
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 

@@ -49,7 +49,7 @@ def cal_position(df):
         size_position = generate_macd_size_signal(df,debug=True)
         print(f"MACD-DI-RSI 시그널: {slop_position}")
         print(f"MACD 크기 시그널: {size_position}")
-        print(f"MACD 다이버전스스 시그널: {dive_position}")
+        print(f"MACD 다이버전스 시그널: {dive_position}")
 
         if slop_position:
             position = slop_position
