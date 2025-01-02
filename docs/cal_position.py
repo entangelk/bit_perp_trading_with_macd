@@ -6,6 +6,7 @@ from docs.strategy.macd_stg import check_trade_signal
 from docs.strategy.macd_di_slop import generate_macd_di_rsi_signal
 from docs.strategy.macd_size_di import generate_macd_size_signal
 from docs.strategy.macd_divergence import generate_macd_dive_signal
+from docs.strategy.volume_norm import check_VSTG_signal
 
 def cal_position(df):
     # 각 전략 계산
@@ -47,11 +48,15 @@ def cal_position(df):
         dive_position = generate_macd_dive_signal(df)
         slop_position = generate_macd_di_rsi_signal(df,debug=True)
         size_position = generate_macd_size_signal(df,debug=True)
+        volume_position = check_VSTG_signal(df)
         print(f"MACD-DI-RSI 시그널: {slop_position}")
         print(f"MACD 크기 시그널: {size_position}")
         print(f"MACD 다이버전스 시그널: {dive_position}")
+        print(f"볼륨 정규화 시그널 : {volume_position}")
 
-        if slop_position:
+        if volume_position:
+            position = 'vn_' + volume_position
+        elif slop_position:
             position = slop_position
         elif size_position:
             position = size_position

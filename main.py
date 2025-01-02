@@ -408,7 +408,10 @@ def main():
                         position = position[3:]
                         stop_loss = 700
                         take_profit = 700
-
+                    elif position[:3] == 'vn_':
+                        position = position[:3]
+                        stop_loss = 800
+                        take_profit = 800
 
                     execute_order(
                         symbol=config['symbol'],

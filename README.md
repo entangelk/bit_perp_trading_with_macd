@@ -24,6 +24,7 @@
 | 2024.12.27 | Created and implemented MACD divergence strategy | |
 | 2024.12.31 | Server deployment | AWS implementation |
 | 2025.01.01 | Added MongoDB and log size limits | Due to free tier server capacity constraints |
+| 2025.01.02 | Added Volume Stg | |
 
 
 ## 개발 일지
@@ -50,3 +51,4 @@
 | 2024.12.27 | MACD를 이용한 다이버전스 전략 생성 및 적용 | |
 | 2024.12.31 | 서버 업로드 및 서버 실행 | AWS |
 | 2025.01.01 | 프리티어 서버 용량 문제로 몽고, 로그 용량제한 | |
+| 2025.01.02 | 볼륨기반 전략 추가 | |

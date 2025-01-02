@@ -481,6 +481,43 @@ def process_chart_data(df):
     df = analyze_state_transitions(df)
     '''
 
+    """차트 데이터 처리 및 지표 계산"""
+    # 변수 설정
+    vol_length = 9
+    trend_length = 10
+    norm_period = 100
+    
+    
+    # 볼륨 이동평균
+    df['vol_ma'] = df['volume'].rolling(vol_length).mean()
+    
+    # 상승/하락 볼륨 구분
+    up_vol = np.where(df['close'] >= df['open'], df['volume'], 0)
+    down_vol = np.where(df['close'] < df['open'], df['volume'], 0)
+    
+    # 상승/하락 볼륨 이동평균
+    df['up_vol_ma'] = pd.Series(up_vol).rolling(vol_length).mean()
+    df['down_vol_ma'] = pd.Series(down_vol).rolling(vol_length).mean()
+    
+    # 볼륨 강도 계산
+    df['vol_strength'] = ((df['up_vol_ma'] - df['down_vol_ma']) / df['vol_ma']) * 100
+    
+    # 볼륨 강도의 추세
+    df['vol_trend'] = df['vol_strength'].ewm(span=trend_length, adjust=False).mean()
+    
+    # 정규화를 위한 최대/최소
+    df['vt_highest'] = df['vol_trend'].rolling(norm_period).max()
+    df['vt_lowest'] = df['vol_trend'].rolling(norm_period).min()
+    
+    # 트렌드 정규화
+    df['norm_trend'] = ((df['vol_trend'] - df['vt_lowest']) / 
+                       (df['vt_highest'] - df['vt_lowest'])) * 2 - 1
+    
+    # 시그널 라인
+    df['signal_line'] = df['norm_trend'].ewm(span=trend_length, adjust=False).mean()
+    
+    # 차이값 계산
+    df['trend_diff'] = abs(df['norm_trend'] - df['signal_line'])
 
 
     return df
