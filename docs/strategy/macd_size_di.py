@@ -4,7 +4,7 @@ def generate_macd_size_signal(df, debug=False):
 
     # 파라미터 설정
     required_candles = 2
-    size_ratio = 1.2
+    size_ratio = 1.4
     min_slope_threshold = 12
 
     if debug:
