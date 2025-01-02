@@ -491,13 +491,13 @@ def process_chart_data(df):
     # 볼륨 이동평균
     df['vol_ma'] = df['volume'].rolling(vol_length).mean()
     
-    # 상승/하락 볼륨 구분
-    up_vol = np.where(df['close'] >= df['open'], df['volume'], 0)
-    down_vol = np.where(df['close'] < df['open'], df['volume'], 0)
-    
+    # 상승/하락 볼륨 구분 및 이동평균 계산
+    df['up_vol'] = np.where(df['close'] >= df['open'], df['volume'], 0)
+    df['down_vol'] = np.where(df['close'] < df['open'], df['volume'], 0)
+
     # 상승/하락 볼륨 이동평균
-    df['up_vol_ma'] = pd.Series(up_vol).rolling(vol_length).mean()
-    df['down_vol_ma'] = pd.Series(down_vol).rolling(vol_length).mean()
+    df['up_vol_ma'] = df['up_vol'].rolling(vol_length).mean()
+    df['down_vol_ma'] = df['down_vol'].rolling(vol_length).mean()
     
     # 볼륨 강도 계산
     df['vol_strength'] = ((df['up_vol_ma'] - df['down_vol_ma']) / df['vol_ma']) * 100
@@ -584,8 +584,9 @@ if __name__ == "__main__":
 
         df = process_chart_data(df)
         
-        from strategy.supertrend import supertrend
+        # from strategy.supertrend import supertrend
 
-        df = supertrend(df)
-
+        # df = supertrend(df)
+        from strategy.volume_norm import check_VSTG_signal
+        position = check_VSTG_signal(df)
         pass
