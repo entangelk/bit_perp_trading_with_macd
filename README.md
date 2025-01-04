@@ -25,7 +25,7 @@
 | 2024.12.31 | Server deployment | AWS implementation |
 | 2025.01.01 | Added MongoDB and log size limits | Due to free tier server capacity constraints |
 | 2025.01.02 | Added Volume Stg | |
-
+| 2025.01.04 | Added Linear Regression Strategy | |
 
 ## 개발 일지
 
@@ -52,3 +52,4 @@
 | 2024.12.31 | 서버 업로드 및 서버 실행 | AWS |
 | 2025.01.01 | 프리티어 서버 용량 문제로 몽고, 로그 용량제한 | |
 | 2025.01.02 | 볼륨기반 전략 추가 | |
+| 2025.01.04 | 선형회귀전략 추가 | |
