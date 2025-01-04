@@ -523,11 +523,15 @@ def process_chart_data(df):
     # 3. Linear Regression Channel 계산
     length = 150
     
+    df['slope'] = np.nan
+    df['intercept'] = np.nan
+    # 선형 회귀 계산 부분에 추가
+    
     # 선형 회귀 계산
-    def calc_regression(series):
-        x = np.arange(len(series))
-        y = series.values
-        n = len(x)
+    for i in range(length-1, len(df)):
+        x = np.arange(length)
+        y = df['close'].iloc[i-length+1:i+1].values
+        n = length
         
         sum_x = np.sum(x)
         sum_y = np.sum(y)
@@ -536,46 +540,40 @@ def process_chart_data(df):
         
         slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
         intercept = (sum_y - slope * sum_x) / n
-        
-        return pd.Series([slope, intercept])
-    
-    # 롤링 윈도우로 기울기와 절편 계산
-    reg_results = df['close'].rolling(window=length, min_periods=length).apply(
-        lambda x: calc_regression(x)
-    )
-    
-    df['slope'] = reg_results.iloc[:, 0]
-    df['intercept'] = reg_results.iloc[:, 1]
-    
+        average = np.mean(y)
+        # 결과 저장
+        df.loc[df.index[i], 'slope'] = slope
+        df.loc[df.index[i], 'intercept'] = intercept
+        df.loc[df.index[i], 'average'] = average
+
     # 중심선 계산
     df['middle_line'] = np.nan
     for i in range(len(df)):
         if not np.isnan(df['intercept'].iloc[i]):
-            df['middle_line'].iloc[i] = df['intercept'].iloc[i] + df['slope'].iloc[i] * length
+            bar_index = i - (length - 1)  # 현재 위치에서 윈도우 크기만큼 뺀 값
+            df.loc[df.index[i], 'middle_line'] = df['intercept'].iloc[i] + df['slope'].iloc[i] * bar_index
     
     # 표준편차 계산
-    def calc_std_dev(data):
-        close_series = data['close']
-        slope = data['slope'].iloc[-1]
-        intercept = data['intercept'].iloc[-1]
+    df['std_dev'] = np.nan
+
+    for i in range(length-1, len(df)):
+        x = np.arange(length)
+        close_series = df['close'].iloc[i-length+1:i+1].values
+        current_slope = df['slope'].iloc[i]
+        current_intercept = df['intercept'].iloc[i]
         
-        x = np.arange(len(close_series))
-        expected_price = intercept + slope * x
+        expected_price = current_intercept + current_slope * x
         diff = close_series - expected_price
-        std_dev = np.sqrt(np.sum(diff ** 2) / len(close_series))
+        std_dev = np.sqrt(np.sum(diff ** 2) / length)
         
-        return std_dev
-    
-    df['std_dev'] = df[['close', 'slope', 'intercept']].rolling(window=length, min_periods=length).apply(
-        lambda x: calc_std_dev(x)
-    )
+        df.loc[df.index[i], 'std_dev'] = std_dev
     
     # 채널 밴드 계산
     multiplier = 3
     df['upper_band'] = df['middle_line'] + multiplier * df['std_dev']
     df['lower_band'] = df['middle_line'] - multiplier * df['std_dev']
     
-    # 추세 지속성 계산 (마지막 150봉에 대해서만)
+    # 추세 지속성 계산
     df['trend_duration'] = 0
     current_duration = 0
 
@@ -594,9 +592,7 @@ def process_chart_data(df):
                 else:
                     current_duration = -1
         
-        df['trend_duration'].iloc[i] = current_duration
-
-
+        df.loc[df.index[i], 'trend_duration'] = current_duration
 
 
 
@@ -671,6 +667,6 @@ if __name__ == "__main__":
         # position = check_VSTG_signal(df)
         
         from strategy.line_reg import check_line_reg_signal
-        position = check_line_reg_signal
+        position = check_line_reg_signal(df)
         
         pass
