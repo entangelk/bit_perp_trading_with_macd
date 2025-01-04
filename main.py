@@ -432,9 +432,10 @@ def main():
                         if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                             stop_loss = 700
                             take_profit = 700
-                        elif tag == 'vn':
+                        elif tag == 'vn' or tag == 'lr':
                             stop_loss = 800
                             take_profit = 800
+
 
 
                         execute_order(
@@ -463,7 +464,7 @@ def main():
                     if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                         stop_loss = 700
                         take_profit = 700
-                    elif tag == 'vn':
+                    elif tag == 'vn' or tag == 'lr':
                         stop_loss = 800
                         take_profit = 800
 

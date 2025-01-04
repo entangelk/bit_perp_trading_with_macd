@@ -520,6 +520,86 @@ def process_chart_data(df):
     df['trend_diff'] = abs(df['norm_trend'] - df['signal_line'])
 
 
+    # 3. Linear Regression Channel 계산
+    length = 150
+    
+    # 선형 회귀 계산
+    def calc_regression(series):
+        x = np.arange(len(series))
+        y = series.values
+        n = len(x)
+        
+        sum_x = np.sum(x)
+        sum_y = np.sum(y)
+        sum_xy = np.sum(x * y)
+        sum_x2 = np.sum(x * x)
+        
+        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+        intercept = (sum_y - slope * sum_x) / n
+        
+        return pd.Series([slope, intercept])
+    
+    # 롤링 윈도우로 기울기와 절편 계산
+    reg_results = df['close'].rolling(window=length, min_periods=length).apply(
+        lambda x: calc_regression(x)
+    )
+    
+    df['slope'] = reg_results.iloc[:, 0]
+    df['intercept'] = reg_results.iloc[:, 1]
+    
+    # 중심선 계산
+    df['middle_line'] = np.nan
+    for i in range(len(df)):
+        if not np.isnan(df['intercept'].iloc[i]):
+            df['middle_line'].iloc[i] = df['intercept'].iloc[i] + df['slope'].iloc[i] * length
+    
+    # 표준편차 계산
+    def calc_std_dev(data):
+        close_series = data['close']
+        slope = data['slope'].iloc[-1]
+        intercept = data['intercept'].iloc[-1]
+        
+        x = np.arange(len(close_series))
+        expected_price = intercept + slope * x
+        diff = close_series - expected_price
+        std_dev = np.sqrt(np.sum(diff ** 2) / len(close_series))
+        
+        return std_dev
+    
+    df['std_dev'] = df[['close', 'slope', 'intercept']].rolling(window=length, min_periods=length).apply(
+        lambda x: calc_std_dev(x)
+    )
+    
+    # 채널 밴드 계산
+    multiplier = 3
+    df['upper_band'] = df['middle_line'] + multiplier * df['std_dev']
+    df['lower_band'] = df['middle_line'] - multiplier * df['std_dev']
+    
+    # 추세 지속성 계산 (마지막 150봉에 대해서만)
+    df['trend_duration'] = 0
+    current_duration = 0
+
+    for i in range(max(0, len(df)-length), len(df)):
+        if i == max(0, len(df)-length):  # 첫 데이터
+            current_duration = 1 if df['slope'].iloc[i] >= 0 else -1
+        else:
+            if df['slope'].iloc[i] >= 0:  # 상승 추세
+                if df['slope'].iloc[i-1] >= 0:
+                    current_duration = current_duration + 1 if current_duration > 0 else 1
+                else:
+                    current_duration = 1
+            else:  # 하락 추세
+                if df['slope'].iloc[i-1] < 0:
+                    current_duration = current_duration - 1 if current_duration < 0 else -1
+                else:
+                    current_duration = -1
+        
+        df['trend_duration'].iloc[i] = current_duration
+
+
+
+
+
     return df
 
 
@@ -587,6 +667,10 @@ if __name__ == "__main__":
         # from strategy.supertrend import supertrend
 
         # df = supertrend(df)
-        from strategy.volume_norm import check_VSTG_signal
-        position = check_VSTG_signal(df)
+        # from strategy.volume_norm import check_VSTG_signal
+        # position = check_VSTG_signal(df)
+        
+        from strategy.line_reg import check_line_reg_signal
+        position = check_line_reg_signal
+        
         pass
