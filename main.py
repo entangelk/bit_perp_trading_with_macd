@@ -18,12 +18,25 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
+# 로거 생성 및 레벨 설정
+logger = logging.getLogger('trading_bot')
+logger.setLevel(logging.INFO)
+
+# 핸들러 설정
 handler = RotatingFileHandler(
     filename='trading_bot.log',
     maxBytes=10*1024*1024,  # 10MB
-    backupCount=0,
+    backupCount=1,
     encoding='utf-8'
 )
+handler.setLevel(logging.INFO)
+
+# 포맷터 설정
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# 핸들러를 로거에 추가
+logger.addHandler(handler)
 
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -93,15 +106,15 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
         
         if order_response:
             print(f"주문 성공: {order_response}")
-            logging.info(f"주문 성공: {order_response}")
+            logger.info(f"주문 성공: {order_response}")
             return True
         print("주문 생성 실패")
-        logging.info(f"주문 실패")
+        logger.info(f"주문 실패")
 
         return False
     except Exception as e:
         print(f"주문 실행 중 오류 발생: {e}")
-        logging.info(f"주문 실행 중 오류 발생: {e}")
+        logger.info(f"주문 실행 중 오류 발생: {e}")
 
         return False
 
@@ -233,10 +246,10 @@ def check_adx_di_trigger(df, di_threshold=3, adx_threshold=2.5, lookback=2):
 def main():
     # 초기 설정
     config = TRADING_CONFIG
-    save_signal = None
+    stg_tag = None
+    stg_side = None
     global trigger_first_active, trigger_first_count, position_first_active, position_first_count, position_save
-    is_hma_trade = False  # HMA 단타 플래그
-    squeeze_active = False  # 새로운 플래그
+
 
     try:
         # 초기 차트 동기화
@@ -252,11 +265,11 @@ def main():
             time.sleep(60)
             
         print(f"{config['set_timevalue']} 차트 업데이트 완료")
-        logging.info(f"{config['set_timevalue']} 차트 업데이트 완료")
+        logger.info(f"{config['set_timevalue']} 차트 업데이트 완료")
         
         # 레버리지 설정
         if not set_leverage(config['symbol'], config['leverage']):
-            logging.info(f"레버리지 설정 실패")
+            logger.info(f"레버리지 설정 실패")
 
             raise Exception("레버리지 설정 실패")
             
@@ -280,15 +293,17 @@ def main():
             
             # 차트 데이터 업데이트
             result, update_server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
-            logging.info(f"{server_time} 차트 업데이트 완료")
+            logger.info(f"{server_time} 차트 업데이트 완료")
 
             df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
                                     period=period, 
                                     last_day=(back_testing_count-last_day))
             df_calculated = process_chart_data(df_rare_chart)
             
+
+
             # 시그널 체크 먼저 수행
-            position, df = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
+            position, df, tag = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
 
 
 
@@ -388,30 +403,70 @@ def main():
                 # should_close_position(current_side, position) or 
                 if isclowstime(df, current_side):
                     close_position(symbol=config['symbol'])
-                    logging.info(f"포지션 종료")
+                    logger.info(f"포지션 종료")
 
                     print("포지션 종료")
                     # 트리거 상태 초기화
-                    is_hma_trade = False
+
                     trigger_first_active = False
                     trigger_first_count = 4
                     position_first_active = False
                     position_first_count = 2
                     position_save = None
+                    stg_tag = None
+                    stg_side = None
+
+                if position:
+                    if stg_tag == tag and stg_side != position: # 같은 전략에서 반대 신호가 나타났을때 종료 후 전환.
+                        close_position(symbol=config['symbol'])
+                        logger.info(f"반대 신호 포지션 종료")
+
+                        print("포지션 종료")
+                        time.sleep(1)
+                        
+                        stop_loss = config['stop_loss']
+                        take_profit = config['take_profit']
+                        stg_tag = tag # 태그 저장
+                        stg_side = position # 포지션 저장
+
+                        if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
+                            stop_loss = 700
+                            take_profit = 700
+                        elif tag == 'vn':
+                            stop_loss = 800
+                            take_profit = 800
+
+
+                        execute_order(
+                            symbol=config['symbol'],
+                            position=position,  # position_save 사용
+                            usdt_amount=config['usdt_amount'],
+                            leverage=config['leverage'],
+                            stop_loss=stop_loss,
+                            take_profit=take_profit
+                        )                                        
+                        trigger_first_active = False
+                        trigger_first_count = 4
+                        position_first_active = False
+                        position_first_count = 2
+                        position_save = None
+                        stg_tag = None
+                        stg_side = None
 
             else:  # 포지션이 없는 경우
                 if position:
                     stop_loss = config['stop_loss']
                     take_profit = config['take_profit']
+                    stg_tag = tag # 태그 저장
+                    stg_side = position # 포지션 저장
 
-                    if position[:3] == 'st_': # 슈퍼 트랜드일시 특별 tpsl사용용
-                        position = position[3:]
+                    if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                         stop_loss = 700
                         take_profit = 700
-                    elif position[:3] == 'vn_':
-                        position = position[:3]
+                    elif tag == 'vn':
                         stop_loss = 800
                         take_profit = 800
+
 
                     execute_order(
                         symbol=config['symbol'],
@@ -533,7 +588,7 @@ def main():
             
     except Exception as e:
         print(f"오류 발생: {e}")
-        logging.info(f"오류 발생: {e}")
+        logger.info(f"오류 발생: {e}")
         return False
 if __name__ == "__main__":
     main()

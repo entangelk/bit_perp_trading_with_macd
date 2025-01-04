@@ -11,6 +11,8 @@ from docs.strategy.volume_norm import check_VSTG_signal
 def cal_position(df):
     # 각 전략 계산
     # df = check_hma_signals(df)
+
+    tag = None
     
     # df = follow_line(df)
     df = supertrend(df)
@@ -55,20 +57,25 @@ def cal_position(df):
         print(f"볼륨 정규화 시그널 : {volume_position}")
 
         if volume_position:
-            position = 'vn_' + volume_position
+            position = volume_position
+            tag = 'vn'
         elif slop_position:
             position = slop_position
+            tag = 'sl'
         elif size_position:
             position = size_position
+            tag = 'sz'
         elif dive_position:
             position = dive_position
+            tag = 'dv'
         else:
             position = None
     else:
-        position = 'st_' + st_position
+        position = st_position
+        tag = 'st'
 
     print(f"\n===== 최종 포지션 =====")
-    print(f"결정된 포지션: {position}")
+    print(f"결정된 포지션: {tag}, {position}")
 
     '''
     macd 전략 테스트를 위해 macd 포지션만 리턴
@@ -158,7 +165,7 @@ def cal_position(df):
         final_position = None
     '''
 
-    return position, df
+    return position, df, tag
 
 
 
