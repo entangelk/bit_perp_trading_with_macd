@@ -15,14 +15,24 @@ def process_chart_data(df):
     # MACD 계산
     fast_period = 12
     slow_period = 26
+    slow_period_for_di = 17
+    signal_period_for_di = 20
     signal_period = 9
     size_ratio = 1.2
 
     df['EMA_fast'] = ema_with_sma_init(df['close'], fast_period)
     df['EMA_slow'] = ema_with_sma_init(df['close'], slow_period)
+    df['EMA_slow_di'] = ema_with_sma_init(df['close'], slow_period_for_di)
+
     df['macd'] = df['EMA_fast'] - df['EMA_slow']
+    df['macd_di'] = df['EMA_fast'] - df['EMA_slow_di']
+
     df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
+    df['macd_signal_di'] = ema_with_sma_init(df['macd'], signal_period_for_di)
+
     df['hist'] = df['macd'] - df['macd_signal']
+    df['hist_di'] = df['macd'] - df['macd_signal_di']
+
     
 
     # MACD Size 분석
@@ -33,8 +43,18 @@ def process_chart_data(df):
     df['hist_size_ma'] = df['hist_size'].rolling(window=slow_period).mean()
     df['normalized_hist_size'] = df['hist_size'] / df['hist_size_ma']
 
+    # MACD di Size 분석
+    df['hist_size_di'] = abs(df['hist_di'])
+    df['candle_size_di'] = abs(df['close'] - df['open'])
+    df['candle_size_ma_di'] = df['candle_size_di'].rolling(window=slow_period_for_di).mean()
+    df['normalized_candle_size_di'] = df['candle_size_di'] / df['candle_size_ma_di']
+    df['hist_size_ma_di'] = df['hist_size_di'].rolling(window=slow_period_for_di).mean()
+    df['normalized_hist_size_di'] = df['hist_size_di'] / df['hist_size_ma_di']    
+
     # === 두 번째 전략 추가 계산 (MACD Direction) ===
     df['hist_direction'] = df['hist'] - df['hist'].shift(1)
+    df['hist_direction_di'] = df['hist_di'] - df['hist_di'].shift(1)
+
 
     # STC는 조금더 연구해 본 이후 사용용
     '''
@@ -213,6 +233,7 @@ def process_chart_data(df):
 
     # adx di
     len_di = 14
+    len_di_slope = 17
 
 
     df['TR'] = df['TR'].fillna(0)
@@ -255,14 +276,26 @@ def process_chart_data(df):
     df['Smoothed_DM+'] = wilder_smoothing(df['DM+'], len_di)
     df['Smoothed_DM-'] = wilder_smoothing(df['DM-'], len_di)
 
+    df['Smoothed_TR_di'] = wilder_smoothing(df['TR'], len_di_slope)
+    df['Smoothed_DM+_di'] = wilder_smoothing(df['DM+'], len_di_slope)
+    df['Smoothed_DM-_di'] = wilder_smoothing(df['DM-'], len_di_slope)
+
     # DI+ 및 DI- 계산
     df['DI+'] = 100 * (df['Smoothed_DM+'] / df['Smoothed_TR'])
     df['DI-'] = 100 * (df['Smoothed_DM-'] / df['Smoothed_TR'])
 
-    # DI Slopes
-    df['DIPlus_slope1'] = df['DI+'] - df['DI+'].shift(slope_len)
-    df['DIMinus_slope1'] = df['DI-'] - df['DI-'].shift(slope_len)
+
+    df['DI+_di'] = 100 * (df['Smoothed_DM+_di'] / df['Smoothed_TR_di'])
+    df['DI-_di'] = 100 * (df['Smoothed_DM-_di'] / df['Smoothed_TR_di'])
+
+    # # DI Slopes
+    # df['DIPlus_slope1'] = df['DI+'] - df['DI+'].shift(slope_len)
+    # df['DIMinus_slope1'] = df['DI-'] - df['DI-'].shift(slope_len)
     
+    # DI Slopes
+    df['DIPlus_slope1'] = df['DI+_di'] - df['DI+_di'].shift(slope_len)
+    df['DIMinus_slope1'] = df['DI-_di'] - df['DI-_di'].shift(slope_len)
+
     # === 두 번째 전략의 DI Slope (slope_len=3) ===
     df['DIPlus_slope2'] = df['DI+'] - df['DI+'].shift(3)
     df['DIMinus_slope2'] = df['DI-'] - df['DI-'].shift(3)
@@ -272,16 +305,24 @@ def process_chart_data(df):
     df['DX'] = np.where((df['DI+'] + df['DI-']) > 0,
                         100 * abs(df['DI+'] - df['DI-']) / (df['DI+'] + df['DI-']),
                         0)
-
+    # 5. DX 계산
+    df['DX_di'] = np.where((df['DI+_di'] + df['DI-_di']) > 0,
+                        100 * abs(df['DI+_di'] - df['DI-_di']) / (df['DI+_di'] + df['DI-_di']),
+                        0)
+    
     # 6. ADX 계산
     df['ADX'] = df['DX'].rolling(window=len_di).mean()
+
+    df['ADX_di'] = df['DX_di'].rolling(window=len_di).mean()
+
 
 
     # 불필요한 중간 계산 컬럼 제거
     columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR', 'Smoothed_DM+', 'Smoothed_DM-']
     df.drop(columns=columns_to_drop, inplace=True)
     
-    
+    columns_to_drop = ['Smoothed_TR_di', 'Smoothed_DM+_di', 'Smoothed_DM-_di']
+    df.drop(columns=columns_to_drop, inplace=True)
     
     '''
     # Length 설정

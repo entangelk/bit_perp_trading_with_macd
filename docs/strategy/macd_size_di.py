@@ -19,7 +19,7 @@ def generate_macd_size_signal(df, debug=False):
         print("\nMACD 크기 조건 확인:")
     for i in range(required_candles):
         if i < len(df):
-            hist = df['hist'].iloc[-(i+1)]
+            hist = df['hist_di'].iloc[-(i+1)]
             norm_hist_size = df['normalized_hist_size'].iloc[-(i+1)]
             norm_candle_size = df['normalized_candle_size'].iloc[-(i+1)]
             
