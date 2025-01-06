@@ -417,7 +417,7 @@ def main():
                     stg_side = None
 
                 if position:
-                    if stg_tag == tag and stg_side != position: # 같은 전략에서 반대 신호가 나타났을때 종료 후 전환.
+                    if stg_tag == tag and stg_side != position and tag != 'lr': # 같은 전략에서 반대 신호가 나타났을때 종료 후 전환. 선형회귀는 제외(테스팅팅)
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
 

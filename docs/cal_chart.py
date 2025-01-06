@@ -564,25 +564,32 @@ def process_chart_data(df):
     # 3. Linear Regression Channel 계산
     length = 150
     
+    # 초기값 설정
     df['slope'] = np.nan
     df['intercept'] = np.nan
-    # 선형 회귀 계산 부분에 추가
+    df['average'] = np.nan
     
     # 선형 회귀 계산
     for i in range(length-1, len(df)):
-        x = np.arange(length)
-        y = df['close'].iloc[i-length+1:i+1].values
-        n = length
+        sum_x = 0.0
+        sum_y = 0.0
+        sum_xy = 0.0
+        sum_x2 = 0.0
         
-        sum_x = np.sum(x)
-        sum_y = np.sum(y)
-        sum_xy = np.sum(x * y)
-        sum_x2 = np.sum(x * x)
+        # 파인스크립트와 동일한 방식으로 계산
+        for j in range(length):
+            price = df['close'].iloc[i-j]  # 최신 데이터부터 역순으로
+            x = length - 1 - j  # x값도 역순으로
+            sum_x += x
+            sum_y += price
+            sum_xy += x * price
+            sum_x2 += x * x
         
+        n = float(length)
         slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
         intercept = (sum_y - slope * sum_x) / n
-        average = np.mean(y)
-        # 결과 저장
+        average = sum_y / n
+        
         df.loc[df.index[i], 'slope'] = slope
         df.loc[df.index[i], 'intercept'] = intercept
         df.loc[df.index[i], 'average'] = average
@@ -591,22 +598,26 @@ def process_chart_data(df):
     df['middle_line'] = np.nan
     for i in range(len(df)):
         if not np.isnan(df['intercept'].iloc[i]):
-            bar_index = i - (length - 1)  # 현재 위치에서 윈도우 크기만큼 뺀 값
-            df.loc[df.index[i], 'middle_line'] = df['intercept'].iloc[i] + df['slope'].iloc[i] * bar_index
+            # 현재 캔들의 중간값 계산
+            candle_middle = (df['close'].iloc[i] + df['open'].iloc[i]) / 2
+            # 파인스크립트와 동일한 방식으로 계산
+            df.loc[df.index[i], 'middle_line'] = df['intercept'].iloc[i] + df['slope'].iloc[i] * candle_middle
     
     # 표준편차 계산
     df['std_dev'] = np.nan
 
     for i in range(length-1, len(df)):
-        x = np.arange(length)
-        close_series = df['close'].iloc[i-length+1:i+1].values
+        sum_diff_sq = 0.0
         current_slope = df['slope'].iloc[i]
         current_intercept = df['intercept'].iloc[i]
         
-        expected_price = current_intercept + current_slope * x
-        diff = close_series - expected_price
-        std_dev = np.sqrt(np.sum(diff ** 2) / length)
-        
+        for j in range(length):
+            expected_price = current_intercept + current_slope * float(j)
+            # 최신 데이터부터 과거 순서로 계산
+            diff = df['close'].iloc[i-j] - expected_price
+            sum_diff_sq += diff * diff
+            
+        std_dev = np.sqrt(sum_diff_sq / length)
         df.loc[df.index[i], 'std_dev'] = std_dev
     
     # 채널 밴드 계산
@@ -617,22 +628,22 @@ def process_chart_data(df):
     # 추세 지속성 계산
     df['trend_duration'] = 0
     current_duration = 0
-
-    for i in range(max(0, len(df)-length), len(df)):
-        if i == max(0, len(df)-length):  # 첫 데이터
-            current_duration = 1 if df['slope'].iloc[i] >= 0 else -1
-        else:
-            if df['slope'].iloc[i] >= 0:  # 상승 추세
-                if df['slope'].iloc[i-1] >= 0:
-                    current_duration = current_duration + 1 if current_duration > 0 else 1
-                else:
-                    current_duration = 1
-            else:  # 하락 추세
-                if df['slope'].iloc[i-1] < 0:
-                    current_duration = current_duration - 1 if current_duration < 0 else -1
-                else:
-                    current_duration = -1
+    
+    for i in range(len(df)):
+        is_uptrend = df['slope'].iloc[i] >= 0
+        is_downtrend = df['slope'].iloc[i] < 0
         
+        if i == 0:
+            current_duration = 1 if is_uptrend else -1
+        else:
+            prev_duration = df['trend_duration'].iloc[i-1]
+            if is_uptrend:
+                current_duration = (prev_duration + 1) if prev_duration >= 0 else 1
+            elif is_downtrend:
+                current_duration = (prev_duration - 1) if prev_duration <= 0 else -1
+            else:
+                current_duration = 0
+                
         df.loc[df.index[i], 'trend_duration'] = current_duration
 
 
@@ -645,7 +656,7 @@ if __name__ == "__main__":
 
     set_timevalue = '5m'
     period = 700  # 전체 데이터 수
-    start_from = 85  # 과거 n번째 데이터 (뒤에서부터)
+    start_from = 207  # 과거 n번째 데이터 (뒤에서부터)
     slice_size = 300  # 슬라이싱할 데이터 개수 m
     total_ticks = 85
 
@@ -709,5 +720,5 @@ if __name__ == "__main__":
         
         from strategy.line_reg import check_line_reg_signal
         position = check_line_reg_signal(df)
-        
+        print(f'시간 : {df.tail(1).index[0]}, 포지션 :  {position}')
         pass
