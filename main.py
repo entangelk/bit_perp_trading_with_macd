@@ -293,7 +293,7 @@ def main():
             
             # 차트 데이터 업데이트
             result, update_server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
-            logger.info(f"{server_time} 차트 업데이트 완료")
+            logger.info(f"차트 업데이트 완료")
 
             df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
                                     period=period, 
