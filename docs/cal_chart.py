@@ -33,7 +33,21 @@ def process_chart_data(df):
     df['hist'] = df['macd'] - df['macd_signal']
     df['hist_di'] = df['macd'] - df['macd_signal_di']
 
-    
+    # MACD for divergence
+    fast_period_dive = 17
+    slow_period_dive = 27
+    signal_period_dive = 7
+
+    df['EMA_fast_dive'] = ema_with_sma_init(df['close'], fast_period_dive)
+    df['EMA_slow_dive'] = ema_with_sma_init(df['close'], slow_period_dive)
+
+    df['macd_dive'] = df['EMA_fast_dive'] - df['EMA_slow_dive']
+    df['macd_signal_dive'] = ema_with_sma_init(df['macd_dive'], signal_period_dive)
+
+    df['hist_dive'] = df['macd_dive'] - df['macd_signal_dive']
+
+
+
 
     # MACD Size 분석
     df['hist_size'] = abs(df['hist'])
