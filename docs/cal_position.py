@@ -21,10 +21,12 @@ def cal_position(df):
     print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
 
     # 슈퍼트랜드 필터링 적용
+    di_diff_filter = 9
+    di_diff_lookback = 6
 
     # DI 차이와 4기간 평균
     df['di_diff'] = df['DI+'] - df['DI-']
-    df['avg_di_diff'] = df['di_diff'].rolling(window=4).mean()
+    df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
 
     print(f"\n===== DI 지표 =====")
     print(f"DI+ 값: {df['DI+'].iloc[-1]:.2f}")
@@ -35,8 +37,8 @@ def cal_position(df):
     # 시그널 필터링 (DI difference threshold: 17)
     df['filtered_position'] = None
     
-    long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > 17)
-    short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -17)
+    long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > di_diff_filter)
+    short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -di_diff_filter)
     
     df.loc[long_condition, 'filtered_position'] = 'Long'
     df.loc[short_condition, 'filtered_position'] = 'Short'

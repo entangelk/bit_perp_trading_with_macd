@@ -216,7 +216,7 @@ def process_chart_data(df):
 
     # 기존 TR을 활용하여 ATR 계산 (SMA와 RMA 모두)
     df['atr_10'] = rma(df['TR'], 10)  # RMA로 변경
-    df['atr_35'] = rma(df['TR'], 35)  # RMA로 변경
+    df['atr_34'] = rma(df['TR'], 34)  # RMA로 변경
     df['atr_100'] = rma(df['TR'], 100)  # RMA로 변경
     df['atr_200'] = rma(df['TR'], 200)  # RMA로 변경
 

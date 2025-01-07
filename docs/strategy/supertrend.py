@@ -1,8 +1,8 @@
 def supertrend(df):
     # 소스 hl2 유지
     src = (df['high'] + df['low']) / 2
-    atr = df['atr_35']  
-    multiplier = 6
+    atr = df['atr_34']  
+    multiplier = 7
     
     # Basic Bands 계산
     df['basic_upper'] = src - (multiplier * atr)
