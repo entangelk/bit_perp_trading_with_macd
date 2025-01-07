@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import pandas as pd
 
-def load_data(set_timevalue, period=300, last_day=0):
+def load_data(set_timevalue, period=300):
     # MongoDB에 접속
     mongoClient = MongoClient("mongodb://mongodb:27017")
     database = mongoClient["bitcoin"]
@@ -17,7 +17,7 @@ def load_data(set_timevalue, period=300, last_day=0):
         chart_collection = database['chart_15m']
     elif set_timevalue == '1h':
         chart_collection = database['chart_1h']
-    elif set_timevalue == '30d':  # 30일을 분 단위로 계산 (30일 * 24시간 * 60분)
+    elif set_timevalue == '30d':
         chart_collection = database['chart_30d']
     else:
         raise ValueError(f"Invalid time value: {set_timevalue}")
@@ -42,12 +42,7 @@ def load_data(set_timevalue, period=300, last_day=0):
     # 시간순으로 정렬 (오름차순으로 변환)
     df.sort_index(inplace=True)
 
-    # `last_day`와 `period`에 따라 데이터 슬라이싱
-    if last_day > 0:
-        # 끝 데이터를 기준으로 과거로 `period`만큼 가져옴
-        df = df.iloc[-(last_day + period):-last_day]
-    else:
-        # 최신 데이터에서 과거로 `period`만큼 가져옴
-        df = df.iloc[-period:]
+    # 최신 period 개수만큼의 데이터만 반환
+    df = df.iloc[-min(period, len(df)):]
 
     return df

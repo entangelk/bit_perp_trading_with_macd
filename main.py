@@ -273,10 +273,6 @@ def main():
 
             raise Exception("레버리지 설정 실패")
             
-        # 백테스팅 설정
-        period = 300
-        last_day = 0
-        back_testing_count = 0
         
         # 메인 루프
         while True:
@@ -296,14 +292,16 @@ def main():
             logger.info(f"차트 업데이트 완료")
 
             df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
-                                    period=period, 
-                                    last_day=(back_testing_count-last_day))
+                                    period=300)  # period만 전달
             df_calculated = process_chart_data(df_rare_chart)
             
 
 
             # 시그널 체크 먼저 수행
-            position, df, tag = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
+            try:
+                position, df, tag = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
+            except:
+                logger.info(f"포지션 계산 오류")
 
 
 
@@ -320,84 +318,7 @@ def main():
                 positions_data = json.loads(positions_json)
                 current_amount, current_side, current_avgPrice = get_position_amount(config['symbol'])
                 current_side = 'Long' if current_side == 'Buy' else 'Short'
-                
-                '''
-                    # HMA 거래 중 일반 시그널 체크
-                if is_hma_trade:
-                    if trigger_signal and not trigger_first_active:  
-                        print("트리거 조건 충족, 카운트다운 시작")
-                        trigger_first_active = True
-                        trigger_first_count = 4
-                        trigger_signal_type = trigger_signal  # 'long' 또는 'short'
 
-                    if trigger_first_active:
-                        print(f"트리거 선행 카운트다운: {trigger_first_count}틱 남음")
-                        
-                        if position:  # position은 'Long' 또는 'Short'
-                            validated_position = validate_di_difference(df, position)
-                            if validated_position:  # validated_position은 'Long' 또는 'Short' 또는 None
-                                # 대소문자를 맞춰서 비교
-                                if ((trigger_signal_type == 'long' and validated_position == 'Long') or 
-                                    (trigger_signal_type == 'short' and validated_position == 'Short')):
-                                    print(f"HMA 포지션 중 스탠다드 시그널 감지: SL/TP 조정")
-                                                # 포지션 정보 조회
-                                    amount, side, avgPrice = get_position_amount(symbol=config['symbol'])
-                                    set_tp_sl(
-                                        symbol=config['symbol'], 
-                                        stop_loss=config['stop_loss'],
-                                        take_profit=config['take_profit'], 
-                                        avgPrice=avgPrice,  # Correctly named parameter
-                                        side=side  # Include side parameter if required by the function
-                                        )
-                                    trigger_first_active = False
-                                    trigger_first_count = 4
-                    
-                    trigger_first_count -= 1  
-                    
-                    if trigger_first_count <= 0:
-                        print("트리거 선행 윈도우 종료")
-                        trigger_first_active = False
-                        trigger_first_count = 4
-
-
-                    # 케이스 2: 포지션 신호 선행 (2틱)  
-                    if position and not position_first_active and not trigger_first_active:  # 트리거 선행이 없을 때만
-                        validated_position = validate_di_difference(df, position)
-                        if validated_position:
-                            print("포지션 신호 발생, 카운트다운 시작 (2틱)")
-                            position_first_active = True
-                            position_first_count = 2
-                            position_save = validated_position
-
-                    if position_first_active:
-                        position_first_count -= 1
-                        print(f"포지션 선행 카운트다운: {position_first_count}틱 남음")
-                        
-                        if trigger_signal:
-                            if ((position_save == 'Long' and trigger_signal == 'long') or 
-                                (position_save == 'Short' and trigger_signal == 'short')):
-                                print(f"HMA 포지션 중 스탠다드 시그널 감지: SL/TP 조정")
-                                
-                                amount, side, avgPrice = get_position_amount(symbol=config['symbol'])
-                                set_tp_sl(
-                                    symbol=config['symbol'], 
-                                    stop_loss=config['stop_loss'],
-                                    take_profit=config['take_profit'], 
-                                    avgPrice=avgPrice,  # Correctly named parameter
-                                    side=side  # Include side parameter if required by the function
-                                    )
-                                position_first_active = False
-                                position_first_count = 2
-                                position_save = None
-                        
-                        if position_first_count <= 0:
-                            print("포지션 선행 윈도우 종료")
-                            position_first_active = False
-                            position_first_count = 2
-                            position_save = None
-                    
-                    is_hma_trade = False # 세팅 후 플래그 초기화
-                '''
                 
                 # 포지션 종료 조건 체크
                 # should_close_position(current_side, position) or 
@@ -482,101 +403,8 @@ def main():
                     position_first_active = False
                     position_first_count = 2
                     position_save = None
-                                
-                '''
-                # 케이스 1: 트리거 시그널 선행 (4틱)
-                if trigger_signal and not trigger_first_active:  
-                    print("트리거 조건 충족, 카운트다운 시작")
-                    trigger_first_active = True
-                    trigger_first_count = 4
-                    trigger_signal_type = trigger_signal  # 'long' 또는 'short'
 
-                if trigger_first_active:
-                    print(f"트리거 선행 카운트다운: {trigger_first_count}틱 남음")
-                    
-                    if position:  # position은 'Long' 또는 'Short'
-                        validated_position = validate_di_difference(df, position)
-                        if validated_position:  # validated_position은 'Long' 또는 'Short' 또는 None
-                            # 대소문자를 맞춰서 비교
-                            if ((trigger_signal_type == 'long' and validated_position == 'Long') or 
-                                (trigger_signal_type == 'short' and validated_position == 'Short')):
-                                print(f"트리거 창 내 포지션 발생: {validated_position} 포지션 실행")
-                                execute_order(
-                                    symbol=config['symbol'],
-                                    position=validated_position,  # 'Long' 또는 'Short' 전달
-                                    usdt_amount=config['usdt_amount'],
-                                    leverage=config['leverage'],
-                                    stop_loss=config['stop_loss'],
-                                    take_profit=config['take_profit']
-                                )
-                                trigger_first_active = False
-                                trigger_first_count = 4
-                    
-                    trigger_first_count -= 1  
-                    
-                    if trigger_first_count <= 0:
-                        print("트리거 선행 윈도우 종료")
-                        trigger_first_active = False
-                        trigger_first_count = 4
 
-                # 케이스 2: 포지션 신호 선행 (2틱)
-                if position and not position_first_active and not trigger_first_active:  # 트리거 선행이 없을 때만
-                    validated_position = validate_di_difference(df, position)
-                    if validated_position:
-                        print("포지션 신호 발생, 카운트다운 시작 (2틱)")
-                        position_first_active = True
-                        position_first_count = 2
-                        position_save = validated_position
-
-                if position_first_active:
-                    position_first_count -= 1
-                    print(f"포지션 선행 카운트다운: {position_first_count}틱 남음")
-                    
-                    if trigger_signal:
-                        if ((position_save == 'Long' and trigger_signal == 'long') or 
-                            (position_save == 'Short' and trigger_signal == 'short')):
-                            print(f"포지션 창 내 트리거 발생: {position_save} 포지션 실행")
-                            execute_order(
-                                symbol=config['symbol'],
-                                position=position_save,  # position_save 사용
-                                usdt_amount=config['usdt_amount'],
-                                leverage=config['leverage'],
-                                stop_loss=config['stop_loss'],
-                                take_profit=config['take_profit']
-                            )
-                            position_first_active = False
-                            position_first_count = 2
-                            position_save = None
-                    
-                    if position_first_count <= 0:
-                        print("포지션 선행 윈도우 종료")
-                        position_first_active = False
-                        position_first_count = 2
-                        position_save = None
-                
-                # 케이스 3: hma 단타
-                if position in ['hma_Long','hma_Short']:
-                    is_hma_trade = True  # HMA 단타 플래그
-
-                    if squeeze_active:  # 이미 스퀴즈 거래가 활성화되어 있으면 스킵
-                        print("스퀴즈 거래가 한번 진행되었습니다.")
-                        continue
-
-                    hma_position = position[4:]
-                    squeeze_active = True  # 스퀴즈 거래 활성화
-                    execute_order(
-                                symbol=config['symbol'],
-                                position=hma_position,  # position_save 사용
-                                usdt_amount=config['usdt_amount'],
-                                leverage=config['leverage'],
-                                stop_loss=400,
-                                take_profit=300
-                            )
-                    pass
-                else:
-                    # HMA 신호가 없는 경우 스퀴즈 플래그 리셋
-                    squeeze_active = False
-            '''
             remaining_time = 270 - execution_time
 
             # 남은 시간이 있다면 대기
@@ -586,7 +414,6 @@ def main():
                         time.sleep(1)
                         pbar.update(1)
                                 
-                        back_testing_count -= 1
                         save_signal = position
             
     except Exception as e:
