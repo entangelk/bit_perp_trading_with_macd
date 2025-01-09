@@ -1,4 +1,4 @@
-def check_line_reg_signal(df):
+def check_line_reg_signal(df,STG_CONFIG):
     """
     진입 시그널 체크 함수
     Parameters:
@@ -10,11 +10,11 @@ def check_line_reg_signal(df):
         return None
         
     # 파라미터 설정
-    rsi_lower = 25
-    rsi_upper = 75
-    min_slope_filter = 5.7
-    min_trend_bars = 67
-    bounce_strength = 4
+    rsi_lower = STG_CONFIG['LINEAR_REG']['RSI_LOWER_BOUND'] 
+    rsi_upper = STG_CONFIG['LINEAR_REG']['RSI_UPPER_BOUND']
+    min_slope_filter = STG_CONFIG['LINEAR_REG']['MIN_SLOPE_VALUE']
+    min_trend_bars = STG_CONFIG['LINEAR_REG']['MIN_TREND_DURATION']
+    bounce_strength = STG_CONFIG['LINEAR_REG']['MIN_BOUNCE_BARS']
     
     # 현재 값들 가져오기
     current = df.iloc[-1]

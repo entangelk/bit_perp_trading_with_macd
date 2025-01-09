@@ -9,23 +9,23 @@ from docs.strategy.macd_divergence import generate_macd_dive_signal
 from docs.strategy.volume_norm import check_VSTG_signal
 from docs.strategy.line_reg import check_line_reg_signal
 
-def cal_position(df):
+def cal_position(df, STG_CONFIG):
     # 각 전략 계산
     # df = check_hma_signals(df)
 
     tag = None
     
     # df = follow_line(df)
-    df = supertrend(df)
+    df = supertrend(df,STG_CONFIG)
     print("\n===== 포지션 계산 디버깅 =====")
     print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
 
     # 슈퍼트랜드 필터링 적용
-    di_diff_filter = 9
-    di_diff_lookback = 6
+    di_diff_filter = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_FILTER']
+    di_diff_lookback = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_LOOKBACK_PERIOD']
 
     # DI 차이와 4기간 평균
-    df['di_diff'] = df['DI+'] - df['DI-']
+    df['di_diff'] = df['DI+_stg3'] - df['DI-_stg3']
     df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
 
     print(f"\n===== DI 지표 =====")
@@ -34,7 +34,7 @@ def cal_position(df):
     print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
     print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
 
-    # 시그널 필터링 (DI difference threshold: 17)
+    # 시그널 필터링
     df['filtered_position'] = None
     
     long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > di_diff_filter)
@@ -49,12 +49,11 @@ def cal_position(df):
 
     if not st_position:
         print("\n===== 대체 시그널 확인 =====")
-        # macd_position = check_trade_signal(df)
-        line_position = check_line_reg_signal(df)
-        dive_position = generate_macd_dive_signal(df)
-        slop_position = generate_macd_di_rsi_signal(df,debug=True)
-        size_position = generate_macd_size_signal(df,debug=True)
-        volume_position = check_VSTG_signal(df)
+        line_position = check_line_reg_signal(df,STG_CONFIG)
+        dive_position = generate_macd_dive_signal(df,STG_CONFIG)
+        slop_position = generate_macd_di_rsi_signal(df,STG_CONFIG,debug=True)
+        size_position = generate_macd_size_signal(df,STG_CONFIG,debug=True)
+        volume_position = check_VSTG_signal(df,STG_CONFIG)
         print(f"MACD-DI-RSI 시그널: {slop_position}")
         print(f"MACD 크기 시그널: {size_position}")
         print(f"MACD 다이버전스 시그널: {dive_position}")
@@ -84,94 +83,6 @@ def cal_position(df):
 
     print(f"\n===== 최종 포지션 =====")
     print(f"결정된 포지션: {tag}, {position}")
-
-    '''
-    macd 전략 테스트를 위해 macd 포지션만 리턴
-    
-
-
-
-    # 포지션 결과를 저장할 딕셔너리 생성
-    position_dict = {}
-    
-    # 이전 포지션과 비교하여 변화가 있을 때만 시그널 생성
-    fl_position_changed = df['fl_position'] != df['fl_position'].shift(1)
-    st_position_changed = df['st_position'] != df['st_position'].shift(1)
-  
-    
-    # 포지션이 변경된 경우에만 딕셔너리에 저장
-    if fl_position_changed.iloc[-1]:
-        position_dict['Flow Line'] = df['fl_position'].iloc[-1]
-    else:
-        position_dict['Flow Line'] = None
-        
-    if st_position_changed.iloc[-1]:
-        position_dict['super trend'] = df['st_position'].iloc[-1]
-    else:
-        position_dict['super trend'] = None
-
-    # 연속 시그널널
-    position_dict['hma_signal'] = df['signal_hma'].iloc[-1]
- 
-    
-    print(df.index[-1])
-    print(f'Flow Line : {position_dict["Flow Line"]}, super trend : {position_dict["super trend"]}, HMA : {position_dict["hma_signal"]}')
-    
-    # 순차적으로 포지션 덮어쓰기
-    final_position = None
-    
-    df = check_squeeze_signals(df)
-
-    # HMA 신호가 있으면 마지막으로 적용
-    if position_dict['hma_signal'] is not None:
-        current = df.iloc[-1]
-                
-        # 기본 신호 준비
-        signal = position_dict['hma_signal']  # 'Long' 또는 'Short'
-                        
-        # 1. MACD 방향 확인
-        macd_aligned = (signal == 'Long' and current['macd_diff'] > 0) or \
-                        (signal == 'Short' and current['macd_diff'] < 0)
-                
-        # 2. 스퀴즈 방향 확인
-        momentum_aligned = (signal == 'Long' and current['squeeze_color'] == 'EMERALD') or \
-                            (signal == 'Short' and current['squeeze_color'] == 'RED')
-                
-        # 3. 스퀴즈 강도 확인
-        strong_squeeze = current['squeeze_state'] == 'YELLOW'
-                
-        # 모든 조건 확인
-        if macd_aligned and momentum_aligned and strong_squeeze:
-            print("\n[디버그] 포지션 결정 조건 확인:")
-            print(f"1. MACD 정렬 상태: {macd_aligned} (현재 MACD 차이: {current['macd_diff']})")
-            print(f"2. 모멘텀 방향 정렬: {momentum_aligned} (현재 색상: {current['squeeze_color']})")
-            print(f"3. 스퀴즈 강도: {strong_squeeze} (현재 상태: {current['squeeze_state']})")
-            print(f"최종 포지션: hma_{signal}")
-            
-            final_position = 'hma_' + signal
-        else:
-            print("\n[디버그] 포지션 결정 조건 불충족:")
-            print(f"1. MACD 정렬 상태: {macd_aligned} (현재 MACD 차이: {current['macd_diff']})")
-            print(f"2. 모멘텀 방향 정렬: {momentum_aligned} (현재 색상: {current['squeeze_color']})")
-            print(f"3. 스퀴즈 강도: {strong_squeeze} (현재 상태: {current['squeeze_state']})")
-            print("최종 포지션: None")
-            
-            final_position = None
-
-    # Flow Line 신호가 있으면 적용
-    if position_dict['Flow Line'] is not None:
-        final_position = position_dict['Flow Line']
-    
-    # Super Trend 신호가 있으면 적용
-    if position_dict['super trend'] is not None:
-        final_position = position_dict['super trend']
-        
-    # Flow Line과 Super Trend가 다른 방향을 가리키면 포지션 없음
-    if (position_dict['Flow Line'] is not None and 
-        position_dict['super trend'] is not None and 
-        position_dict['Flow Line'] != position_dict['super trend']):
-        final_position = None
-    '''
 
     return position, df, tag
 

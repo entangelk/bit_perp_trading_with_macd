@@ -1,12 +1,12 @@
-def generate_macd_di_rsi_signal(df, debug=False):
+def generate_macd_di_rsi_signal(df,STG_CONFIG, debug=False):
     if len(df) < 5:
         return None
 
     # 파라미터 설정
-    required_signals = 5
-    min_slope_threshold = 6
-    rsi_lower = 40
-    rsi_upper = 60
+    required_signals = STG_CONFIG['MACD_DI_SLOPE']['REQUIRED_CONSECUTIVE_SIGNALS']
+    min_slope_threshold = STG_CONFIG['MACD_DI_SLOPE']['MIN_SLOPE_THRESHOLD']
+    rsi_lower = STG_CONFIG['MACD_DI_SLOPE']['RSI_LOWER_BOUND']
+    rsi_upper = STG_CONFIG['MACD_DI_SLOPE']['RSI_UPPER_BOUND']
 
     if debug:
         print("\n=== MACD 방향성 & DI 기울기 & RSI 전략 디버깅 ===")
@@ -15,7 +15,7 @@ def generate_macd_di_rsi_signal(df, debug=False):
         print(f"RSI 범위: {rsi_lower} - {rsi_upper}")
 
     # RSI 확인
-    current_rsi = df['rsi'].iloc[-1]
+    current_rsi = df['rsi_stg5'].iloc[-1]
     if debug:
         print(f"\nRSI 확인:")
         print(f"현재 RSI: {current_rsi:.2f}")
@@ -32,7 +32,7 @@ def generate_macd_di_rsi_signal(df, debug=False):
         print("\nMACD 방향성 조건 확인:")
     for i in range(required_signals):
         if i < len(df):
-            direction = df['hist_direction'].iloc[-(i+1)]
+            direction = df['hist_direction_stg5'].iloc[-(i+1)]
             macd_up = direction > 0
             macd_down = direction < 0
             
@@ -50,7 +50,7 @@ def generate_macd_di_rsi_signal(df, debug=False):
         print("\nDI 기울기 차이 조건 확인:")
     for i in range(required_signals):
         if i < len(df):
-            slope_diff = df['slope_diff'].iloc[-(i+1)]
+            slope_diff = df['slope_diff_stg5'].iloc[-(i+1)]
             slope_up = slope_diff > min_slope_threshold
             slope_down = slope_diff < -min_slope_threshold
             
@@ -80,12 +80,12 @@ def generate_macd_di_rsi_signal(df, debug=False):
 
     # 카운트 확인 후, 시그널 생성 직전에 추가
     if bull_count == required_signals:
-        if abs(df['slope_diff'].iloc[-1]) > min_slope_threshold * 2:
+        if abs(df['slope_diff_stg5'].iloc[-1]) > min_slope_threshold * 2:
             if debug:
                 print("\n최종 신호: 매수")
             return "Long"
     elif bear_count == required_signals:
-        if abs(df['slope_diff'].iloc[-1]) > min_slope_threshold * 2:
+        if abs(df['slope_diff_stg5'].iloc[-1]) > min_slope_threshold * 2:
             if debug:
                 print("\n최종 신호: 매도")
             return "Short"

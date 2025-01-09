@@ -1,8 +1,14 @@
-def generate_macd_dive_signal(df, hist_upper=60, hist_lower=-200, 
-                            price_threshold=0.16, lookback=1):
+def generate_macd_dive_signal(df,STG_CONFIG):
     """
     MACD 다이버전스 기반 매매 신호 생성
     """
+
+    hist_upper=STG_CONFIG['MACD_DIVE']['HISTOGRAM_UPPER_LIMIT']
+    hist_lower=STG_CONFIG['MACD_DIVE']['HISTOGRAM_LOWER_LIMIT']
+    price_threshold=STG_CONFIG['MACD_DIVE']['PRICE_MOVEMENT_THRESHOLD']
+    lookback=STG_CONFIG['MACD_DIVE']['LOOKBACK_PERIOD']
+
+
     # 충분한 데이터가 없으면 None 반환
     if len(df) < lookback + 2:  # +2는 현재와 이전 데이터를 위해
         return None

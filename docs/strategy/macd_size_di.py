@@ -1,11 +1,11 @@
-def generate_macd_size_signal(df, debug=False):
+def generate_macd_size_signal(df, STG_CONFIG, debug=False):
     if len(df) < 2:
         return None
 
     # 파라미터 설정
-    required_candles = 2
-    size_ratio = 1.4
-    min_slope_threshold = 12
+    required_candles = STG_CONFIG['MACD_SIZE']['REQUIRED_CONSECUTIVE_CANDLES']
+    size_ratio = STG_CONFIG['MACD_SIZE']['SIZE_RATIO_THRESHOLD']
+    min_slope_threshold = STG_CONFIG['MACD_SIZE']['MIN_SLOPE_THRESHOLD']
 
     if debug:
         print("\n=== MACD 크기 & DI 기울기 전략 디버깅 ===")
@@ -19,7 +19,7 @@ def generate_macd_size_signal(df, debug=False):
         print("\nMACD 크기 조건 확인:")
     for i in range(required_candles):
         if i < len(df):
-            hist = df['hist_di'].iloc[-(i+1)]
+            hist = df['hist_stg1'].iloc[-(i+1)]
             norm_hist_size = df['normalized_hist_size'].iloc[-(i+1)]
             norm_candle_size = df['normalized_candle_size'].iloc[-(i+1)]
             
@@ -42,8 +42,8 @@ def generate_macd_size_signal(df, debug=False):
         print("\nDI 기울기 조건 확인:")
     for i in range(required_candles):
         if i < len(df):
-            di_plus_slope = df['DIPlus_slope1'].iloc[-(i+1)]
-            di_minus_slope = df['DIMinus_slope1'].iloc[-(i+1)]
+            di_plus_slope = df['DIPlus_stg1'].iloc[-(i+1)]
+            di_minus_slope = df['DIMinus_stg1'].iloc[-(i+1)]
             
             bull_slope = di_plus_slope > min_slope_threshold
             bear_slope = di_minus_slope > min_slope_threshold

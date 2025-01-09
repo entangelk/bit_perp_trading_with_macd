@@ -4,153 +4,89 @@ import numpy as np
 
 def process_chart_data(df):
 
-    # 1. MACD (Moving Average Convergence Divergence)
-    # SMA 초기값을 사용하는 EMA 함수
+    STG_CONFIG = {
+        'MACD_SIZE': {
+            'STG_No' : 1,
+            'MACD_FAST_LENGTH': 12,
+            'MACD_SLOW_LENGTH': 17,
+            'MACD_SIGNAL_LENGTH': 20,
+            'SIZE_RATIO_THRESHOLD': 1.4,
+            'DI_LENGTH': 17,
+            'DI_SLOPE_LENGTH': 4,
+            'MIN_SLOPE_THRESHOLD': 12,
+            'REQUIRED_CONSECUTIVE_CANDLES': 2
+        },
+        'MACD_DIVE': {
+            'STG_No' : 2,
+            'FAST_LENGTH': 17,
+            'SLOW_LENGTH': 27,
+            'SIGNAL_LENGTH': 7,
+            'HISTOGRAM_UPPER_LIMIT': 60,
+            'HISTOGRAM_LOWER_LIMIT': -200,
+            'LOOKBACK_PERIOD': 1,
+            'PRICE_MOVEMENT_THRESHOLD': 0.16
+        },
+        'SUPERTREND': {
+            'STG_No' : 3,
+            'ATR_PERIOD': 34,
+            'ATR_MULTIPLIER': 7,
+            'ADX_LENGTH': 14,
+            'DI_DIFFERENCE_FILTER': 9,
+            'DI_DIFFERENCE_LOOKBACK_PERIOD': 6
+        },
+        'LINEAR_REG': {
+            'STG_No' : 4,
+            'LENGTH': 150,
+            'RSI_LENGTH': 14,
+            'RSI_LOWER_BOUND': 25,
+            'RSI_UPPER_BOUND': 75,
+            'MIN_BOUNCE_BARS': 4,
+            'UPPER_MULTIPLIER': 3,
+            'LOWER_MULTIPLIER': 3,
+            'MIN_SLOPE_VALUE': 5.7,
+            'MIN_TREND_DURATION': 67
+        },
+        'MACD_DI_SLOPE': {
+            'STG_No' : 5,
+            'FAST_LENGTH': 12,
+            'SLOW_LENGTH': 26,
+            'SIGNAL_LENGTH': 8,
+            'DI_LENGTH': 14,
+            'SLOPE_LENGTH': 3,
+            'RSI_LENGTH': 14,
+            'RSI_UPPER_BOUND': 60,
+            'RSI_LOWER_BOUND': 40,
+            'MIN_SLOPE_THRESHOLD': 6,
+            'REQUIRED_CONSECUTIVE_SIGNALS': 5
+        },
+        'VOLUME_TREND': {
+            'STG_No' : 6,
+            'VOLUME_MA_LENGTH': 9,
+            'TREND_PERIOD': 11,
+            'SIGNAL_THRESHOLD': 0.2,
+            'NORM_PERIOD' : 100
+        }
+    }
+
+
+    # 함수 및 공통 계산 부분
+        # SMA 초기값을 사용하는 EMA 함수
     def ema_with_sma_init(series, period):
         sma = series.rolling(window=period, min_periods=period).mean()
         ema = series.ewm(span=period, adjust=False).mean()
         ema[:period] = sma[:period]  # 초기값을 SMA로 설정
         return ema
-
-    # MACD 계산
-    fast_period = 12
-    slow_period = 26
-    slow_period_for_di = 17
-    signal_period_for_di = 20
-    signal_period = 8
-    size_ratio = 1.2
-
-    df['EMA_fast'] = ema_with_sma_init(df['close'], fast_period)
-    df['EMA_slow'] = ema_with_sma_init(df['close'], slow_period)
-    df['EMA_slow_di'] = ema_with_sma_init(df['close'], slow_period_for_di)
-
-    df['macd'] = df['EMA_fast'] - df['EMA_slow']
-    df['macd_di'] = df['EMA_fast'] - df['EMA_slow_di']
-
-    df['macd_signal'] = ema_with_sma_init(df['macd'], signal_period)
-    df['macd_signal_di'] = ema_with_sma_init(df['macd'], signal_period_for_di)
-
-    df['hist'] = df['macd'] - df['macd_signal']
-    df['hist_di'] = df['macd_di'] - df['macd_signal_di']
-
-    # MACD for divergence
-    fast_period_dive = 17
-    slow_period_dive = 27
-    signal_period_dive = 7
-
-    df['EMA_fast_dive'] = ema_with_sma_init(df['close'], fast_period_dive)
-    df['EMA_slow_dive'] = ema_with_sma_init(df['close'], slow_period_dive)
-
-    df['macd_dive'] = df['EMA_fast_dive'] - df['EMA_slow_dive']
-    df['macd_signal_dive'] = ema_with_sma_init(df['macd_dive'], signal_period_dive)
-
-    df['hist_dive'] = df['macd_dive'] - df['macd_signal_dive']
-
-
-
-
-    # MACD Size 분석
-    df['hist_size'] = abs(df['hist'])
-    df['candle_size'] = abs(df['close'] - df['open'])
-    df['candle_size_ma'] = df['candle_size'].rolling(window=slow_period).mean()
-    df['normalized_candle_size'] = df['candle_size'] / df['candle_size_ma']
-    df['hist_size_ma'] = df['hist_size'].rolling(window=slow_period).mean()
-    df['normalized_hist_size'] = df['hist_size'] / df['hist_size_ma']
-
-    # MACD di Size 분석
-    df['hist_size_di'] = abs(df['hist_di'])
-    df['candle_size_di'] = abs(df['close'] - df['open'])
-    df['candle_size_ma_di'] = df['candle_size_di'].rolling(window=slow_period_for_di).mean()
-    df['normalized_candle_size_di'] = df['candle_size_di'] / df['candle_size_ma_di']
-    df['hist_size_ma_di'] = df['hist_size_di'].rolling(window=slow_period_for_di).mean()
-    df['normalized_hist_size_di'] = df['hist_size_di'] / df['hist_size_ma_di']    
-
-    # === 두 번째 전략 추가 계산 (MACD DI slope Direction) ===
-    df['hist_direction'] = df['hist'] - df['hist'].shift(1)
-
-    # === MACD dive 방향 ===
-    df['hist_direction_dive'] = df['hist_dive'] - df['hist_dive'].shift(1)
-
-
- 
+    
     # Wilder 방식 스무딩 함수
     def wilder_smoothing(series, period):
         return series.ewm(alpha=1/period, adjust=False).mean()
-
-
-
-    # Bollinger Bands
-    df['BBUpper'] = (df['close'].rolling(window=21).mean() + 
-                    df['close'].rolling(window=21).std() * 1.00).bfill()
-    df['BBLower'] = (df['close'].rolling(window=21).mean() - 
-                    df['close'].rolling(window=21).std() * 1.00).bfill()
-
-    # Moving Averages
-    df['maFast'] = df['close'].rolling(window=50).mean().bfill()
-    df['maSlow'] = df['close'].rolling(window=200).mean().bfill()
-
-    # 2. RSI (Relative Strength Index)
-    rsi_length = 14
-    df['rsi'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
-
-    # 2. RSI의 21기간 SMA
-    df['rsi_sma'] = df['rsi'].rolling(window=21).mean()
-
-
-    # === DI Calculation ===
-    len_di = 14
-    slope_len = 4
-    min_slope_threshold = 12
-
-    # 3. ATR 계산
-    df['TR'] = np.maximum(df['high'] - df['low'], 
-                        np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                                    abs(df['low'] - df['close'].shift(1))))
-
-    # 기존 TR을 활용하여 ATR 계산
-    # df['atr_10'] = wilder_smoothing(df['TR'], 10)
-    # df['atr_100'] = wilder_smoothing(df['TR'], 100)
-    # df['atr_200'] = wilder_smoothing(df['TR'], 200)
-
-   # 기존 TR을 활용하여 SMA 방식으로 ATR 계산
-    # df['atr_10'] = df['TR'].rolling(window=10).mean()
-    # df['atr_35'] = df['TR'].rolling(window=35).mean()
-    # df['atr_100'] = df['TR'].rolling(window=100).mean()
-    # df['atr_200'] = df['TR'].rolling(window=200).mean()
-
-
+    
     # RMA 함수 정의
     def rma(series, period):
         alpha = 1/period
         return series.ewm(alpha=alpha, adjust=False).mean()
 
-    # 기존 TR을 활용하여 ATR 계산 (SMA와 RMA 모두)
-    df['atr_10'] = rma(df['TR'], 10)  # RMA로 변경
-    df['atr_34'] = rma(df['TR'], 34)  # RMA로 변경
-    df['atr_100'] = rma(df['TR'], 100)  # RMA로 변경
-    df['atr_200'] = rma(df['TR'], 200)  # RMA로 변경
-
-
-
-    # adx di
-    len_di = 14
-    len_di_slope = 17
-
-
-    df['TR'] = df['TR'].fillna(0)
-
-    # 2. Directional Movement (DM+ 및 DM-) 계산
-    df['DM+'] = np.where((df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
-                        np.maximum(df['high'] - df['high'].shift(1), 0), 0)
-    df['DM-'] = np.where((df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
-                        np.maximum(df['low'].shift(1) - df['low'], 0), 0)
-
-    # 동시 활성화 방지
-    df.loc[df['DM+'] > 0, 'DM-'] = 0
-    df.loc[df['DM-'] > 0, 'DM+'] = 0
-    df[['DM+', 'DM-']] = df[['DM+', 'DM-']].fillna(0)
-
-    # 3. Wilder 스무딩
+    # Wilder 스무딩
     def wilder_smoothing(series, period):
         # 첫 번째 유효한 값을 찾아 초기값으로 사용
         first_valid = series.first_valid_index()
@@ -173,101 +109,95 @@ def process_chart_data(df):
         
         return pd.Series(smoothed, index=series.index)
 
-    df['Smoothed_TR'] = wilder_smoothing(df['TR'], len_di)
-    df['Smoothed_DM+'] = wilder_smoothing(df['DM+'], len_di)
-    df['Smoothed_DM-'] = wilder_smoothing(df['DM-'], len_di)
+    # ATR 계산
+    df['TR'] = np.maximum(df['high'] - df['low'], 
+                        np.maximum(abs(df['high'] - df['close'].shift(1)), 
+                                    abs(df['low'] - df['close'].shift(1))))
 
-    df['Smoothed_TR_di'] = wilder_smoothing(df['TR'], len_di_slope)
-    df['Smoothed_DM+_di'] = wilder_smoothing(df['DM+'], len_di_slope)
-    df['Smoothed_DM-_di'] = wilder_smoothing(df['DM-'], len_di_slope)
-
-    # DI+ 및 DI- 계산
-    df['DI+'] = 100 * (df['Smoothed_DM+'] / df['Smoothed_TR'])
-    df['DI-'] = 100 * (df['Smoothed_DM-'] / df['Smoothed_TR'])
+    df['TR'] = df['TR'].fillna(0)
 
 
-    df['DI+_di'] = 100 * (df['Smoothed_DM+_di'] / df['Smoothed_TR_di'])
-    df['DI-_di'] = 100 * (df['Smoothed_DM-_di'] / df['Smoothed_TR_di'])
+    # Directional Movement (DM+ 및 DM-) 계산
+    df['DM+'] = np.where((df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
+                        np.maximum(df['high'] - df['high'].shift(1), 0), 0)
+    df['DM-'] = np.where((df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
+                        np.maximum(df['low'].shift(1) - df['low'], 0), 0)
 
-    # # DI Slopes
-    # df['DIPlus_slope1'] = df['DI+'] - df['DI+'].shift(slope_len)
-    # df['DIMinus_slope1'] = df['DI-'] - df['DI-'].shift(slope_len)
+    # 동시 활성화 방지
+    df.loc[df['DM+'] > 0, 'DM-'] = 0
+    df.loc[df['DM-'] > 0, 'DM+'] = 0
+    df[['DM+', 'DM-']] = df[['DM+', 'DM-']].fillna(0)
+
+
+    ''' 여기서부터 계산 부분 '''
+
+    # STG_No1 - MACD_SIZE 전략
+    df['EMA_fast_stg1'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_SIZE']['MACD_FAST_LENGTH'])
+    df['EMA_slow_stg1'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_SIZE']['MACD_SLOW_LENGTH'])
+    df['macd_stg1'] = df['EMA_fast_stg1'] - df['EMA_slow_stg1']
+    df['macd_signal_stg1'] = ema_with_sma_init(df['macd_stg1'], STG_CONFIG['MACD_SIZE']['MACD_SIGNAL_LENGTH'])
+    df['hist_stg1'] = df['macd_stg1'] - df['macd_signal_stg1']
+
+        ## MACD Size 계산부분
+    df['hist_size'] = abs(df['hist_stg1'])
+    df['candle_size'] = abs(df['close'] - df['open'])
+    df['candle_size_ma'] = df['candle_size'].rolling(window=STG_CONFIG['MACD_SIZE']['MACD_SLOW_LENGTH']).mean()
+    df['normalized_candle_size'] = df['candle_size'] / df['candle_size_ma']
+    df['hist_size_ma'] = df['hist_size'].rolling(window=STG_CONFIG['MACD_SIZE']['MACD_SLOW_LENGTH']).mean()
+    df['normalized_hist_size'] = df['hist_size'] / df['hist_size_ma']
+
+
+    df['Smoothed_TR_stg1'] = wilder_smoothing(df['TR'], STG_CONFIG['MACD_SIZE']['DI_LENGTH'])
+    df['Smoothed_DM+_stg1'] = wilder_smoothing(df['DM+'], STG_CONFIG['MACD_SIZE']['DI_LENGTH'])
+    df['Smoothed_DM-_stg1'] = wilder_smoothing(df['DM-'], STG_CONFIG['MACD_SIZE']['DI_LENGTH'])
     
-    # DI Slopes
-    df['DIPlus_slope1'] = df['DI+_di'] - df['DI+_di'].shift(slope_len)
-    df['DIMinus_slope1'] = df['DI-_di'] - df['DI-_di'].shift(slope_len)
-
-    # === 두 번째 전략의 DI Slope (slope_len=3) ===
-    df['DIPlus_slope2'] = df['DI+'] - df['DI+'].shift(3)
-    df['DIMinus_slope2'] = df['DI-'] - df['DI-'].shift(3)
-    df['slope_diff'] = df['DIPlus_slope2'] - df['DIMinus_slope2']
-
-    # 5. DX 계산
-    df['DX'] = np.where((df['DI+'] + df['DI-']) > 0,
-                        100 * abs(df['DI+'] - df['DI-']) / (df['DI+'] + df['DI-']),
-                        0)
-    # 5. DX 계산
-    df['DX_di'] = np.where((df['DI+_di'] + df['DI-_di']) > 0,
-                        100 * abs(df['DI+_di'] - df['DI-_di']) / (df['DI+_di'] + df['DI-_di']),
-                        0)
+    df['DI+_stg1'] = 100 * (df['Smoothed_DM+_stg1'] / df['Smoothed_TR_stg1'])
+    df['DI-_stg1'] = 100 * (df['Smoothed_DM-_stg1'] / df['Smoothed_TR_stg1'])
     
-    # 6. ADX 계산
-    df['ADX'] = df['DX'].rolling(window=len_di).mean()
-
-    df['ADX_di'] = df['DX_di'].rolling(window=len_di).mean()
-
-
+        # DI Slopes
+    df['DIPlus_stg1'] = df['DI+_stg1'] - df['DI+_stg1'].shift(STG_CONFIG['MACD_SIZE']['DI_SLOPE_LENGTH'])
+    df['DIMinus_stg1'] = df['DI-_stg1'] - df['DI-_stg1'].shift(STG_CONFIG['MACD_SIZE']['DI_SLOPE_LENGTH'])
 
     # 불필요한 중간 계산 컬럼 제거
-    columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR', 'Smoothed_DM+', 'Smoothed_DM-']
+    columns_to_drop = ['Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1']
     df.drop(columns=columns_to_drop, inplace=True)
-    
-    columns_to_drop = ['Smoothed_TR_di', 'Smoothed_DM+_di', 'Smoothed_DM-_di']
-    df.drop(columns=columns_to_drop, inplace=True)
-    
-   
 
-    """차트 데이터 처리 및 지표 계산"""
-    # 변수 설정
-    vol_length = 9
-    trend_length = 11
-    norm_period = 100
-    
-    
-    # 볼륨 이동평균
-    df['vol_ma'] = df['volume'].rolling(vol_length).mean()
-    
-    # 상승/하락 볼륨 구분 및 이동평균 계산
-    df['up_vol'] = np.where(df['close'] >= df['open'], df['volume'], 0)
-    df['down_vol'] = np.where(df['close'] < df['open'], df['volume'], 0)
-
-    # 상승/하락 볼륨 이동평균
-    df['up_vol_ma'] = df['up_vol'].rolling(vol_length).mean()
-    df['down_vol_ma'] = df['down_vol'].rolling(vol_length).mean()
-    
-    # 볼륨 강도 계산
-    df['vol_strength'] = ((df['up_vol_ma'] - df['down_vol_ma']) / df['vol_ma']) * 100
-    
-    # 볼륨 강도의 추세
-    df['vol_trend'] = df['vol_strength'].ewm(span=trend_length, adjust=False).mean()
-    
-    # 정규화를 위한 최대/최소
-    df['vt_highest'] = df['vol_trend'].rolling(norm_period).max()
-    df['vt_lowest'] = df['vol_trend'].rolling(norm_period).min()
-    
-    # 트렌드 정규화
-    df['norm_trend'] = ((df['vol_trend'] - df['vt_lowest']) / 
-                       (df['vt_highest'] - df['vt_lowest'])) * 2 - 1
-    
-    # 시그널 라인
-    df['signal_line'] = df['norm_trend'].ewm(span=trend_length, adjust=False).mean()
-    
-    # 차이값 계산
-    df['trend_diff'] = abs(df['norm_trend'] - df['signal_line'])
+    ''' STG_No1 MACD_SIZE 계산 끝'''
 
 
-    # 3. Linear Regression Channel 계산
-    length = 150
+
+
+
+    # STG_No2 - MACD_DIVE 전략
+    df['EMA_fast_stg2'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DIVE']['FAST_LENGTH'])
+    df['EMA_slow_stg2'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DIVE']['SLOW_LENGTH'])
+    df['macd_stg2'] = df['EMA_fast_stg2'] - df['EMA_slow_stg2']
+    df['macd_signal_stg2'] = ema_with_sma_init(df['macd_stg2'], STG_CONFIG['MACD_DIVE']['SIGNAL_LENGTH'])
+    df['hist_stg2'] = df['macd_stg2'] - df['macd_signal_stg2']
+    
+        # === MACD dive 방향 ===
+    df['hist_direction_dive'] = df['hist_stg2'] - df['hist_stg2'].shift(1)
+
+
+    ''' STG_No2 MACD_DIVE 계산 끝'''
+
+    # STG_No3 - SUPERTREND 전략
+    df['atr_stg3'] = rma(df['TR'], STG_CONFIG['SUPERTREND']['ATR_PERIOD'])  # RMA로 변경
+
+    df['Smoothed_TR_stg3'] = wilder_smoothing(df['TR'], STG_CONFIG['SUPERTREND']['ADX_LENGTH'])
+    df['Smoothed_DM+_stg3'] = wilder_smoothing(df['DM+'], STG_CONFIG['SUPERTREND']['ADX_LENGTH'])
+    df['Smoothed_DM-_stg3'] = wilder_smoothing(df['DM-'], STG_CONFIG['SUPERTREND']['ADX_LENGTH'])
+
+    # DI+ 및 DI- 계산
+    df['DI+_stg3'] = 100 * (df['Smoothed_DM+_stg3'] / df['Smoothed_TR_stg3'])
+    df['DI-_stg3'] = 100 * (df['Smoothed_DM-_stg3'] / df['Smoothed_TR_stg3'])
+
+
+    ''' STG_No3 SUPERTREND 계산 끝'''
+
+    # STG_No4 - LINEAR_REG 전략
+
+    length = STG_CONFIG['LINEAR_REG']['LENGTH']
     
     # 초기값 설정
     df['slope'] = np.nan
@@ -327,9 +257,10 @@ def process_chart_data(df):
         df.loc[df.index[i], 'std_dev'] = std_dev
     
     # 채널 밴드 계산
-    multiplier = 3
-    df['upper_band'] = df['middle_line'] + multiplier * df['std_dev']
-    df['lower_band'] = df['middle_line'] - multiplier * df['std_dev']
+    up_multiplier = STG_CONFIG['LINEAR_REG']['UPPER_MULTIPLIER']
+    lw_multiplier = STG_CONFIG['LINEAR_REG']['LOWER_MULTIPLIER']
+    df['upper_band'] = df['middle_line'] + up_multiplier * df['std_dev']
+    df['lower_band'] = df['middle_line'] - lw_multiplier * df['std_dev']
     
     # 추세 지속성 계산
     df['trend_duration'] = 0
@@ -352,9 +283,85 @@ def process_chart_data(df):
                 
         df.loc[df.index[i], 'trend_duration'] = current_duration
 
+    ''' STG_No4 LINEAR_REG 계산 끝 '''
+
+    # STG_No5 MACD_DI_SLOPE 전략
+    df['EMA_fast_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['FAST_LENGTH'])
+    df['EMA_slow_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['SLOW_LENGTH'])
+    df['macd_stg5'] = df['EMA_fast_stg5'] - df['EMA_slow_stg5']
+    df['macd_signal_stg5'] = ema_with_sma_init(df['macd_stg5'], STG_CONFIG['MACD_DI_SLOPE']['SIGNAL_LENGTH'])
+    df['hist_stg5'] = df['macd_stg5'] - df['macd_signal_stg5']
+    
+    # === MACD dive 방향 ===
+    df['hist_direction_stg5'] = df['hist_stg5'] - df['hist_stg5'].shift(1)
 
 
-    return df
+    df['Smoothed_TR_stg5'] = wilder_smoothing(df['TR'], STG_CONFIG['MACD_DI_SLOPE']['DI_LENGTH'])
+    df['Smoothed_DM+_stg5'] = wilder_smoothing(df['DM+'], STG_CONFIG['MACD_DI_SLOPE']['DI_LENGTH'])
+    df['Smoothed_DM-_stg5'] = wilder_smoothing(df['DM-'], STG_CONFIG['MACD_DI_SLOPE']['DI_LENGTH'])
+
+    # DI+ 및 DI- 계산
+    df['DI+_stg5'] = 100 * (df['Smoothed_DM+_stg5'] / df['Smoothed_TR_stg5'])
+    df['DI-_stg5'] = 100 * (df['Smoothed_DM-_stg5'] / df['Smoothed_TR_stg5'])
+
+    # === 두 번째 전략의 DI Slope (slope_len=3) ===
+    df['DIPlus_stg5'] = df['DI+_stg5'] - df['DI+_stg5'].shift(STG_CONFIG['MACD_DI_SLOPE']['SLOPE_LENGTH'])
+    df['DIMinus_stg5'] = df['DI-_stg5'] - df['DI-_stg5'].shift(STG_CONFIG['MACD_DI_SLOPE']['SLOPE_LENGTH'])
+    df['slope_diff_stg5'] = df['DIPlus_stg5'] - df['DIMinus_stg5']
+    
+    # 2. RSI (Relative Strength Index)
+    rsi_length = STG_CONFIG['MACD_DI_SLOPE']['RSI_LENGTH']
+    df['rsi_stg5'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
+
+    ''' STG_No5 MACD_DI_SLPOE 계산 끝'''
+
+
+    # STG_No6 VOLUME_TREND 전략
+
+    vol_length = STG_CONFIG['VOLUME_TREND']['VOLUME_MA_LENGTH']
+    trend_length = STG_CONFIG['VOLUME_TREND']['TREND_PERIOD']
+    norm_period = STG_CONFIG['VOLUME_TREND']['NORM_PERIOD']
+    
+    
+    # 볼륨 이동평균
+    df['vol_ma'] = df['volume'].rolling(vol_length).mean()
+    
+    # 상승/하락 볼륨 구분 및 이동평균 계산
+    df['up_vol'] = np.where(df['close'] >= df['open'], df['volume'], 0)
+    df['down_vol'] = np.where(df['close'] < df['open'], df['volume'], 0)
+
+    # 상승/하락 볼륨 이동평균
+    df['up_vol_ma'] = df['up_vol'].rolling(vol_length).mean()
+    df['down_vol_ma'] = df['down_vol'].rolling(vol_length).mean()
+    
+    # 볼륨 강도 계산
+    df['vol_strength'] = ((df['up_vol_ma'] - df['down_vol_ma']) / df['vol_ma']) * 100
+    
+    # 볼륨 강도의 추세
+    df['vol_trend'] = df['vol_strength'].ewm(span=trend_length, adjust=False).mean()
+    
+    # 정규화를 위한 최대/최소
+    df['vt_highest'] = df['vol_trend'].rolling(norm_period).max()
+    df['vt_lowest'] = df['vol_trend'].rolling(norm_period).min()
+    
+    # 트렌드 정규화
+    df['norm_trend'] = ((df['vol_trend'] - df['vt_lowest']) / 
+                       (df['vt_highest'] - df['vt_lowest'])) * 2 - 1
+    
+    # 시그널 라인
+    df['signal_line'] = df['norm_trend'].ewm(span=trend_length, adjust=False).mean()
+    
+    # 차이값 계산
+    df['trend_diff'] = abs(df['norm_trend'] - df['signal_line'])
+
+
+
+
+    # 불필요한 중간 계산 컬럼 제거
+    columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1','Smoothed_TR_stg3', 'Smoothed_DM+_di_stg3', 'Smoothed_DM-_di_stg3']
+    df.drop(columns=columns_to_drop, inplace=True)
+
+    return df, STG_CONFIG
 
 
 if __name__ == "__main__":
@@ -416,7 +423,7 @@ if __name__ == "__main__":
         
         df = df.iloc[-(start_from + slice_size):-start_from]
 
-        df = process_chart_data(df)
+        df, STG_CONFIG = process_chart_data(df)
         
         # from strategy.supertrend import supertrend
 

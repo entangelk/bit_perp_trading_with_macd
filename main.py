@@ -293,20 +293,15 @@ def main():
 
             df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
                                     period=300)  # period만 전달
-            df_calculated = process_chart_data(df_rare_chart)
+            df_calculated, STG_CONFIG = process_chart_data(df_rare_chart)
             
 
 
             # 시그널 체크 먼저 수행
             try:
-                position, df, tag = cal_position(df=df_calculated)  # 포지션은 숏,롱,None, hma롱, hma숏
+                position, df, tag = cal_position(df=df_calculated, STG_CONFIG = STG_CONFIG)  # 포지션은 숏,롱,None, hma롱, hma숏
             except:
                 logger.info(f"포지션 계산 오류")
-
-
-
-
-            # trigger_signal = check_adx_di_trigger(df)
 
 
 

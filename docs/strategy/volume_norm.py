@@ -1,4 +1,4 @@
-def check_VSTG_signal(df):
+def check_VSTG_signal(df,STG_CONFIG):
     """시그널 체크 함수
     Returns:
         str: 'long', 'short', 또는 None
@@ -13,7 +13,8 @@ def check_VSTG_signal(df):
     prev_signal_line = last_two['signal_line'].iloc[0]
     curr_signal_line = last_two['signal_line'].iloc[1]
     trend_diff = last_two['trend_diff'].iloc[1]
-    threshold = 0.2
+
+    threshold = STG_CONFIG['VOLUME_TREND']['SIGNAL_THRESHOLD']
     
     # 크로스오버 체크
     if (prev_norm_trend < prev_signal_line and 
