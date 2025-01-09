@@ -357,10 +357,11 @@ def process_chart_data(df):
 
     # 불필요한 중간 계산 컬럼 제거
     try:
-        columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1','Smoothed_TR_stg3', 'Smoothed_DM+_di_stg3', 'Smoothed_DM-_di_stg3']
+        columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1','Smoothed_TR_stg3', 'Smoothed_DM+_stg3', 'Smoothed_DM-_stg3']
         df.drop(columns=columns_to_drop, inplace=True)
     except Exception as e:
         print(f"컬럼 지우기 오류 발생: {e}")
+    
     return df, STG_CONFIG
 
 
