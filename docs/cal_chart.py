@@ -158,14 +158,8 @@ def process_chart_data(df):
     df['DIPlus_stg1'] = df['DI+_stg1'] - df['DI+_stg1'].shift(STG_CONFIG['MACD_SIZE']['DI_SLOPE_LENGTH'])
     df['DIMinus_stg1'] = df['DI-_stg1'] - df['DI-_stg1'].shift(STG_CONFIG['MACD_SIZE']['DI_SLOPE_LENGTH'])
 
-    # 불필요한 중간 계산 컬럼 제거
-    columns_to_drop = ['Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1']
-    df.drop(columns=columns_to_drop, inplace=True)
 
     ''' STG_No1 MACD_SIZE 계산 끝'''
-
-
-
 
 
     # STG_No2 - MACD_DIVE 전략
@@ -178,8 +172,9 @@ def process_chart_data(df):
         # === MACD dive 방향 ===
     df['hist_direction_dive'] = df['hist_stg2'] - df['hist_stg2'].shift(1)
 
-
     ''' STG_No2 MACD_DIVE 계산 끝'''
+
+
 
     # STG_No3 - SUPERTREND 전략
     df['atr_stg3'] = rma(df['TR'], STG_CONFIG['SUPERTREND']['ATR_PERIOD'])  # RMA로 변경
@@ -192,8 +187,8 @@ def process_chart_data(df):
     df['DI+_stg3'] = 100 * (df['Smoothed_DM+_stg3'] / df['Smoothed_TR_stg3'])
     df['DI-_stg3'] = 100 * (df['Smoothed_DM-_stg3'] / df['Smoothed_TR_stg3'])
 
-
     ''' STG_No3 SUPERTREND 계산 끝'''
+
 
     # STG_No4 - LINEAR_REG 전략
 
@@ -285,6 +280,8 @@ def process_chart_data(df):
 
     ''' STG_No4 LINEAR_REG 계산 끝 '''
 
+
+
     # STG_No5 MACD_DI_SLOPE 전략
     df['EMA_fast_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['FAST_LENGTH'])
     df['EMA_slow_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['SLOW_LENGTH'])
@@ -314,6 +311,7 @@ def process_chart_data(df):
     df['rsi_stg5'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
 
     ''' STG_No5 MACD_DI_SLPOE 계산 끝'''
+
 
 
     # STG_No6 VOLUME_TREND 전략
@@ -358,9 +356,11 @@ def process_chart_data(df):
 
 
     # 불필요한 중간 계산 컬럼 제거
-    columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1','Smoothed_TR_stg3', 'Smoothed_DM+_di_stg3', 'Smoothed_DM-_di_stg3']
-    df.drop(columns=columns_to_drop, inplace=True)
-
+    try:
+        columns_to_drop = ['TR', 'DM+', 'DM-', 'Smoothed_TR_stg1', 'Smoothed_DM+_stg1', 'Smoothed_DM-_stg1','Smoothed_TR_stg3', 'Smoothed_DM+_di_stg3', 'Smoothed_DM-_di_stg3']
+        df.drop(columns=columns_to_drop, inplace=True)
+    except Exception as e:
+        print(f"컬럼 지우기 오류 발생: {e}")
     return df, STG_CONFIG
 
 
