@@ -49,6 +49,7 @@ def cal_position(df, STG_CONFIG):
 
     if not st_position:
         print("\n===== 대체 시그널 확인 =====")
+        
         line_position = check_line_reg_signal(df,STG_CONFIG)
         print(f"선형회귀귀 시그널: {line_position}")
 

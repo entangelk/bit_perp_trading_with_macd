@@ -278,9 +278,11 @@ def process_chart_data(df):
                 
         df.loc[df.index[i], 'trend_duration'] = current_duration
 
+
+    rsi_length = STG_CONFIG['LINEAR_REG']['RSI_LENGTH']
+    df['rsi_stg4'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
+
     ''' STG_No4 LINEAR_REG 계산 끝 '''
-
-
 
     # STG_No5 MACD_DI_SLOPE 전략
     df['EMA_fast_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['FAST_LENGTH'])
@@ -306,7 +308,7 @@ def process_chart_data(df):
     df['DIMinus_stg5'] = df['DI-_stg5'] - df['DI-_stg5'].shift(STG_CONFIG['MACD_DI_SLOPE']['SLOPE_LENGTH'])
     df['slope_diff_stg5'] = df['DIPlus_stg5'] - df['DIMinus_stg5']
     
-    # 2. RSI (Relative Strength Index)
+    # RSI (Relative Strength Index)
     rsi_length = STG_CONFIG['MACD_DI_SLOPE']['RSI_LENGTH']
     df['rsi_stg5'] = ta.momentum.rsi(df['close'], window=rsi_length).fillna(50)
 

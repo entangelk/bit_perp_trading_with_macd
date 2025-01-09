@@ -20,7 +20,7 @@ def check_line_reg_signal(df,STG_CONFIG):
     current = df.iloc[-1]
     
     # RSI 필터
-    is_valid_rsi = rsi_lower <= current['rsi'] <= rsi_upper
+    is_valid_rsi = rsi_lower <= current['rsi_stg4'] <= rsi_upper
     
     # 기울기 강도 필터
     is_valid_slope = abs(current['slope']) >= min_slope_filter
