@@ -228,7 +228,7 @@ def process_chart_data(df):
     """차트 데이터 처리 및 지표 계산"""
     # 변수 설정
     vol_length = 9
-    trend_length = 10
+    trend_length = 11
     norm_period = 100
     
     
