@@ -5,8 +5,8 @@ def generate_macd_di_rsi_signal(df, debug=False):
     # 파라미터 설정
     required_signals = 5
     min_slope_threshold = 6
-    rsi_lower = 35
-    rsi_upper = 65
+    rsi_lower = 40
+    rsi_upper = 60
 
     if debug:
         print("\n=== MACD 방향성 & DI 기울기 & RSI 전략 디버깅 ===")

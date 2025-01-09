@@ -17,7 +17,7 @@ def process_chart_data(df):
     slow_period = 26
     slow_period_for_di = 17
     signal_period_for_di = 20
-    signal_period = 9
+    signal_period = 8
     size_ratio = 1.2
 
     df['EMA_fast'] = ema_with_sma_init(df['close'], fast_period)
@@ -31,7 +31,7 @@ def process_chart_data(df):
     df['macd_signal_di'] = ema_with_sma_init(df['macd'], signal_period_for_di)
 
     df['hist'] = df['macd'] - df['macd_signal']
-    df['hist_di'] = df['macd'] - df['macd_signal_di']
+    df['hist_di'] = df['macd_di'] - df['macd_signal_di']
 
     # MACD for divergence
     fast_period_dive = 17
@@ -65,9 +65,11 @@ def process_chart_data(df):
     df['hist_size_ma_di'] = df['hist_size_di'].rolling(window=slow_period_for_di).mean()
     df['normalized_hist_size_di'] = df['hist_size_di'] / df['hist_size_ma_di']    
 
-    # === 두 번째 전략 추가 계산 (MACD Direction) ===
+    # === 두 번째 전략 추가 계산 (MACD DI slope Direction) ===
     df['hist_direction'] = df['hist'] - df['hist'].shift(1)
-    df['hist_direction_di'] = df['hist_di'] - df['hist_di'].shift(1)
+
+    # === MACD dive 방향 ===
+    df['hist_direction_dive'] = df['hist_dive'] - df['hist_dive'].shift(1)
 
 
  
