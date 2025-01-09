@@ -24,7 +24,7 @@ def process_chart_data(df):
             'HISTOGRAM_UPPER_LIMIT': 60,
             'HISTOGRAM_LOWER_LIMIT': -200,
             'LOOKBACK_PERIOD': 1,
-            'PRICE_MOVEMENT_THRESHOLD': 0.16
+            'PRICE_MOVEMENT_THRESHOLD': 0.18
         },
         'SUPERTREND': {
             'STG_No' : 3,
