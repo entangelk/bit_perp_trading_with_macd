@@ -67,6 +67,9 @@ def fetch_investment_status():
                 # 포지션이 있는 항목을 리스트에 추가
                 active_positions.append(position)
 
+        if not active_positions:
+            print('현재 포지션 없음')
+
         # 포지션을 JSON으로 변환하여 반환
         positions_json = json.dumps(active_positions)
 
