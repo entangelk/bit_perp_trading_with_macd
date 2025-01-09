@@ -29,8 +29,8 @@ def cal_position(df, STG_CONFIG):
     df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
 
     print(f"\n===== DI 지표 =====")
-    print(f"DI+ 값: {df['DI+'].iloc[-1]:.2f}")
-    print(f"DI- 값: {df['DI-'].iloc[-1]:.2f}")
+    print(f"DI+ 값: {df['DI+_stg3'].iloc[-1]:.2f}")
+    print(f"DI- 값: {df['DI-_stg3'].iloc[-1]:.2f}")
     print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
     print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
 
