@@ -9,7 +9,7 @@ def isclowstime(df, side):
     close_signal = False
 
     # RSI 값 확인
-    current_rsi = df['rsi'].iloc[-1]
+    current_rsi = df['rsi_stg5'].iloc[-1]
 
     # Long 포지션: RSI가 75 이상일 때 청산
     if side == 'Long' and current_rsi >= 85:
@@ -19,26 +19,4 @@ def isclowstime(df, side):
     elif side == 'Short' and current_rsi <= 15:
         close_signal = True
 
-    '''
-    # DI 이동평균선 기울기 확인
-    if side == 'Long':
-        current_di_plus = df['DI+_MA7'].iloc[-1]
-        prev_di_plus = df['DI+_MA7'].iloc[-2]
-        current_di_minus = df['DI-_MA7'].iloc[-1]
-        prev_di_minus = df['DI-_MA7'].iloc[-2]
-        
-        # DI+ 하락하고 DI-는 상승하는 경우에만 청산
-        if current_di_plus < prev_di_plus and current_di_minus >= prev_di_minus:
-            close_signal = True
-    
-    elif side == 'Short':
-        current_di_minus = df['DI-_MA7'].iloc[-1]
-        prev_di_minus = df['DI-_MA7'].iloc[-2]
-        current_di_plus = df['DI+_MA7'].iloc[-1]
-        prev_di_plus = df['DI+_MA7'].iloc[-2]
-        
-        # DI- 하락하고 DI+는 상승하는 경우에만 청산
-        if current_di_minus < prev_di_minus and current_di_plus >= prev_di_plus:
-            close_signal = True
-    '''
     return close_signal
