@@ -50,13 +50,18 @@ def cal_position(df, STG_CONFIG):
     if not st_position:
         print("\n===== 대체 시그널 확인 =====")
         line_position = check_line_reg_signal(df,STG_CONFIG)
+        print(f"선형회귀귀 시그널: {line_position}")
+
         dive_position = generate_macd_dive_signal(df,STG_CONFIG)
-        slop_position = generate_macd_di_rsi_signal(df,STG_CONFIG,debug=True)
-        size_position = generate_macd_size_signal(df,STG_CONFIG,debug=True)
-        volume_position = check_VSTG_signal(df,STG_CONFIG)
-        print(f"MACD-DI-RSI 시그널: {slop_position}")
-        print(f"MACD 크기 시그널: {size_position}")
         print(f"MACD 다이버전스 시그널: {dive_position}")
+
+        slop_position = generate_macd_di_rsi_signal(df,STG_CONFIG,debug=True)
+        print(f"MACD-DI-RSI 시그널: {slop_position}")
+
+        size_position = generate_macd_size_signal(df,STG_CONFIG,debug=True)
+        print(f"MACD 크기 시그널: {size_position}")
+
+        volume_position = check_VSTG_signal(df,STG_CONFIG)
         print(f"볼륨 정규화 시그널 : {volume_position}")
 
 
