@@ -277,7 +277,7 @@ def main():
             
     except Exception as e:
         print(f"오류 발생: {e}")
-        logger.info(f"오류 발생: {e}")
+        logger.info(f"오류 발생: {e}", exc_info=True)
         return False
 if __name__ == "__main__":
     main()
