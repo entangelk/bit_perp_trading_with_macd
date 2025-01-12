@@ -372,7 +372,7 @@ if __name__ == "__main__":
 
     set_timevalue = '5m'
     period = 700  # 전체 데이터 수
-    start_from = 207  # 과거 n번째 데이터 (뒤에서부터)
+    start_from = 109  # 과거 n번째 데이터 (뒤에서부터)
     slice_size = 300  # 슬라이싱할 데이터 개수 m
     total_ticks = 85
 
@@ -434,7 +434,11 @@ if __name__ == "__main__":
         # from strategy.volume_norm import check_VSTG_signal
         # position = check_VSTG_signal(df)
         
-        from strategy.line_reg import check_line_reg_signal
-        position = check_line_reg_signal(df)
-        print(f'시간 : {df.tail(1).index[0]}, 포지션 :  {position}')
+        # from strategy.line_reg import check_line_reg_signal
+        # position = check_line_reg_signal(df)
+        # print(f'시간 : {df.tail(1).index[0]}, 포지션 :  {position}')
+
+        from strategy.macd_divergence import generate_macd_dive_signal
+        position = generate_macd_dive_signal(df,STG_CONFIG)
+        
         pass
