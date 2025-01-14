@@ -96,13 +96,32 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
             print(f"주문 성공: {order_response}")
             logger.info(f"주문 성공: {order_response}")
             return True
+        
         print("주문 생성 실패")
-        logger.info(f"주문 실패")
+        logger.info(f"주문 생성 실패 재시도")
+
+        order_response = create_order_with_tp_sl(
+            symbol=symbol,
+            side=side,
+            usdt_amount=usdt_amount,
+            leverage=leverage,
+            current_price=current_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit
+        )
+        
+        if order_response:
+            print(f"주문 성공: {order_response}")
+            logger.info(f"주문 성공: {order_response}")
+            return True
+        
+        print("주문 생성 실패")
+        logger.info(f"주문 재생성 실패 : {order_response}")
 
         return False
     except Exception as e:
         print(f"주문 실행 중 오류 발생: {e}")
-        logger.info(f"주문 실행 중 오류 발생: {e}")
+        logger.info(f"주문 실행 중 오류 발생: {e}", exc_info=True)
 
         return False
 
