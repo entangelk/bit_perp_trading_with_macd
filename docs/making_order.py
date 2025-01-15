@@ -239,13 +239,16 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
     sync_time()
     try:
         balance = bybit.fetch_balance()
-        current_have = balance['USDT']['free']
+        current_have = balance['USDT']['total']
         
         if usdt_amount <= 0 or usdt_amount > 1:
             print(f"잘못된 투자 비율: {usdt_amount}. 0과 1 사이의 값이어야 합니다.")
             return None
         
+
+        pass
         order_amount = current_have * usdt_amount
+        pass
         amount = calculate_amount(order_amount, leverage, current_price)
         
         if amount is None:
@@ -531,15 +534,15 @@ if __name__ == "__main__":
     usdt_amount = 0.1  # 초기 투자금 비율율
     side = 'Buy'
     avgPrice=62404.70
-    take_profit = 500
-    stop_loss = 600
+    take_profit = 400
+    stop_loss = 400
     current_price = 104644.90
-    set_leverage(symbol, leverage)
+    # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
     # amount,side,avgPrice = get_position_amount(symbol)
     # set_tp_sl(symbol, stop_loss, take_profit, current_price, side)
-    # from current_price import get_current_price
-    # current_price = get_current_price(symbol=symbol)
-    # create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit)
+    from current_price import get_current_price
+    current_price = get_current_price(symbol=symbol)
+    create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit)
     pass

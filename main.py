@@ -98,7 +98,7 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
             return True
         
         print("주문 생성 실패")
-        logger.info(f"주문 생성 실패 재시도")
+        logger.info(f"주문 생성 실패 재시도 : {symbol}, {side}, {usdt_amount}, {leverage}, {current_price}, {stop_loss}, {take_profit}")
 
         order_response = create_order_with_tp_sl(
             symbol=symbol,
