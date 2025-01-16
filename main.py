@@ -15,28 +15,7 @@ import time
 import json
 import sys
 import os
-import logging
-from logging.handlers import RotatingFileHandler
-
-# 로거 생성 및 레벨 설정
-logger = logging.getLogger('trading_bot')
-logger.setLevel(logging.INFO)
-
-# 핸들러 설정
-handler = RotatingFileHandler(
-    filename='trading_bot.log',
-    maxBytes=10*1024*1024,  # 10MB
-    backupCount=1,
-    encoding='utf-8'
-)
-handler.setLevel(logging.INFO)
-
-# 포맷터 설정
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
-# 핸들러를 로거에 추가
-logger.addHandler(handler)
+from logger import logger
 
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -124,7 +103,28 @@ def execute_order(symbol, position, usdt_amount, leverage, stop_loss, take_profi
         logger.info(f"주문 실행 중 오류 발생: {e}", exc_info=True)
 
         return False
-
+def try_update_with_check(config, max_retries=3):
+    for attempt in range(max_retries):
+        # 기존 반환값 유지 (result, server_time, execution_time)
+        result, server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
+        if result is None:
+            logger.error(f"차트 업데이트 실패 (시도 {attempt + 1}/{max_retries})")
+            continue
+            
+        # 데이터 로드 시도 (서버 시간 전달)
+        df_rare_chart = load_data(
+            set_timevalue=config['set_timevalue'], 
+            period=300,
+            server_time=server_time
+        )
+        
+        if df_rare_chart is not None:
+            return result, server_time, execution_time  # 기존 반환값 유지
+            
+        logger.warning(f"데이터 시간 불일치, 재시도... (시도 {attempt + 1}/{max_retries})")
+        time.sleep(5)  # 잠시 대기
+        
+    return None, server_time, execution_time  # 실패시에도 기존 형식 유지
 
 def main():
     # 초기 설정
@@ -170,12 +170,17 @@ def main():
                         time.sleep(1)
                         pbar.update(1)
             
-            # 차트 데이터 업데이트
-            result, update_server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
-            logger.info(f"차트 업데이트 완료")
+            # 차트 데이터 업데이트 (재시도 포함)
+            result, update_server_time, execution_time = try_update_with_check(config)
+            if result is None:
+                logger.error("최대 재시도 횟수 초과, 프로세스 종료")
+                return
 
-            df_rare_chart = load_data(set_timevalue=config['set_timevalue'], 
-                                    period=300)  # period만 전달
+            df_rare_chart = load_data(set_timevalue=config['set_timevalue'], period=300)
+            if df_rare_chart is None or df_rare_chart.empty:
+                logger.error("데이터 로드 실패: 데이터가 비어있습니다")
+                return
+            
             df_calculated, STG_CONFIG = process_chart_data(df_rare_chart)
             
 

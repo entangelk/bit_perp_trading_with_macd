@@ -4,6 +4,12 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from pymongo import MongoClient
 import time
+import sys
+import os
+# trading_bot 디렉토리를 Python 경로에 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from logger import logger
 
 # 환경 변수 로드
 load_dotenv()
@@ -123,41 +129,43 @@ def chart_update(update,symbol):
 
 def fetch_latest_ohlcv_and_update_db(symbol, timeframe, collection, max_check_time=240, check_interval=60):
     start_time = time.time()
-    last_try_timestamp = None
     
     while (time.time() - start_time) < max_check_time:
-        # Bybit에서 최신 2개 틱 데이터를 가져옴 (최신 것과 그 직전 것)
         ohlcv = bybit.fetch_ohlcv(symbol, timeframe, limit=2)
-        complete_data = ohlcv[-2]  # 완성된 직전 캔들 선택
-        timestamp = complete_data[0]
-        dt_object = datetime.utcfromtimestamp(timestamp / 1000)  # UTC 시간으로 변환
         
-        # 새로운 데이터 저장/업데이트
-        data_dict = {
-            "timestamp": dt_object,
-            "open": complete_data[1],
-            "high": complete_data[2],
-            "low": complete_data[3],
-            "close": complete_data[4],
-            "volume": complete_data[5]
-        }
-        
-        # MongoDB에 데이터 저장 (동일 타임스탬프여도 업데이트)
-        collection.update_one(
-            {"timestamp": dt_object}, 
-            {"$set": data_dict}, 
-            upsert=True
-        )
-        
-        print(f"데이터가 성공적으로 저장/업데이트되었습니다: {data_dict}")
+        saved_times = []  # 저장된 시간을 기록할 리스트
+        # 두 캔들 모두 저장
+        for candle in ohlcv:
+            timestamp = candle[0]
+            dt_object = datetime.utcfromtimestamp(timestamp / 1000)
+            saved_times.append(dt_object)  # 변환된 시간 저장
+            
+            data_dict = {
+                "timestamp": dt_object,
+                "open": candle[1],
+                "high": candle[2],
+                "low": candle[3],
+                "close": candle[4],
+                "volume": candle[5]
+            }
+            
+            collection.update_one(
+                {"timestamp": dt_object}, 
+                {"$set": data_dict}, 
+                upsert=True
+            )
+            
+        logger.info(f"최근 2개 캔들 업데이트 완료: {saved_times}")
         break
 
 def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
-    start_time = time.time()
-    server_time = datetime.utcnow()
-    
     try:
-        # collection 매핑을 None 비교로 수정
+                # 바이비트 서버 시간으로 시작
+        server_time = bybit.fetch_time() / 1000
+        server_datetime = datetime.utcfromtimestamp(server_time)
+        start_time = time.time()  # 이건 실행 시간 체크용으로만 사용
+
+        # collection 매핑
         collection = None
         if update == '1m':
             collection = chart_collection_1m
@@ -171,6 +179,7 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
         if collection is None:
             raise ValueError(f"Invalid update value: {update}")
         
+        # 업데이트 수행
         fetch_latest_ohlcv_and_update_db(
             symbol=symbol,
             timeframe=update,
@@ -179,15 +188,20 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
             check_interval=check_interval
         )
         
+        # 업데이트 결과 확인
         result = collection.find_one(sort=[("timestamp", -1)])
+        if result is None:
+            raise Exception("No data found after update")
+            
         total_time = time.time() - start_time
-        
-        return result, server_time, total_time
+        return True, server_time, total_time
         
     except Exception as e:
         total_time = time.time() - start_time
-        print(f"오류 발생: {e}")
-        return None, server_time, total_time
+        logger.error(f"차트 업데이트 오류: {str(e)}")  # print 대신 logger.error 사용
+        return False, server_time, total_time  # None 대신 False 반환
+    
+    
 # 사용 예시
 if __name__ == "__main__":
     update_type = '5m'  # '1m', '3m', '5m', '15m' 중 선택
@@ -203,3 +217,4 @@ if __name__ == "__main__":
         chart_update_one(update_type)
     else:
         print(f"유효하지 않은 업데이트 타입: {update_type}")
+    pass
