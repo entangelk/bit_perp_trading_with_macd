@@ -75,9 +75,10 @@ def fetch_investment_status():
 
     except Exception as e:
         print(f"API 호출 중 오류 발생: {e}")
-        return None, None
+        return 'error', None, None
     pass
     return balance, positions_json, ledger
 
 if __name__ == "__main__":
     fetch_investment_status()
+    pass

@@ -190,6 +190,17 @@ def main():
 
             # 포지션 상태 확인
             balance, positions_json, ledger = fetch_investment_status()
+       
+            if balance == 'error':
+                print("API 호출 실패, 5초 후 재시도합니다...")
+                time.sleep(5)
+                balance, positions_json, ledger = fetch_investment_status()
+
+                if balance == 'error':
+                    logger.info(f"오류 발생: 상태 확인 api 호출 오류류", exc_info=True)
+                    break
+
+
             positions_flag = positions_json != '[]' and positions_json is not None
 
             if positions_flag:  # 포지션이 있는 경우
@@ -298,5 +309,6 @@ def main():
         print(f"오류 발생: {e}")
         logger.info(f"오류 발생: {e}", exc_info=True)
         return False
+    
 if __name__ == "__main__":
     main()
