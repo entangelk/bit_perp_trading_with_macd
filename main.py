@@ -202,7 +202,7 @@ def main():
                 balance, positions_json, ledger = fetch_investment_status()
 
                 if balance == 'error':
-                    logger.info(f"오류 발생: 상태 확인 api 호출 오류류", exc_info=True)
+                    logger.info(f"오류 발생: 상태 확인 api 호출 오류", exc_info=True)
                     break
 
 
