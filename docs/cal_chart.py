@@ -77,38 +77,42 @@ def process_chart_data(df):
         ema[:period] = sma[:period]  # 초기값을 SMA로 설정
         return ema
     
-    # Wilder 방식 스무딩 함수
-    def wilder_smoothing(series, period):
-        return series.ewm(alpha=1/period, adjust=False).mean()
-    
     # RMA 함수 정의
     def rma(series, period):
         alpha = 1/period
         return series.ewm(alpha=alpha, adjust=False).mean()
 
-    # Wilder 스무딩
+    # 수정된 코드
     def wilder_smoothing(series, period):
-        # 첫 번째 유효한 값을 찾아 초기값으로 사용
-        first_valid = series.first_valid_index()
-        if first_valid is None:
+        # 첫 번째 유효한 값의 위치를 찾는 부분을 수정
+        first_valid_idx = series.first_valid_index()
+        if first_valid_idx is None:
             return pd.Series(index=series.index)
         
-        smoothed = []
-        # 첫 번째 유효값 이전은 NaN으로 채움
-        first_valid_loc = series.index.get_loc(first_valid)
-        smoothed.extend([np.nan] * first_valid_loc)
-        smoothed.append(series[first_valid])
+        # 추가된 부분: get_loc 결과 타입 체크 및 처리
+        first_valid_loc = series.index.get_loc(first_valid_idx)
+        if not isinstance(first_valid_loc, (int, np.integer)):
+            # 슬라이스가 반환된 경우 처리
+            first_valid_loc = series.reset_index(drop=True).first_valid_index()
+            if first_valid_loc is None:
+                first_valid_loc = 0
         
+        smoothed = []
+        smoothed.extend([np.nan] * first_valid_loc)
+        smoothed.append(series[first_valid_idx])
+        
+        # Wilder's smoothing 공식 수정
         for i in range(first_valid_loc + 1, len(series)):
             prev = smoothed[i-1] if not pd.isna(smoothed[i-1]) else series.iloc[i]
             current = series.iloc[i]
             if pd.isna(current):
                 smoothed.append(prev)
             else:
-                smoothed.append(prev - (prev / period) + current)
+                # 수정된 수식: (이전값 * (기간-1) + 현재값) / 기간
+                smoothed.append((prev * (period - 1) + current) / period)
         
         return pd.Series(smoothed, index=series.index)
-
+    
     # ATR 계산
     df['TR'] = np.maximum(df['high'] - df['low'], 
                         np.maximum(abs(df['high'] - df['close'].shift(1)), 
