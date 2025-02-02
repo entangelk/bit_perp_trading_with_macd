@@ -197,14 +197,21 @@ def main():
             balance, positions_json, ledger = fetch_investment_status()
        
             if balance == 'error':
-                print("API 호출 실패, 5초 후 재시도합니다...")
-                time.sleep(5)
-                balance, positions_json, ledger = fetch_investment_status()
+                logger.info(f"오류 발생: 상태 확인 api 호출 오류", exc_info=True)
 
-                if balance == 'error':
-                    logger.info(f"오류 발생: 상태 확인 api 호출 오류", exc_info=True)
-                    break
+                for i in range(24):
+                    print("API 호출 실패, 5초 후 재시도합니다...")
 
+                    time.sleep(5)
+                    balance, positions_json, ledger = fetch_investment_status()
+
+                    
+                    if balance != 'error':
+                        logger.info(f"api 호출 재시도 성공", exc_info=True)
+                        break
+                else:
+                    logger.info(f"api 호출 오류 3분 재시도 실패", exc_info=True)
+                    
 
             positions_flag = positions_json != '[]' and positions_json is not None
 
