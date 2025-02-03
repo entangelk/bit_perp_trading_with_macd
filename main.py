@@ -195,14 +195,16 @@ def main():
 
             # 포지션 상태 확인
             balance, positions_json, ledger = fetch_investment_status()
-       
+
+            error_time = 0
             if balance == 'error':
                 logger.info(f"오류 발생: 상태 확인 api 호출 오류", exc_info=True)
-
+                
                 for i in range(24):
                     print("API 호출 실패, 5초 후 재시도합니다...")
 
                     time.sleep(5)
+                    error_time += 5
                     balance, positions_json, ledger = fetch_investment_status()
 
                     
@@ -239,7 +241,7 @@ def main():
                     stg_side = None
 
                 if position:
-                    if stg_side != position and tag != 'dv': # 반대 신호가 나타났을때 종료 후 전환 - 다이버전스 전략략 제외.
+                    if stg_side != position: # 반대 신호가 나타났을때 종료 후 전환
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
 
@@ -254,7 +256,7 @@ def main():
                         if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                             stop_loss = 700
                             take_profit = 700
-                        elif tag == 'vn' or tag == 'lr':
+                        elif tag == 'vn' or tag == 'lr' or tag == 'sz' or tag == 'dv':
                             stop_loss = 800
                             take_profit = 800
 
@@ -288,7 +290,7 @@ def main():
                     if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                         stop_loss = 700
                         take_profit = 700
-                    elif tag == 'vn' or tag == 'lr':
+                    elif tag == 'vn' or tag == 'lr' or tag == 'sz' or tag == 'dv':
                         stop_loss = 800
                         take_profit = 800
 
@@ -306,7 +308,7 @@ def main():
                     position_save = None
 
 
-            remaining_time = 270 - execution_time
+            remaining_time = 270 - (execution_time + error_time)
 
             # 남은 시간이 있다면 대기
             if remaining_time > 0:

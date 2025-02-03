@@ -10,62 +10,84 @@ from docs.strategy.volume_norm import check_VSTG_signal
 from docs.strategy.line_reg import check_line_reg_signal
 
 def cal_position(df, STG_CONFIG):
-    # 각 전략 계산
-    # df = check_hma_signals(df)
+    # 전략 활성화 설정
+    STRATEGY_ENABLE = {
+        'SUPERTREND': True,      # 슈퍼트렌드 전략
+        'LINE_REGRESSION': True,  # 선형회귀 전략
+        'VOLUME_NORM': True,      # 볼륨 정규화 전략
+        'MACD_DI_RSI': False,     # MACD-DI-RSI Slop 전략
+        'MACD_SIZE': False,       # MACD 크기 전략
+        'MACD_DIVERGENCE': True,  # MACD 다이버전스 전략
+    }
 
     tag = None
     
-    # df = follow_line(df)
-    df = supertrend(df,STG_CONFIG)
-    print("\n===== 포지션 계산 디버깅 =====")
-    print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
+    # 슈퍼트렌드 전략 실행
+    if STRATEGY_ENABLE['SUPERTREND']:
+        df = supertrend(df, STG_CONFIG)
+        print("\n===== 포지션 계산 디버깅 =====")
+        print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
 
-    # 슈퍼트랜드 필터링 적용
-    di_diff_filter = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_FILTER']
-    di_diff_lookback = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_LOOKBACK_PERIOD']
+        # 슈퍼트랜드 필터링 적용
+        di_diff_filter = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_FILTER']
+        di_diff_lookback = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_LOOKBACK_PERIOD']
 
-    # DI 차이와 4기간 평균
-    df['di_diff'] = df['DI+_stg3'] - df['DI-_stg3']
-    df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
+        # DI 차이와 4기간 평균
+        df['di_diff'] = df['DI+_stg3'] - df['DI-_stg3']
+        df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
 
-    print(f"\n===== DI 지표 =====")
-    print(f"DI+ 값: {df['DI+_stg3'].iloc[-1]:.2f}")
-    print(f"DI- 값: {df['DI-_stg3'].iloc[-1]:.2f}")
-    print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
-    print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
+        print(f"\n===== DI 지표 =====")
+        print(f"DI+ 값: {df['DI+_stg3'].iloc[-1]:.2f}")
+        print(f"DI- 값: {df['DI-_stg3'].iloc[-1]:.2f}")
+        print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
+        print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
 
-    # 시그널 필터링
-    df['filtered_position'] = None
-    
-    long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > di_diff_filter)
-    short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -di_diff_filter)
-    
-    df.loc[long_condition, 'filtered_position'] = 'Long'
-    df.loc[short_condition, 'filtered_position'] = 'Short'
+        # 시그널 필터링
+        df['filtered_position'] = None
+        
+        long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > di_diff_filter)
+        short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -di_diff_filter)
+        
+        df.loc[long_condition, 'filtered_position'] = 'Long'
+        df.loc[short_condition, 'filtered_position'] = 'Short'
 
-    st_position = df['filtered_position'].iloc[-1]
-    print(f"\n===== 필터링 결과 =====")
-    print(f"DI 필터 적용 포지션: {df['filtered_position'].iloc[-1]}")
+        st_position = df['filtered_position'].iloc[-1]
+        print(f"\n===== 필터링 결과 =====")
+        print(f"DI 필터 적용 포지션: {df['filtered_position'].iloc[-1]}")
+    else:
+        st_position = None
 
     if not st_position:
         print("\n===== 대체 시그널 확인 =====")
         
-        line_position = check_line_reg_signal(df,STG_CONFIG)
-        print(f"선형회귀귀 시그널: {line_position}")
+        line_position = None
+        dive_position = None
+        slop_position = None
+        size_position = None
+        volume_position = None
 
-        dive_position = generate_macd_dive_signal(df,STG_CONFIG)
-        print(f"MACD 다이버전스 시그널: {dive_position}")
+        # 각 전략 실행 (활성화된 경우에만)
+        if STRATEGY_ENABLE['LINE_REGRESSION']:
+            line_position = check_line_reg_signal(df, STG_CONFIG)
+            print(f"선형회귀 시그널: {line_position}")
 
-        slop_position = generate_macd_di_rsi_signal(df,STG_CONFIG,debug=True)
-        print(f"MACD-DI-RSI 시그널: {slop_position}")
+        if STRATEGY_ENABLE['MACD_DIVERGENCE']:
+            dive_position = generate_macd_dive_signal(df, STG_CONFIG)
+            print(f"MACD 다이버전스 시그널: {dive_position}")
 
-        size_position = generate_macd_size_signal(df,STG_CONFIG,debug=True)
-        print(f"MACD 크기 시그널: {size_position}")
+        if STRATEGY_ENABLE['MACD_DI_RSI']:
+            slop_position = generate_macd_di_rsi_signal(df, STG_CONFIG, debug=True)
+            print(f"MACD-DI-RSI 시그널: {slop_position}")
 
-        volume_position = check_VSTG_signal(df,STG_CONFIG)
-        print(f"볼륨 정규화 시그널 : {volume_position}")
+        if STRATEGY_ENABLE['MACD_SIZE']:
+            size_position = generate_macd_size_signal(df, STG_CONFIG, debug=True)
+            print(f"MACD 크기 시그널: {size_position}")
 
+        if STRATEGY_ENABLE['VOLUME_NORM']:
+            volume_position = check_VSTG_signal(df, STG_CONFIG)
+            print(f"볼륨 정규화 시그널 : {volume_position}")
 
+        # 우선순위에 따라 포지션 결정
         if line_position:
             position = line_position
             tag = 'lr'

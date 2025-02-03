@@ -11,40 +11,40 @@ def process_chart_data(df):
             'MACD_SLOW_LENGTH': 17,
             'MACD_SIGNAL_LENGTH': 20,
             'SIZE_RATIO_THRESHOLD': 1.4,
-            'DI_LENGTH': 17,
-            'DI_SLOPE_LENGTH': 4,
-            'MIN_SLOPE_THRESHOLD': 12,
+            'DI_LENGTH': 18,
+            'DI_SLOPE_LENGTH': 9,
+            'MIN_SLOPE_THRESHOLD': 13,
             'REQUIRED_CONSECUTIVE_CANDLES': 2
         },
         'MACD_DIVE': {
             'STG_No' : 2,
-            'FAST_LENGTH': 17,
+            'FAST_LENGTH': 11,
             'SLOW_LENGTH': 27,
-            'SIGNAL_LENGTH': 7,
+            'SIGNAL_LENGTH': 12,
             'HISTOGRAM_UPPER_LIMIT': 60,
-            'HISTOGRAM_LOWER_LIMIT': -200,
-            'LOOKBACK_PERIOD': 1,
-            'PRICE_MOVEMENT_THRESHOLD': 0.18
+            'HISTOGRAM_LOWER_LIMIT': -60,
+            'LOOKBACK_PERIOD': 2,
+            'PRICE_MOVEMENT_THRESHOLD': 0.01
         },
         'SUPERTREND': {
             'STG_No' : 3,
-            'ATR_PERIOD': 34,
-            'ATR_MULTIPLIER': 7,
+            'ATR_PERIOD': 30,
+            'ATR_MULTIPLIER': 6,
             'ADX_LENGTH': 14,
-            'DI_DIFFERENCE_FILTER': 9,
+            'DI_DIFFERENCE_FILTER': 8,
             'DI_DIFFERENCE_LOOKBACK_PERIOD': 6
         },
         'LINEAR_REG': {
             'STG_No' : 4,
-            'LENGTH': 150,
+            'LENGTH': 100,
             'RSI_LENGTH': 14,
-            'RSI_LOWER_BOUND': 25,
-            'RSI_UPPER_BOUND': 75,
+            'RSI_LOWER_BOUND': 40,
+            'RSI_UPPER_BOUND': 60,
             'MIN_BOUNCE_BARS': 4,
             'UPPER_MULTIPLIER': 3,
             'LOWER_MULTIPLIER': 3,
-            'MIN_SLOPE_VALUE': 5.7,
-            'MIN_TREND_DURATION': 67
+            'MIN_SLOPE_VALUE': 6,
+            'MIN_TREND_DURATION': 50
         },
         'MACD_DI_SLOPE': {
             'STG_No' : 5,
