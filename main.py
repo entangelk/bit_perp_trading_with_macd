@@ -181,6 +181,9 @@ def main():
                 logger.error("데이터 로드 실패: 데이터가 비어있습니다")
                 return
             
+            # 데이터 정합성을 위한 대기
+            time.sleep(1.0)  # 1초 대기
+
             df_calculated, STG_CONFIG = process_chart_data(df_rare_chart)
             
 
@@ -308,7 +311,7 @@ def main():
                     position_save = None
 
 
-            remaining_time = 270 - (execution_time + error_time)
+            remaining_time = 269 - (execution_time + error_time)
 
             # 남은 시간이 있다면 대기
             if remaining_time > 0:

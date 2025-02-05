@@ -83,33 +83,34 @@ def process_chart_data(df):
         return series.ewm(alpha=alpha, adjust=False).mean()
 
     def wilder_smoothing(series, period):
-        # 첫 번째 유효한 값의 위치를 찾는 부분
+        if not isinstance(series, pd.Series):
+            series = pd.Series(series)
+        
+        # 모든 값을 미리 float로 변환
+        series = series.astype(float)
+        
         first_valid_idx = series.first_valid_index()
         if first_valid_idx is None:
             return pd.Series(index=series.index)
         
-        # get_loc 결과 타입 체크 및 처리
         first_valid_loc = series.index.get_loc(first_valid_idx)
         if not isinstance(first_valid_loc, (int, np.integer)):
-            first_valid_loc = series.reset_index(drop=True).first_valid_index()
-            if first_valid_loc is None:
-                first_valid_loc = 0
+            first_valid_loc = first_valid_loc.start if isinstance(first_valid_loc, slice) else 0
         
-        smoothed = []
-        smoothed.extend([np.nan] * first_valid_loc)
-        smoothed.append(series[first_valid_idx])
+        smoothed = np.full(len(series), np.nan)
+        smoothed[first_valid_loc] = series.iloc[first_valid_loc]
         
-        # Wilder's smoothing 계산 부분 수정
+        # 계산 과정
         for i in range(first_valid_loc + 1, len(series)):
-            prev_value = float(smoothed[i-1]) if not isinstance(smoothed[i-1], float) else smoothed[i-1]
-            current_value = float(series.iloc[i]) if isinstance(series.iloc[i], pd.Series) else series.iloc[i]
+            current_value = series.iloc[i]
+            prev_value = smoothed[i-1]
             
-            if np.isnan(prev_value):
-                smoothed.append(current_value)
-            elif np.isnan(current_value):
-                smoothed.append(prev_value)
+            if np.isnan(current_value):
+                smoothed[i] = prev_value
+            elif np.isnan(prev_value):
+                smoothed[i] = current_value
             else:
-                smoothed.append((prev_value * (period - 1) + current_value) / period)
+                smoothed[i] = (prev_value * (period - 1) + current_value) / period
         
         return pd.Series(smoothed, index=series.index)
     
