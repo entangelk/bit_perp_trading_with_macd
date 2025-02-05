@@ -101,10 +101,10 @@ def process_chart_data(df):
         
         # Wilder's smoothing 계산 부분 수정
         for i in range(first_valid_loc + 1, len(series)):
-            prev_value = smoothed[i-1]
-            current_value = series.iloc[i]
+            prev_value = float(smoothed[i-1]) if not isinstance(smoothed[i-1], float) else smoothed[i-1]
+            current_value = float(series.iloc[i]) if isinstance(series.iloc[i], pd.Series) else series.iloc[i]
             
-            if np.isnan(prev_value):  # numpy의 isnan 사용
+            if np.isnan(prev_value):
                 smoothed.append(current_value)
             elif np.isnan(current_value):
                 smoothed.append(prev_value)
@@ -114,9 +114,9 @@ def process_chart_data(df):
         return pd.Series(smoothed, index=series.index)
     
     # ATR 계산
-    df['TR'] = np.maximum(df['high'] - df['low'], 
+    df['TR'] = pd.Series(np.maximum(df['high'] - df['low'], 
                         np.maximum(abs(df['high'] - df['close'].shift(1)), 
-                                    abs(df['low'] - df['close'].shift(1))))
+                                    abs(df['low'] - df['close'].shift(1)))), dtype=float)
 
     df['TR'] = df['TR'].fillna(0)
 
