@@ -150,11 +150,11 @@ def main():
         print(f"{config['set_timevalue']} 차트 업데이트 완료")
         logger.info(f"{config['set_timevalue']} 차트 업데이트 완료")
         
-        # 레버리지 설정
-        if not set_leverage(config['symbol'], config['leverage']):
-            logger.info(f"레버리지 설정 실패")
+        # # 레버리지 설정
+        # if not set_leverage(config['symbol'], config['leverage']):
+        #     logger.info(f"레버리지 설정 실패")
 
-            raise Exception("레버리지 설정 실패")
+        #     raise Exception("레버리지 설정 실패")
             
         
         # 메인 루프

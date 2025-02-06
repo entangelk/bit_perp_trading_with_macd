@@ -72,7 +72,14 @@ def load_data(set_timevalue, period=300, server_time=None):
     # 시간순으로 정렬 (오름차순으로 변환)
     df.sort_index(inplace=True)
 
-    # 최신 period 개수만큼의 데이터만 반환
-    df = df.iloc[-min(period, len(df)):]
+    # 마지막 데이터(미완성 봉) 제외하고, 최신 period 개수만큼의 데이터만 반환
+    if len(df) > 1:
+        df = df.iloc[-(period+1):-1]  # period+1개를 가져와서 마지막 하나 제외
+        if len(df) < period:  # 데이터가 충분한지 확인
+            logger.warning(f"요청된 기간({period})보다 적은 데이터({len(df)})가 있습니다")
+            return None
+    else:
+        logger.warning("데이터가 충분하지 않습니다")
+        return None
 
     return df
