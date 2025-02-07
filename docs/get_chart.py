@@ -95,7 +95,13 @@ def chart_update(update,symbol):
                 "volume": data[5]
             }
 
-            collection.insert_one(data_dict)  # update_one 대신 insert_one 사용
+            collection.delete_many({"timestamp": dt_object})
+            # 올바른 방법
+            collection.update_one(
+                {"timestamp": dt_object},     # 이 타임스탬프를 가진 문서를 찾아서
+                {"$set": data_dict},         # 이 데이터로 업데이트하거나
+                upsert=True                  # 없으면 새로 만들어라
+            )
             print(f"{time_description} 저장된 데이터: {dt_object} - O: {data[1]}, H: {data[2]}, L: {data[3]}, C: {data[4]}, V: {data[5]}")
 
     # 심볼 설정

@@ -77,6 +77,38 @@ def process_chart_data(df):
         ema[:period] = sma[:period]  # 초기값을 SMA로 설정
         return ema
     
+    def ema_with_sma_init(series, period):
+        # NaN 체크 및 제거
+        if series.isnull().any():
+            print(f"Warning: Input series contains {series.isnull().sum()} NaN values")
+        
+        # EMA multiplier
+        multiplier = 2 / (period + 1)
+        
+        # SMA 계산 (min_periods를 1로 설정하여 초기값 계산 개선)
+        sma = series.rolling(window=period, min_periods=1).mean()
+        
+        # EMA 계산
+        ema = pd.Series(0.0, index=series.index)
+        
+        # 첫 번째 유효한 값을 찾아 초기값으로 사용
+        first_valid_idx = series.first_valid_index()
+        if first_valid_idx:
+            ema.loc[first_valid_idx] = series.loc[first_valid_idx]
+        
+        # EMA 계산 (이전 값이 있는 경우에만 계산)
+        for i in range(1, len(series)):
+            prev_ema = ema.iloc[i-1]
+            curr_price = series.iloc[i]
+            
+            if pd.notna(curr_price) and pd.notna(prev_ema):
+                ema.iloc[i] = (curr_price * multiplier) + (prev_ema * (1 - multiplier))
+            else:
+                ema.iloc[i] = curr_price if pd.notna(curr_price) else prev_ema
+        
+        return ema
+    
+
     # RMA 함수 정의
     def rma(series, period):
         alpha = 1/period
@@ -293,7 +325,10 @@ def process_chart_data(df):
     df['EMA_fast_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['FAST_LENGTH'])
     df['EMA_slow_stg5'] = ema_with_sma_init(df['close'], STG_CONFIG['MACD_DI_SLOPE']['SLOW_LENGTH'])
     df['macd_stg5'] = df['EMA_fast_stg5'] - df['EMA_slow_stg5']
-    df['macd_signal_stg5'] = ema_with_sma_init(df['macd_stg5'], STG_CONFIG['MACD_DI_SLOPE']['SIGNAL_LENGTH'])
+
+    # NaN이 아닌 값으로 시그널 라인 계산
+    # df['macd_signal_stg5'] = ema_with_sma_init(df['macd_stg5'].fillna(method='ffill'), STG_CONFIG['MACD_DI_SLOPE']['SIGNAL_LENGTH'])
+    df['macd_signal_stg5'] = ema_with_sma_init(df['macd_stg5'].ffill(), STG_CONFIG['MACD_DI_SLOPE']['SIGNAL_LENGTH'])
     df['hist_stg5'] = df['macd_stg5'] - df['macd_signal_stg5']
     
     # === MACD dive 방향 ===
@@ -373,20 +408,16 @@ def process_chart_data(df):
 
 
 if __name__ == "__main__":
-
-
     set_timevalue = '5m'
-    period = 700  # 전체 데이터 수
-    start_from = 109  # 과거 n번째 데이터 (뒤에서부터)
-    slice_size = 300  # 슬라이싱할 데이터 개수 m
+    period = 700
+    start_from = 0  # 과거 n번째 데이터
+    slice_size = 300
     total_ticks = 85
 
     from pymongo import MongoClient
-    # MongoDB에 접속
     mongoClient = MongoClient("mongodb://mongodb:27017")
     database = mongoClient["bitcoin"]
 
-    # set_timevalue 값에 따라 적절한 차트 컬렉션 선택
     chart_collections = {
         '1m': 'chart_1m',
         '3m': 'chart_3m',
@@ -399,48 +430,67 @@ if __name__ == "__main__":
     if set_timevalue not in chart_collections:
         raise ValueError(f"Invalid time value: {set_timevalue}")
     
-    
-              
-                   
-                    
-    
     chart_collection = database[chart_collections[set_timevalue]]    
 
-
-    for start_from in range(start_from, 0, -1):
-        
-
+    # range의 끝값을 -1로 변경하여 0을 포함하도록 수정
+    for current_from in range(start_from, -1, -1):
         # 최신 데이터부터 과거 데이터까지 모두 가져오기
         data_cursor = chart_collection.find().sort("timestamp", -1)
         data_list = list(data_cursor)
 
-        # MongoDB 데이터를 DataFrame으로 변환
         df = pd.DataFrame(data_list)
-
-        # 타임스탬프를 datetime 형식으로 변환
         df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-        # 불필요한 ObjectId 필드 제거
         if '_id' in df.columns:
             df.drop('_id', axis=1, inplace=True)
 
-        # 인덱스를 타임스탬프로 설정
         df.set_index('timestamp', inplace=True)
-
-        # 시간순으로 정렬 (오름차순으로 변환)
         df.sort_index(inplace=True)
 
-        # 과거 n번째 데이터부터 m개의 데이터 슬라이싱
-        if start_from > len(df):
-            raise ValueError(f"start_from ({start_from}) is larger than available data length ({len(df)})")
+        if current_from > len(df):
+            raise ValueError(f"start_from ({current_from}) is larger than available data length ({len(df)})")
         
-        df = df.iloc[-(start_from + slice_size):-start_from]
-
+        # current_from이 0인 경우 최신 데이터를 가져오도록 슬라이싱
+        if current_from == 0:
+            df = df.iloc[-slice_size:]
+        else:
+            df = df.iloc[-(current_from + slice_size):-current_from]
         df, STG_CONFIG = process_chart_data(df)
         
-        # from strategy.supertrend import supertrend
+        from strategy.supertrend import supertrend
 
-        # df = supertrend(df)
+        df = supertrend(df,STG_CONFIG)
+
+        print("\n===== 포지션 계산 디버깅 =====")
+        print(f"슈퍼트렌드 포지션: {df['st_position'].iloc[-1]}")
+
+        # 슈퍼트랜드 필터링 적용
+        di_diff_filter = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_FILTER']
+        di_diff_lookback = STG_CONFIG['SUPERTREND']['DI_DIFFERENCE_LOOKBACK_PERIOD']
+
+        # DI 차이와 4기간 평균
+        df['di_diff'] = df['DI+_stg3'] - df['DI-_stg3']
+        df['avg_di_diff'] = df['di_diff'].rolling(window=di_diff_lookback).mean()
+
+        print(f"\n===== DI 지표 =====")
+        print(f"DI+ 값: {df['DI+_stg3'].iloc[-1]:.2f}")
+        print(f"DI- 값: {df['DI-_stg3'].iloc[-1]:.2f}")
+        print(f"DI 차이: {df['di_diff'].iloc[-1]:.2f}")
+        print(f"4기간 평균 DI 차이: {df['avg_di_diff'].iloc[-1]:.2f}")
+
+        # 시그널 필터링
+        df['filtered_position'] = None
+        
+        long_condition = (df['st_position'] == 'Long') & (df['avg_di_diff'] > di_diff_filter)
+        short_condition = (df['st_position'] == 'Short') & (df['avg_di_diff'] < -di_diff_filter)
+        
+        df.loc[long_condition, 'filtered_position'] = 'Long'
+        df.loc[short_condition, 'filtered_position'] = 'Short'
+
+        st_position = df['filtered_position'].iloc[-1]
+        print(f"\n===== 필터링 결과 =====")
+        print(f"DI 필터 적용 포지션: {df['filtered_position'].iloc[-1]}")
+
         # from strategy.volume_norm import check_VSTG_signal
         # position = check_VSTG_signal(df)
         
@@ -448,7 +498,7 @@ if __name__ == "__main__":
         # position = check_line_reg_signal(df)
         # print(f'시간 : {df.tail(1).index[0]}, 포지션 :  {position}')
 
-        from strategy.macd_divergence import generate_macd_dive_signal
-        position = generate_macd_dive_signal(df,STG_CONFIG)
+        # from strategy.macd_divergence import generate_macd_dive_signal
+        # position = generate_macd_dive_signal(df,STG_CONFIG)
         
         pass
