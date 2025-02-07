@@ -191,6 +191,7 @@ def main():
             # 시그널 체크 먼저 수행
             try:
                 position, df, tag = cal_position(df=df_calculated, STG_CONFIG = STG_CONFIG)  # 포지션은 숏,롱,None, hma롱, hma숏
+                logger.info(f"결정 포지션: {position}, 전략 : {tag}", exc_info=True)
             except:
                 logger.info(f"포지션 계산 오류")
 
@@ -244,7 +245,7 @@ def main():
                     stg_side = None
 
                 if position:
-                    if stg_side != position: # 반대 신호가 나타났을때 종료 후 전환
+                    if stg_side != position or tag != 'lr': # 반대 신호가 나타났을때 종료 후 전환 / 장기 추세 기반 전략 선형회귀 전략은 적용 X 
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
 
@@ -259,7 +260,7 @@ def main():
                         if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
                             stop_loss = 700
                             take_profit = 700
-                        elif tag == 'vn' or tag == 'lr' or tag == 'sz' or tag == 'dv':
+                        elif tag == 'vn' or tag == 'sz' or tag == 'dv':
                             stop_loss = 800
                             take_profit = 800
 
