@@ -14,9 +14,9 @@ def cal_position(df, STG_CONFIG):
     STRATEGY_ENABLE = {
         'SUPERTREND': True,      # 슈퍼트렌드 전략
         'LINE_REGRESSION': True,  # 선형회귀 전략
-        'VOLUME_NORM': True,      # 볼륨 정규화 전략
+        'VOLUME_NORM': False,      # 볼륨 정규화 전략
         'MACD_DI_RSI': False,     # MACD-DI-RSI Slop 전략
-        'MACD_SIZE': False,       # MACD 크기 전략
+        'MACD_SIZE': True,       # MACD 크기 전략
         'MACD_DIVERGENCE': True,  # MACD 다이버전스 전략
     }
 

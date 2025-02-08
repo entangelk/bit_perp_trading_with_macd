@@ -150,11 +150,11 @@ def main():
         print(f"{config['set_timevalue']} 차트 업데이트 완료")
         logger.info(f"{config['set_timevalue']} 차트 업데이트 완료")
         
-        # # 레버리지 설정
-        # if not set_leverage(config['symbol'], config['leverage']):
-        #     logger.info(f"레버리지 설정 실패")
+        # 레버리지 설정
+        if not set_leverage(config['symbol'], config['leverage']):
+            logger.info(f"레버리지 설정 실패")
 
-        #     raise Exception("레버리지 설정 실패")
+            raise Exception("레버리지 설정 실패")
             
         
         # 메인 루프
@@ -191,9 +191,9 @@ def main():
             # 시그널 체크 먼저 수행
             try:
                 position, df, tag = cal_position(df=df_calculated, STG_CONFIG = STG_CONFIG)  # 포지션은 숏,롱,None, hma롱, hma숏
-                logger.info(f"결정 포지션: {position}, 전략 : {tag}", exc_info=True)
+                logger.info(f"결정 포지션: {position}, 전략 : {tag}")
             except:
-                logger.info(f"포지션 계산 오류")
+                logger.info(f"포지션 계산 오류", exc_info=True)
 
 
 
