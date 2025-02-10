@@ -29,10 +29,10 @@ def process_chart_data(df):
         'SUPERTREND': {
             'STG_No' : 3,
             'ATR_PERIOD': 30,
-            'ATR_MULTIPLIER': 6,
-            'ADX_LENGTH': 14,
-            'DI_DIFFERENCE_FILTER': 8,
-            'DI_DIFFERENCE_LOOKBACK_PERIOD': 6
+            'ATR_MULTIPLIER': 5,
+            'ADX_LENGTH': 24,
+            'DI_DIFFERENCE_FILTER': 3,
+            'DI_DIFFERENCE_LOOKBACK_PERIOD': 14
         },
         'LINEAR_REG': {
             'STG_No' : 4,
@@ -43,7 +43,7 @@ def process_chart_data(df):
             'MIN_BOUNCE_BARS': 4,
             'UPPER_MULTIPLIER': 3,
             'LOWER_MULTIPLIER': 3,
-            'MIN_SLOPE_VALUE': 6,
+            'MIN_SLOPE_VALUE': 7,
             'MIN_TREND_DURATION': 50
         },
         'MACD_DI_SLOPE': {

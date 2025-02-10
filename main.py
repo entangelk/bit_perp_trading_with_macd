@@ -258,8 +258,8 @@ def main():
                         stg_side = position # 포지션 저장
 
                         if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
-                            stop_loss = 700
-                            take_profit = 700
+                            stop_loss = 800
+                            take_profit = 800
                         elif tag == 'vn' or tag == 'sz' or tag == 'dv':
                             stop_loss = 800
                             take_profit = 800
@@ -292,8 +292,8 @@ def main():
                     stg_side = position # 포지션 저장
 
                     if tag == 'st': # 슈퍼 트랜드일시 특별 tpsl사용용
-                        stop_loss = 700
-                        take_profit = 700
+                        stop_loss = 800
+                        take_profit = 800
                     elif tag == 'vn' or tag == 'lr' or tag == 'sz' or tag == 'dv':
                         stop_loss = 800
                         take_profit = 800
