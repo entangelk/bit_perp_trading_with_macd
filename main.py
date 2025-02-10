@@ -245,7 +245,7 @@ def main():
                     stg_side = None
 
                 if position:
-                    if stg_side != position or tag != 'lr': # 반대 신호가 나타났을때 종료 후 전환 / 장기 추세 기반 전략 선형회귀 전략은 적용 X 
+                    if current_side != position or tag != 'lr': # 반대 신호가 나타났을때 종료 후 전환 / 장기 추세 기반 전략 선형회귀 전략은 적용 X 
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
 
