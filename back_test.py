@@ -105,7 +105,7 @@ from logging.handlers import RotatingFileHandler
 
 
 # 로거 생성 및 레벨 설정 
-logger = logging.getLogger('strategy_backtest')
+logger = logging.getLogger('backtest')
 logger.setLevel(logging.INFO)
 
 # 핸들러 설정
