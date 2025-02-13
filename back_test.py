@@ -276,7 +276,7 @@ def evaluate_strategy(df, signal_column):
     logger.info(f"Losses: {losses}")
     logger.info(f"Win Rate: {win_rate:.2f}%")
 
-    return win_rate
+    return win_rate, total_trades
 
 def backtest_all_strategies(df_backtest):
     strategy_columns = {
@@ -292,7 +292,11 @@ def backtest_all_strategies(df_backtest):
         if column in df_backtest.columns:
             # 전략 테스트
             win_rate = evaluate_strategy(df_backtest, column)
-            results[tag] = win_rate < 50  # 승률이 50% 미만이면 True 반환
+            # 거래가 있을 때만 리버스 여부 판단
+            if total_trades, total_trades > 0:
+                results[tag] = win_rate < 50
+            else:
+                results[tag] = False  # 거래가 없으면 리버스 하지 않음
     
     return results
 
