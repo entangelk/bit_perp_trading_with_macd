@@ -210,7 +210,7 @@ def main():
             # 사용 예시
             is_reverse = load_config()
 
-            if is_reverse:
+            if is_reverse and tag:
                 reversed_chaek = is_reverse[tag]
 
                 if reversed_chaek:
