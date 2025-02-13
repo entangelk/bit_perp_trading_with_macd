@@ -302,6 +302,12 @@ def backtest_all_strategies(df_backtest):
 
 def run_daily_backtest():
     chart_collection = database[chart_collections[set_timevalue]] 
+    
+    # 처음 실행시 데이터 업데이트
+    from docs.get_chart import chart_update
+    last_time, server_time = chart_update('5m','BTCUSDT')
+    time.sleep(1)
+    
     while True:
         try:
             current_time = datetime.now()
@@ -310,35 +316,15 @@ def run_daily_backtest():
 
             data_cursor = chart_collection.find().sort("timestamp", -1).skip(1)
             data_list = list(data_cursor)
-            if data_list:
             
+            df = pd.DataFrame(data_list)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-                df = pd.DataFrame(data_list)
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+            if '_id' in df.columns:
+                df.drop('_id', axis=1, inplace=True)
 
-                if '_id' in df.columns:
-                    df.drop('_id', axis=1, inplace=True)
-
-                df.set_index('timestamp', inplace=True)
-                df.sort_index(inplace=True)
-            else:
-                from docs.get_chart import chart_update
-                last_time, server_time = chart_update('5m','BTCUSDT')
-
-                time.sleep(1)
-
-                chart_collection = database[chart_collections[set_timevalue]]    
-
-                data_cursor = chart_collection.find().sort("timestamp", -1)
-                data_list = list(data_cursor)
-                df = pd.DataFrame(data_list)
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-                if '_id' in df.columns:
-                    df.drop('_id', axis=1, inplace=True)
-
-                df.set_index('timestamp', inplace=True)
-                df.sort_index(inplace=True)
+            df.set_index('timestamp', inplace=True)
+            df.sort_index(inplace=True)
 
 
             # 전략 계산
