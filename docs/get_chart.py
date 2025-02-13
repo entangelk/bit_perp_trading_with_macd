@@ -23,10 +23,10 @@ mongoClient = MongoClient("mongodb://mongodb:27017")
 database = mongoClient["bitcoin"]
 # Capped Collections 초기화
 collections_config = {
-    'chart_1m': {'size': 200 * 1500, 'max': 1500},
-    'chart_3m': {'size': 200 * 1500, 'max': 1500},
-    'chart_5m': {'size': 200 * 1500, 'max': 1500},
-    'chart_15m': {'size': 200 * 1500, 'max': 1500}
+    'chart_1m': {'size': 200 * 1500, 'max': 1500},  # 실시간 모니터링용
+    'chart_3m': {'size': 200 * 2100, 'max': 2100},  # 7일치 보장
+    'chart_5m': {'size': 200 * 2100, 'max': 2100},  # 7일치 보장
+    'chart_15m': {'size': 200 * 1000, 'max': 1000}  # 7일치 충분
 }
 # 컬렉션 초기화
 for collection_name, config in collections_config.items():
@@ -121,7 +121,7 @@ def chart_update(update,symbol):
 
     elif update == '5m':
         # 5분봉 (최근 1000틱 데이터 저장 및 업데이트)
-        fetch_and_store_ohlcv(chart_collection_5m, '5m', symbol, limit=1000, minutes_per_unit=5, time_description="5분봉")
+        fetch_and_store_ohlcv(chart_collection_5m, '5m', symbol, limit=2000, minutes_per_unit=5, time_description="5분봉")
         return chart_collection_5m.find_one(sort=[("timestamp", -1)]), server_time
 
     elif update == '15m':

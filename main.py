@@ -1,12 +1,9 @@
 from tqdm import tqdm
-from docs.making_order import set_tp_sl
 from docs.get_chart import chart_update, chart_update_one
 from docs.cal_chart import process_chart_data
 from docs.cal_position import cal_position
 from docs.get_current import fetch_investment_status
 from docs.making_order import set_leverage, create_order_with_tp_sl, close_position, get_position_amount
-from docs.strategy.adx_di import adx_di_signal
-from docs.utility.get_sl import set_sl
 from docs.utility.cal_close import isclowstime
 from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
@@ -195,6 +192,29 @@ def main():
             except:
                 logger.info(f"포지션 계산 오류", exc_info=True)
 
+
+
+            # 전략 리버싱 로드
+            from pymongo import MongoClient
+
+            def load_config():
+                mongoClient = MongoClient("mongodb://mongodb:27017")
+                database = mongoClient["bitcoin"]
+                config_collection = database['config']
+                
+                config = config_collection.find_one({'name': 'reverse_settings'})
+                if config:
+                    return config['is_reverse']
+                return None
+
+            # 사용 예시
+            is_reverse = load_config()
+
+            if is_reverse:
+                reversed_chaek = is_reverse[tag]
+
+                if reversed_chaek:
+                    position = 'Long' if position == 'Sell' else 'Short'
 
 
             # 포지션 상태 확인

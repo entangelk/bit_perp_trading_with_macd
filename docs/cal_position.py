@@ -68,11 +68,13 @@ def cal_position(df, STG_CONFIG):
 
         # 각 전략 실행 (활성화된 경우에만)
         if STRATEGY_ENABLE['LINE_REGRESSION']:
-            line_position = check_line_reg_signal(df, STG_CONFIG)
+            df = check_line_reg_signal(df, STG_CONFIG)
+            line_position = df['line_reg_signal'].iloc[-1]
             print(f"선형회귀 시그널: {line_position}")
 
         if STRATEGY_ENABLE['MACD_DIVERGENCE']:
-            dive_position = generate_macd_dive_signal(df, STG_CONFIG)
+            df = generate_macd_dive_signal(df, STG_CONFIG)
+            dive_position = df['macd_dive_signal'].iloc[-1]
             print(f"MACD 다이버전스 시그널: {dive_position}")
 
         if STRATEGY_ENABLE['MACD_DI_RSI']:
@@ -80,7 +82,8 @@ def cal_position(df, STG_CONFIG):
             print(f"MACD-DI-RSI 시그널: {slop_position}")
 
         if STRATEGY_ENABLE['MACD_SIZE']:
-            size_position = generate_macd_size_signal(df, STG_CONFIG, debug=True)
+            df = generate_macd_size_signal(df, STG_CONFIG, debug=True)
+            size_position = df['macd_size_signal'].iloc[-1]
             print(f"MACD 크기 시그널: {size_position}")
 
         if STRATEGY_ENABLE['VOLUME_NORM']:
