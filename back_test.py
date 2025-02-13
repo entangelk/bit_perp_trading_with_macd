@@ -308,7 +308,7 @@ def run_daily_backtest():
             logger.info(f"\n{'='*50}")
             logger.info(f"백테스트 시작 시간: {current_time}")
 
-            data_cursor = chart_collection.find().sort("timestamp", -1)
+            data_cursor = chart_collection.find().sort("timestamp", -1).skip(1)
             data_list = list(data_cursor)
             if data_list:
             
