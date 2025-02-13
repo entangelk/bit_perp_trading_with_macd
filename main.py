@@ -214,7 +214,7 @@ def main():
                 reversed_chaek = is_reverse[tag]
 
                 if reversed_chaek:
-                    position = 'Long' if position == 'Sell' else 'Short'
+                    position = 'Long' if position == 'Short' else 'Short'
 
 
             # 포지션 상태 확인
