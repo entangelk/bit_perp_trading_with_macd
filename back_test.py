@@ -291,9 +291,9 @@ def backtest_all_strategies(df_backtest):
     for tag, column in strategy_columns.items():
         if column in df_backtest.columns:
             # 전략 테스트
-            win_rate = evaluate_strategy(df_backtest, column)
+            win_rate, total_trades = evaluate_strategy(df_backtest, column)
             # 거래가 있을 때만 리버스 여부 판단
-            if total_trades, total_trades > 0:
+            if total_trades > 0:
                 results[tag] = win_rate < 50
             else:
                 results[tag] = False  # 거래가 없으면 리버스 하지 않음
