@@ -351,6 +351,7 @@ def run_daily_backtest():
                 }}
             )
             
+            logger.info(f"Strategy Results: {backtest_results}")
             logger.info("백테스트 완료")
             
             # 24시간 대기
