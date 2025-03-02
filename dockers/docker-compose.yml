@@ -19,7 +19,7 @@ services:
     volumes:
       - mongodb_data:/data/db
       - ./config/mongod.conf:/etc/mongod.conf
-    command: --config /etc/mongod.conf
+    command: --wiredTigerCacheSizeGB 0.25 --wiredTigerJournalCompressor snappy --journalCommitInterval 100
     networks:
       - app-network  
 
