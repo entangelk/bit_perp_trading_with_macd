@@ -10,7 +10,7 @@ from pathlib import Path
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
 
 # 템플릿 디렉토리 설정
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="/app/trading_bot/templates")
 
 # 로그 파일 경로 설정
 LOG_DIR = "/app/trading_bot"  # 올바른 경로
