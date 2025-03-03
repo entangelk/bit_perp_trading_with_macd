@@ -1,29 +1,18 @@
 version: '3.10.7'
 services:  
-  trading_bot:  # 기존 서비스
+  trading_bot:  
     build: .    
     container_name: ${CONTAINER_PREFIX}_trading_bot
     restart: always
-    command: tail -f /dev/null
+    command: bash -c "pip install fastapi uvicorn jinja2 && python -m uvicorn log_viewer:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "80:8000"  # 포트 추가
     depends_on:
       - mongodb
     networks:
       - app-network
     volumes:
-      - ../:/app  # 상위 디렉토리(루트 폴더)를 /app에 마운트
-
-  log_viewer:  # 로그 뷰어 서비스
-    image: python:3.10-slim
-    container_name: ${CONTAINER_PREFIX}_log_viewer
-    restart: always
-    ports:
-      - "80:8000"
-    volumes:
-      - ../:/app
-    working_dir: /app
-    command: bash -c "pip install fastapi uvicorn jinja2 && mkdir -p templates && python -m uvicorn log_viewer:app --host 0.0.0.0 --port 8000"
-    networks:
-      - app-network
+      - ../:/app  # dockers 폴더에 있다면 상위 폴더를 마운트
 
   mongodb:
     image: mongo:7
@@ -33,7 +22,7 @@ services:
       - 27017:27017
     volumes:
       - mongodb_data:/data/db
-      - ./config/mongod.conf:/etc/mongod.conf
+      - ../config/mongod.conf:/etc/mongod.conf
     command: --wiredTigerCacheSizeGB 0.25 --wiredTigerJournalCompressor snappy
     networks:
       - app-network  
