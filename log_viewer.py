@@ -12,8 +12,8 @@ app = FastAPI(title="트레이딩 봇 로그 뷰어")
 # 템플릿 디렉토리 설정
 templates = Jinja2Templates(directory="templates")
 
-# 로그 파일 경로 설정 - 루트 폴더로 설정
-LOG_DIR = "/app"  # Docker 볼륨을 통해 마운트된 경로
+# 로그 파일 경로 설정
+LOG_DIR = "/app/trading_bot"  # 올바른 경로
 LOG_FILES = {
     "trading": "trading_bot.log",
     "backtest": "strategy_backtest.log"
