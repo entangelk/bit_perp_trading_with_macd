@@ -45,7 +45,11 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
         raise HTTPException(status_code=404, detail="로그 파일을 찾을 수 없습니다")
     
     # 정규식 패턴 (로그 형식에 맞게 설정)
-    pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (\w+) - (\w+) - (.+)'
+    # 정규식 패턴을 로그 타입별로 설정
+    patterns = {
+        "trading": r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (\w+) - (\w+) - (.+)',
+        "backtest": r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (.+)'
+    }
     
     try:
         log_entries = []
@@ -54,29 +58,62 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
 
         # 로그 파싱
         current_entry = None
+        pattern = patterns.get(log_type)
+
         for line in content:
-            match = re.match(pattern, line)
-            if match:
-                if current_entry:
-                    log_entries.append(current_entry)
-                
-                timestamp, module, level, message = match.groups()
-                
-                # error_only 옵션이 활성화된 경우 ERROR/CRITICAL 레벨만 저장
-                if error_only and level not in ["ERROR", "CRITICAL"]:
-                    current_entry = None
-                    continue
-                
-                current_entry = {
-                    "timestamp": timestamp,
-                    "module": module,
-                    "level": level,
-                    "message": message,
-                    "class": LOG_LEVELS.get(level, "")
-                }
-            elif current_entry:
-                # 멀티라인 메시지 처리
-                current_entry["message"] += "\n" + line
+            if log_type == "trading":
+                match = re.match(pattern, line)
+                if match:
+                    if current_entry:
+                        log_entries.append(current_entry)
+                    
+                    timestamp, module, level, message = match.groups()
+                    
+                    # error_only 옵션이 활성화된 경우 ERROR/CRITICAL 레벨만 저장
+                    if error_only and level not in ["ERROR", "CRITICAL"]:
+                        current_entry = None
+                        continue
+                    
+                    current_entry = {
+                        "timestamp": timestamp,
+                        "module": module,
+                        "level": level,
+                        "message": message,
+                        "class": LOG_LEVELS.get(level, "")
+                    }
+                elif current_entry:
+                    # 멀티라인 메시지 처리
+                    current_entry["message"] += "\n" + line
+            
+            elif log_type == "backtest":
+                match = re.match(pattern, line)
+                if match:
+                    if current_entry:
+                        log_entries.append(current_entry)
+                    
+                    timestamp, message = match.groups()
+                    
+                    # backtest 로그에는 레벨 정보가 없으므로 INFO로 간주
+                    level = "INFO"
+                    
+                    # error_only 옵션을 위한 예외 처리
+                    if error_only:
+                        # 메시지에 "error", "exception" 등이 포함된 경우에만 표시
+                        if not re.search(r'error|exception|fail', message.lower()):
+                            current_entry = None
+                            continue
+                        level = "ERROR"  # 오류 메시지로 간주
+                    
+                    current_entry = {
+                        "timestamp": timestamp,
+                        "module": "Backtest",
+                        "level": level,
+                        "message": message,
+                        "class": LOG_LEVELS.get(level, "")
+                    }
+                elif current_entry:
+                    # 멀티라인 메시지 처리
+                    current_entry["message"] += "\n" + line
         
         # 마지막 로그 항목 추가
         if current_entry:
