@@ -1,18 +1,17 @@
 version: '3.10.7'
 services:  
-  trading_bot:  
-    build: .    
+  trading_bot:
+    build: .
     container_name: ${CONTAINER_PREFIX}_trading_bot
     restart: always
-    command: tail -f /dev/null
+    command: tail -f /dev/null  # 처음에는 백그라운드로 유지만 하고
     ports:
-      - "80:8000"  # 포트 추가
+      - "80:8000"  # 포트 설정 추가
     depends_on:
       - mongodb
     networks:
       - app-network
-    volumes:
-      - ../:/app  # dockers 폴더에 있다면 상위 폴더를 마운트
+    # 볼륨 마운트 설정 제거 또는 주석 처리
 
   mongodb:
     image: mongo:7
@@ -22,7 +21,7 @@ services:
       - 27017:27017
     volumes:
       - mongodb_data:/data/db
-      - ../config/mongod.conf:/etc/mongod.conf
+      - ./config/mongod.conf:/etc/mongod.conf
     command: --wiredTigerCacheSizeGB 0.25 --wiredTigerJournalCompressor snappy
     networks:
       - app-network  
