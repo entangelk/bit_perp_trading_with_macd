@@ -1,12 +1,27 @@
 version: '3.10.7'
 services:  
-  trading_bot:  # 추가된 서비스
-    build: .    # 현재 디렉토리의 Dockerfile 사용
+  trading_bot:  # 기존 서비스
+    build: .    
     container_name: ${CONTAINER_PREFIX}_trading_bot
     restart: always
-    command: tail -f /dev/null  # 이 부분 추가
+    command: tail -f /dev/null
     depends_on:
       - mongodb
+    networks:
+      - app-network
+    volumes:
+      - ./:/app  # 로그 파일 접근을 위한 볼륨 설정
+
+  log_viewer:  # 로그 뷰어 서비스
+    image: python:3.10-slim
+    container_name: ${CONTAINER_PREFIX}_log_viewer
+    restart: always
+    ports:
+      - "80:8000"
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: bash -c "pip install fastapi uvicorn jinja2 && mkdir -p templates && python -m uvicorn log_viewer:app --host 0.0.0.0 --port 8000"
     networks:
       - app-network
 

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ file_info.name }} - 트레이딩 봇 로그 뷰어</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">{{ file_info.name }}</h1>
+            <a href="/" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+                홈으로 돌아가기
+            </a>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <div class="flex flex-wrap justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <p><span class="font-medium">파일:</span> {{ file_info.name }}</p>
+                    <p><span class="font-medium">크기:</span> {{ file_info.size }}</p>
+                    <p><span class="font-medium">마지막 수정:</span> {{ file_info.modified }}</p>
+                </div>
+                
+                <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+                    <form method="get" action="/log/{{ file_info.log_type }}" class="flex items-center space-x-2">
+                        <label for="lines" class="whitespace-nowrap">표시할 줄 수:</label>
+                        <select id="lines" name="lines" class="border rounded px-2 py-1" onchange="this.form.submit()">
+                            <option value="50" {% if lines == 50 %}selected{% endif %}>50줄</option>
+                            <option value="100" {% if lines == 100 %}selected{% endif %}>100줄</option>
+                            <option value="200" {% if lines == 200 %}selected{% endif %}>200줄</option>
+                            <option value="500" {% if lines == 500 %}selected{% endif %}>500줄</option>
+                            <option value="1000" {% if lines == 1000 %}selected{% endif %}>1000줄</option>
+                        </select>
+                        {% if error_only %}
+                        <input type="hidden" name="error_only" value="true">
+                        {% endif %}
+                    </form>
+                    
+                    <div class="flex space-x-2">
+                        {% if error_only %}
+                        <a href="/log/{{ file_info.log_type }}?lines={{ lines }}" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                            전체 로그 보기
+                        </a>
+                        {% else %}
+                        <a href="/log/{{ file_info.log_type }}?lines={{ lines }}&error_only=true" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition">
+                            에러만 보기
+                        </a>
+                        {% endif %}
+                        <button onclick="window.location.reload()" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                            새로고침
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="p-4 bg-gray-800 text-white font-medium flex justify-between items-center">
+                <span>로그 내용 (최근 {{ lines }}줄)</span>
+                {% if error_only %}
+                <span class="bg-red-600 px-2 py-1 rounded text-sm">에러 메시지만 표시 중</span>
+                {% endif %}
+            </div>
+            
+            <div class="divide-y divide-gray-200">
+                {% for entry in log_entries %}
+                <div class="p-4 {% if entry.level in ['ERROR', 'CRITICAL'] %}bg-red-50{% endif %}">
+                    <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3 text-gray-500 text-sm">
+                            {{ entry.timestamp }}
+                        </div>
+                        <div class="col-span-6 md:col-span-2 text-gray-600 text-sm truncate">
+                            {{ entry.module }}
+                        </div>
+                        <div class="col-span-6 md:col-span-1">
+                            <span class="px-2 py-1 text-xs rounded-full font-medium {{ entry.class }} {% if entry.level in ['ERROR', 'CRITICAL'] %}bg-red-100{% else %}bg-gray-100{% endif %}">
+                                {{ entry.level }}
+                            </span>
+                        </div>
+                        <div class="col-span-12 md:col-span-6 mt-1 md:mt-0">
+                            <pre class="whitespace-pre-wrap break-words text-sm {% if entry.level in ['ERROR', 'CRITICAL'] %}font-medium{% endif %}">{{ entry.message }}</pre>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                {% if not log_entries %}
+                <div class="p-8 text-center text-gray-500">
+                    {% if error_only %}
+                    <p>에러 로그가 없습니다.</p>
+                    {% else %}
+                    <p>로그 내용이 없습니다.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 페이지 로드 시 자동으로 맨 위로 스크롤 (최신 로그가 위에 표시됨)
+        window.onload = function() {
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>

@@ -58,3 +58,120 @@
 | 2025.01.07 | 승률에 따른 전략 수치 재조정 | MACD_div, supertrend| |
 | 2025.01.09 | 변수 정리 | 전략 CONFIG로 통합 관리 |
 | 2025.01.16 | 슬라이싱 오류 - 보완 코드 제작 | api 업데이트 문제로 예상 |
+
+
+
+# 트레이딩 봇 로그 뷰어 설치 및 실행 가이드
+
+이 가이드는 FastAPI를 사용하여 트레이딩 봇의 로그를 웹으로 확인할 수 있는 애플리케이션의 설치 및 실행 방법을 안내합니다.
+
+## 1. 필요한 패키지 설치
+
+```bash
+pip install fastapi uvicorn jinja2
+```
+
+## 2. 프로젝트 구조 생성
+
+다음과 같은 프로젝트 구조를 생성합니다:
+
+```
+log-viewer/
+├── main.py          # FastAPI 애플리케이션 코드
+├── templates/       # HTML 템플릿 디렉토리
+│   ├── index.html   # 메인 페이지 템플릿
+│   └── log_view.html # 로그 보기 페이지 템플릿
+└── static/          # 정적 파일 디렉토리(필요시)
+```
+
+## 3. 설정 수정
+
+`main.py` 파일에서 다음 부분을 실제 환경에 맞게 수정해야 합니다:
+
+```python
+# 로그 파일 경로 설정 - 실제 로그 파일 경로로 변경해야 합니다
+LOG_DIR = "/path/to/your/logs"  # 실제 로그 파일 경로로 수정하세요
+LOG_FILES = {
+    "trading": "trading_bot.log",
+    "backtest": "strategy_backtest.log"
+}
+```
+
+EC2 서버에서 로그 파일의 실제 위치로 `LOG_DIR`을 변경하세요.
+
+## 4. 애플리케이션 실행
+
+개발 환경에서 실행:
+
+```bash
+cd log-viewer
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## 5. EC2 서버에서 백그라운드로 실행하기
+
+서버에서 애플리케이션을 백그라운드로 실행하려면 다음 방법 중 하나를 사용할 수 있습니다:
+
+### 5.1. systemd 서비스 사용 (권장)
+
+`/etc/systemd/system/log-viewer.service` 파일을 생성합니다:
+
+```ini
+[Unit]
+Description=Trading Bot Log Viewer
+After=network.target
+
+[Service]
+User=ubuntu  # 실행할 사용자 계정
+WorkingDirectory=/home/ubuntu/log-viewer  # 프로젝트 디렉토리
+ExecStart=/home/ubuntu/.local/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+그런 다음 서비스를 활성화하고 시작합니다:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable log-viewer
+sudo systemctl start log-viewer
+```
+
+서비스 상태 확인:
+
+```bash
+sudo systemctl status log-viewer
+```
+
+### 5.2. nohup 사용 (간단한 방법)
+
+```bash
+cd log-viewer
+nohup uvicorn main:app --host 0.0.0.0 --port 8000 > log_viewer_output.log 2>&1 &
+```
+
+## 6. EC2 보안 그룹 설정
+
+EC2 인스턴스의 보안 그룹에서 8000번 포트(또는 사용 중인 포트)에 대한 인바운드 트래픽을 허용해야 합니다:
+
+1. AWS 콘솔에서 EC2 서비스로 이동
+2. 해당 인스턴스의 보안 그룹 선택
+3. 인바운드 규칙 편집
+4. 규칙 추가: TCP 프로토콜, 포트 8000, 소스 IP 제한(필요한 경우)
+
+## 7. 접속 방법
+
+웹 브라우저에서 다음 URL로 접속합니다:
+
+```
+http://[EC2-인스턴스-IP]:8000
+```
+
+## 8. 주의사항
+
+- 이 애플리케이션은 기본적인 인증이 없으므로, 필요한 경우 Basic Auth나 다른 인증 방식을 추가하는 것이 좋습니다.
+- 프로덕션 환경에서는 Nginx나 Apache와 같은 웹 서버를 프록시로 사용하는 것이 권장됩니다.
+- 로그 파일에 접근할 수 있는 권한이 있어야 합니다. 필요한 경우 실행 사용자에게 적절한 권한을 부여하세요.

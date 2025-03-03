@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>트레이딩 봇 로그 뷰어</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6 text-gray-800">트레이딩 봇 로그 뷰어</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4 text-blue-700">거래 실행 로그</h2>
+                <p class="text-gray-600 mb-4">트레이딩 봇 실행 중에 생성된 로그를 확인합니다.</p>
+                <div class="flex space-x-4">
+                    <a href="/log/trading" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                        전체 로그 보기
+                    </a>
+                    <a href="/log/trading?error_only=true" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">
+                        에러만 보기
+                    </a>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4 text-green-700">백테스트 로그</h2>
+                <p class="text-gray-600 mb-4">전략 백테스트 과정의 로그를 확인합니다.</p>
+                <div class="flex space-x-4">
+                    <a href="/log/backtest" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                        전체 로그 보기
+                    </a>
+                    <a href="/log/backtest?error_only=true" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">
+                        에러만 보기
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-8 bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">도움말</h2>
+            <ul class="list-disc pl-5 text-gray-700">
+                <li class="mb-2"><span class="text-blue-600 font-medium">INFO</span> - 일반적인 정보 로그입니다.</li>
+                <li class="mb-2"><span class="text-yellow-600 font-medium">WARNING</span> - 경고 메시지입니다.</li>
+                <li class="mb-2"><span class="text-red-600 font-medium">ERROR</span> - 오류가 발생했음을 나타냅니다.</li>
+                <li class="mb-2"><span class="text-red-700 font-bold">CRITICAL</span> - 심각한 오류가 발생했음을 나타냅니다.</li>
+            </ul>
+            <p class="mt-4 text-gray-600">로그 페이지에서는 표시할 로그 라인 수를 조정할 수 있습니다.</p>
+        </div>
+    </div>
+</body>
+</html>
