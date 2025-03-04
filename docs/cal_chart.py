@@ -9,19 +9,19 @@ def process_chart_data(df):
             'STG_No' : 1,
             'MACD_FAST_LENGTH': 12,
             'MACD_SLOW_LENGTH': 17,
-            'MACD_SIGNAL_LENGTH': 20,
-            'SIZE_RATIO_THRESHOLD': 1.4,
+            'MACD_SIGNAL_LENGTH': 10,
+            'SIZE_RATIO_THRESHOLD': 1.1,
             'DI_LENGTH': 18,
-            'DI_SLOPE_LENGTH': 9,
-            'MIN_SLOPE_THRESHOLD': 13,
+            'DI_SLOPE_LENGTH': 11,
+            'MIN_SLOPE_THRESHOLD': 14,
             'REQUIRED_CONSECUTIVE_CANDLES': 2
         },
         'MACD_DIVE': {
             'STG_No' : 2,
-            'FAST_LENGTH': 11,
-            'SLOW_LENGTH': 27,
+            'FAST_LENGTH': 10,
+            'SLOW_LENGTH': 26,
             'SIGNAL_LENGTH': 12,
-            'HISTOGRAM_UPPER_LIMIT': 60,
+            'HISTOGRAM_UPPER_LIMIT': 50,
             'HISTOGRAM_LOWER_LIMIT': -60,
             'LOOKBACK_PERIOD': 2,
             'PRICE_MOVEMENT_THRESHOLD': 0.01
@@ -29,10 +29,10 @@ def process_chart_data(df):
         'SUPERTREND': {
             'STG_No' : 3,
             'ATR_PERIOD': 30,
-            'ATR_MULTIPLIER': 5,
-            'ADX_LENGTH': 24,
-            'DI_DIFFERENCE_FILTER': 3,
-            'DI_DIFFERENCE_LOOKBACK_PERIOD': 14
+            'ATR_MULTIPLIER': 6,
+            'ADX_LENGTH': 11,
+            'DI_DIFFERENCE_FILTER': 6,
+            'DI_DIFFERENCE_LOOKBACK_PERIOD': 4
         },
         'LINEAR_REG': {
             'STG_No' : 4,
