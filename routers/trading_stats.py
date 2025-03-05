@@ -63,6 +63,9 @@ async def view_trading_stats(request: Request, days: int = 7):
             # 일별 통계 계산
             daily_stats = calculate_daily_stats(result['trades'])
             
+            # 전체 PnL 합계 계산
+            total_pnl = sum(stat['pnl'] for stat in daily_stats)
+            
             return templates.TemplateResponse(
                 "trading_stats.html", 
                 {
@@ -72,7 +75,8 @@ async def view_trading_stats(request: Request, days: int = 7):
                     "overall_stats": {
                         "win_rate": result['win_rate'],
                         "win_trades": result['win_trades'],
-                        "total_trades": result['total_trades']
+                        "total_trades": result['total_trades'],
+                        "total_pnl": total_pnl  # 전체 PnL 추가
                     },
                     "days": days
                 }

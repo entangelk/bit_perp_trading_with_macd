@@ -43,7 +43,7 @@
         
         {% if overall_stats %}
         <!-- 전체 통계 카드 -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">전체 승률</h2>
                 <div class="flex items-center">
@@ -70,6 +70,15 @@
                     </div>
                     <div class="ml-2 text-gray-500">
                         (손실: {{ overall_stats.total_trades - overall_stats.win_trades }}건)
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">총 손익(PnL)</h2>
+                <div class="flex items-center">
+                    <div class="text-3xl font-bold {% if overall_stats.total_pnl > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ overall_stats.total_pnl|round(2) }} USDT
                     </div>
                 </div>
             </div>
