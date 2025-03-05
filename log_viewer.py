@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import os
 import re
+import shutil
 from datetime import datetime
 import uvicorn
 from pathlib import Path
@@ -28,10 +29,35 @@ LOG_LEVELS = {
     "CRITICAL": "text-red-700 font-bold"
 }
 
+# 디스크 용량 정보를 가져오는 함수
+def get_disk_usage(path="/"):
+    """지정된 경로의 디스크 사용량 정보를 반환합니다."""
+    total, used, free = shutil.disk_usage(path)
+    return {
+        "total": f"{total / (1024**3):.2f} GB",
+        "used": f"{used / (1024**3):.2f} GB",
+        "free": f"{free / (1024**3):.2f} GB",
+        "percent_used": f"{(used / total) * 100:.1f}%",
+        "percent_free": f"{(free / total) * 100:.1f}%"
+    }
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """메인 페이지"""
-    return templates.TemplateResponse("index.html", {"request": request, "log_files": LOG_FILES})
+    # 디스크 용량 정보 가져오기
+    disk_info = get_disk_usage()
+    # EC2 인스턴스의 경우 루트 파일 시스템과 로그 디렉토리 파일 시스템이 다를 수 있음
+    log_disk_info = get_disk_usage(LOG_DIR)
+    
+    return templates.TemplateResponse(
+        "index.html", 
+        {
+            "request": request, 
+            "log_files": LOG_FILES,
+            "disk_info": disk_info,
+            "log_disk_info": log_disk_info
+        }
+    )
 
 @app.get("/log/{log_type}", response_class=HTMLResponse)
 async def view_log(request: Request, log_type: str, lines: int = 100, error_only: bool = False):
@@ -43,6 +69,10 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
     
     if not os.path.exists(log_file):
         raise HTTPException(status_code=404, detail="로그 파일을 찾을 수 없습니다")
+    
+    # 디스크 용량 정보 가져오기
+    disk_info = get_disk_usage()
+    log_disk_info = get_disk_usage(LOG_DIR)
     
     # 정규식 패턴 (로그 형식에 맞게 설정)
     # 정규식 패턴을 로그 타입별로 설정
@@ -139,7 +169,9 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
                 "log_entries": log_entries, 
                 "file_info": file_info,
                 "lines": lines,
-                "error_only": error_only
+                "error_only": error_only,
+                "disk_info": disk_info,
+                "log_disk_info": log_disk_info
             }
         )
     except Exception as e:
