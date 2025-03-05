@@ -16,7 +16,7 @@ def get_bybit_signature(api_secret, params_str):
         hashlib.sha256
     ).hexdigest()
 
-def get_win_rate(api_key, api_secret, start_time=None, end_time=None, limit=50):
+def get_win_rate(api_key, api_secret, start_time=None, end_time=None, limit=100):
     # API 엔드포인트 설정
     url = "https://api.bybit.com/v5/position/closed-pnl"
     
