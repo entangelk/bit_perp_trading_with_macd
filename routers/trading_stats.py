@@ -5,6 +5,19 @@ import os
 from datetime import datetime, timedelta
 import sys
 from pathlib import Path
+import shutil
+
+# get_disk_usage 함수를 직접 구현
+def get_disk_usage(path="/"):
+    """지정된 경로의 디스크 사용량 정보를 반환합니다."""
+    total, used, free = shutil.disk_usage(path)
+    return {
+        "total": f"{total / (1024**3):.2f} GB",
+        "used": f"{used / (1024**3):.2f} GB",
+        "free": f"{free / (1024**3):.2f} GB",
+        "percent_used": f"{(used / total) * 100:.1f}%",
+        "percent_free": f"{(free / total) * 100:.1f}%"
+    }
 
 # 공통 유틸리티 모듈 경로 추가
 sys.path.append(str(Path(__file__).parent.parent))
@@ -18,8 +31,7 @@ templates = Jinja2Templates(directory="/app/trading_bot/templates")
 async def view_trading_stats(request: Request, days: int = 7):
     """바이비트 거래 승률 통계를 보여주는 페이지"""
     try:
-        # 디스크 용량 정보 가져오기 (기존 함수 재사용)
-        from main import get_disk_usage
+        # 디스크 용량 정보 가져오기
         disk_info = get_disk_usage()
         
         # 시작일과 종료일 계산
