@@ -7,8 +7,10 @@ import shutil
 from datetime import datetime
 import uvicorn
 from pathlib import Path
+from routers.trading_stats import router as trading_stats_router
 
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
+app.include_router(trading_stats_router)
 
 # 템플릿 디렉토리 설정
 templates = Jinja2Templates(directory="/app/trading_bot/templates")

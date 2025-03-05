@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>거래 승률 통계 - 트레이딩 봇</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex items-center mb-6">
+            <a href="/" class="text-blue-600 hover:text-blue-800 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+            </a>
+            <h1 class="text-3xl font-bold text-gray-800">거래 승률 통계</h1>
+        </div>
+        
+        {% if error_message %}
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+            <p class="font-bold">오류 발생</p>
+            <p>{{ error_message }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- 통계 필터 -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <form method="get" class="flex flex-wrap items-end gap-4">
+                <div>
+                    <label for="days" class="block text-sm font-medium text-gray-700 mb-1">기간 설정</label>
+                    <select id="days" name="days" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                        <option value="3" {% if days == 3 %}selected{% endif %}>최근 3일</option>
+                        <option value="7" {% if days == 7 %}selected{% endif %}>최근 7일</option>
+                        <option value="14" {% if days == 14 %}selected{% endif %}>최근 14일</option>
+                        <option value="30" {% if days == 30 %}selected{% endif %}>최근 30일</option>
+                    </select>
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">적용</button>
+            </form>
+        </div>
+        
+        {% if overall_stats %}
+        <!-- 전체 통계 카드 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">전체 승률</h2>
+                <div class="flex items-center">
+                    <div class="text-3xl font-bold {% if overall_stats.win_rate >= 50 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ overall_stats.win_rate|round(1) }}%
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">총 거래 횟수</h2>
+                <div class="flex items-center">
+                    <div class="text-3xl font-bold text-blue-600">
+                        {{ overall_stats.total_trades }}건
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">이익 거래</h2>
+                <div class="flex items-center">
+                    <div class="text-3xl font-bold text-green-600">
+                        {{ overall_stats.win_trades }}건
+                    </div>
+                    <div class="ml-2 text-gray-500">
+                        (손실: {{ overall_stats.total_trades - overall_stats.win_trades }}건)
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 차트 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4">일별 승률 추이</h2>
+                <canvas id="winRateChart" height="300"></canvas>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4">일별 PnL 추이</h2>
+                <canvas id="pnlChart" height="300"></canvas>
+            </div>
+        </div>
+        
+        <!-- 일별 통계 테이블 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">날짜</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">승률</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">이익 거래</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">손실 거래</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">총 거래</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">손익(PnL)</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for stat in daily_stats %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ stat.date }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="{% if stat.win_rate >= 50 %}text-green-600{% else %}text-red-600{% endif %} font-semibold">
+                                {{ stat.win_rate|round(1) }}%
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">{{ stat.win }}건</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">{{ stat.loss }}건</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ stat.total }}건</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm {% if stat.pnl > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ stat.pnl|round(2) }} USDT
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 차트 데이터를 JSON으로 전달 -->
+        <script id="chartData" type="application/json">
+            {
+                "dates": [{% for stat in daily_stats %}"{{ stat.date }}"{% if not loop.last %},{% endif %}{% endfor %}],
+                "winRates": [{% for stat in daily_stats %}{{ stat.win_rate }}{% if not loop.last %},{% endif %}{% endfor %}],
+                "pnlData": [{% for stat in daily_stats %}{{ stat.pnl }}{% if not loop.last %},{% endif %}{% endfor %}]
+            }
+        </script>
+        
+        <!-- 차트 초기화 스크립트 -->
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                // 차트 데이터 가져오기
+                const chartDataElement = document.getElementById('chartData');
+                const chartData = JSON.parse(chartDataElement.textContent);
+                
+                const dates = chartData.dates;
+                const winRates = chartData.winRates;
+                const pnlData = chartData.pnlData;
+                
+                // 승률 차트
+                const winRateCtx = document.getElementById('winRateChart').getContext('2d');
+                new Chart(winRateCtx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: '일별 승률(%)',
+                            data: winRates,
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.1,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.raw.toFixed(1) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                suggestedMin: 0,
+                                suggestedMax: 100,
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // PnL 차트
+                const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+                new Chart(pnlCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: '일별 손익(USDT)',
+                            data: pnlData,
+                            backgroundColor: pnlData.map(value => 
+                                value >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+                            ),
+                            borderColor: pnlData.map(value => 
+                                value >= 0 ? 'rgb(22, 163, 74)' : 'rgb(220, 38, 38)'
+                            ),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.raw.toFixed(2) + ' USDT';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        </script>
+        {% else %}
+        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+            <p class="font-bold">데이터 없음</p>
+            <p>거래 데이터를 불러올 수 없습니다. API 연결을 확인하세요.</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
