@@ -354,8 +354,8 @@ def run_daily_backtest():
             logger.info(f"Strategy Results: {backtest_results}")
             logger.info("백테스트 완료")
             
-            # 24시간 대기
-            time.sleep(24 * 60 * 60)
+            # 12시간 대기
+            time.sleep(12 * 60 * 60)
             
         except Exception as e:
             logger.error(f"백테스트 중 오류 발생: {e}")
