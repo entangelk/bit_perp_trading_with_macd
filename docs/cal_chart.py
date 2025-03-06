@@ -10,21 +10,21 @@ def process_chart_data(df):
             'MACD_FAST_LENGTH': 12,
             'MACD_SLOW_LENGTH': 17,
             'MACD_SIGNAL_LENGTH': 10,
-            'SIZE_RATIO_THRESHOLD': 1.1,
-            'DI_LENGTH': 18,
+            'SIZE_RATIO_THRESHOLD': 0.9,
+            'DI_LENGTH': 16,
             'DI_SLOPE_LENGTH': 11,
-            'MIN_SLOPE_THRESHOLD': 14,
+            'MIN_SLOPE_THRESHOLD': 18,
             'REQUIRED_CONSECUTIVE_CANDLES': 2
         },
         'MACD_DIVE': {
             'STG_No' : 2,
             'FAST_LENGTH': 10,
-            'SLOW_LENGTH': 26,
-            'SIGNAL_LENGTH': 12,
-            'HISTOGRAM_UPPER_LIMIT': 50,
+            'SLOW_LENGTH': 21,
+            'SIGNAL_LENGTH': 16,
+            'HISTOGRAM_UPPER_LIMIT': 90,
             'HISTOGRAM_LOWER_LIMIT': -60,
             'LOOKBACK_PERIOD': 2,
-            'PRICE_MOVEMENT_THRESHOLD': 0.01
+            'PRICE_MOVEMENT_THRESHOLD': 0.03
         },
         'SUPERTREND': {
             'STG_No' : 3,
@@ -38,12 +38,12 @@ def process_chart_data(df):
             'STG_No' : 4,
             'LENGTH': 100,
             'RSI_LENGTH': 14,
-            'RSI_LOWER_BOUND': 40,
+            'RSI_LOWER_BOUND': 30,
             'RSI_UPPER_BOUND': 60,
-            'MIN_BOUNCE_BARS': 4,
+            'MIN_BOUNCE_BARS': 5,
             'UPPER_MULTIPLIER': 3,
             'LOWER_MULTIPLIER': 3,
-            'MIN_SLOPE_VALUE': 7,
+            'MIN_SLOPE_VALUE': 6,
             'MIN_TREND_DURATION': 50
         },
         'MACD_DI_SLOPE': {
