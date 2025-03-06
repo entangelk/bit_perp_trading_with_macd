@@ -5,13 +5,13 @@ services:
     container_name: ${CONTAINER_PREFIX}_trading_bot
     restart: always
     command: tail -f /dev/null  # 처음에는 백그라운드로 유지만 하고
-    ports:
-      - "80:8000"  # 포트 설정 추가
+    # 80 포트를 nginx가 사용할 것이므로 포트 매핑 변경
+    # ports:
+    #   - "80:8000"  # 이 부분을 주석 처리하거나 제거
     depends_on:
       - mongodb
     networks:
       - app-network
-    # 볼륨 마운트 설정 제거 또는 주석 처리
 
   mongodb:
     image: mongo:7
@@ -24,7 +24,35 @@ services:
       - ./config/mongod.conf:/etc/mongod.conf
     command: --wiredTigerCacheSizeGB 0.25 --wiredTigerJournalCompressor snappy
     networks:
-      - app-network  
+      - app-network
+      
+  nginx:
+    image: nginx:alpine
+    container_name: ${CONTAINER_PREFIX}_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    networks:
+      - app-network
+    depends_on:
+      - trading_bot
+
+  certbot:
+    image: certbot/certbot
+    container_name: ${CONTAINER_PREFIX}_certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - app-network
 
 networks:
   app-network:
