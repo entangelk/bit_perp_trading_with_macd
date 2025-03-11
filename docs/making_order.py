@@ -301,7 +301,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
                 print("주문 성공:", result)
                 
                 # 이 부분은 기존 코드 유지
-                amount, side, avgPrice = get_position_amount(symbol)
+                amount, side, avgPrice,pnl = get_position_amount(symbol)
                 if avgPrice:
                     set_tp_sl(symbol, stop_loss, take_profit, avgPrice, side)
                 return result
@@ -435,7 +435,8 @@ def get_position_amount(symbol):
                 side = position['side']
                 avgPrice = float(position['avgPrice'])
                 print(f"현재 포지션 수량: {amount}")
-                return amount, side, avgPrice
+                PnL = float(position_data['result']['list'][0]['curRealisedPnl'])
+                return amount, side, avgPrice, PnL
             else:
                 print("열린 포지션이 없습니다.")
                 return None, None, None
@@ -452,7 +453,7 @@ def close_position(symbol):
     sync_time()
     try:
         # 현재 포지션의 방향, 수량 조회
-        amount, side, avgPrice = get_position_amount(symbol)
+        amount, side, avgPrice, PnL = get_position_amount(symbol)
         if amount is None or amount == 0:
             print("청산할 포지션이 없습니다.")
             return None
@@ -540,7 +541,7 @@ if __name__ == "__main__":
     # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
-    amount,side,avgPrice = get_position_amount(symbol)
+    amount,side,avgPrice,pnl = get_position_amount(symbol)
     # set_tp_sl(symbol, stop_loss, take_profit, current_price, side)
     # from current_price import get_current_price
     # current_price = get_current_price(symbol=symbol)

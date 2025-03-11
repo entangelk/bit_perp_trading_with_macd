@@ -243,7 +243,7 @@ def main():
 
             if positions_flag:  # 포지션이 있는 경우
                 positions_data = json.loads(positions_json)
-                current_amount, current_side, current_avgPrice = get_position_amount(config['symbol'])
+                current_amount, current_side, current_avgPrice,pnl = get_position_amount(config['symbol'])
                 current_side = 'Long' if current_side == 'Buy' else 'Short'
 
                 
@@ -264,7 +264,7 @@ def main():
                     stg_tag = None
                     stg_side = None
 
-                if position:
+                if position and current_side == 'Long' and pnl < 0:
                     if current_side != position and tag != 'lr': # 반대 신호가 나타났을때 종료 후 전환 / 장기 추세 기반 전략 선형회귀 전략은 적용 X 
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
