@@ -140,6 +140,7 @@ def evaluate_strategy(df, signal_column):
     entry_time = None
     position_size = 1
     capital = initial_capital
+    save_winloss_list =[]
     wins = 0
     losses = 0
    
@@ -159,11 +160,11 @@ def evaluate_strategy(df, signal_column):
                 sl_price = entry_price + trigger_amount
             
             # 진입 로그 기록
-            logger.info(f"\n진입 시간: {entry_time}")
-            logger.info(f"포지션: {current_position}")
-            logger.info(f"진입가: {entry_price}")
-            logger.info(f"TP 가격: {tp_price}")
-            logger.info(f"SL 가격: {sl_price}")
+            # logger.info(f"\n진입 시간: {entry_time}")
+            # logger.info(f"포지션: {current_position}")
+            # logger.info(f"진입가: {entry_price}")
+            # logger.info(f"TP 가격: {tp_price}")
+            # logger.info(f"SL 가격: {sl_price}")
             
             # 진입 수수료 계산
             commission = position_size * entry_price * commission_rate
@@ -189,19 +190,23 @@ def evaluate_strategy(df, signal_column):
                     commission = position_size * tp_price * commission_rate
                     capital -= commission
                     wins += 1
-                    logger.info(f"청산 시간: {current_time} - TP Hit (동일 봉 TPSL, 양봉)")
-                    logger.info(f"청산가: {tp_price}")
-                    logger.info(f"수익: {profit}")
+                    # 승리 시 0
+                    save_winloss_list.append(0)
+                    # logger.info(f"청산 시간: {current_time} - TP Hit (동일 봉 TPSL, 양봉)")
+                    # logger.info(f"청산가: {tp_price}")
+                    # logger.info(f"수익: {profit}")
                 else:  # 음봉이면 SL
                     loss = sl_price - entry_price
                     capital += loss
                     commission = position_size * sl_price * commission_rate
                     capital -= commission
                     losses += 1
-                    logger.info(f"청산 시간: {current_time} - SL Hit (동일 봉 TPSL, 음봉)")
-                    logger.info(f"청산가: {sl_price}")
-                    logger.info(f"손실: {loss}")
-                logger.info(f"수수료: {commission}")
+                    # 패배시 1
+                    save_winloss_list.append(1)
+                #     logger.info(f"청산 시간: {current_time} - SL Hit (동일 봉 TPSL, 음봉)")
+                #     logger.info(f"청산가: {sl_price}")
+                #     logger.info(f"손실: {loss}")
+                # logger.info(f"수수료: {commission}")
                 current_position = None
                 
             elif current_position == 'Short' and (low <= tp_price and high >= sl_price):
@@ -212,20 +217,24 @@ def evaluate_strategy(df, signal_column):
                     capital += profit
                     commission = position_size * tp_price * commission_rate
                     capital -= commission
+                    # 승리 시 0
+                    save_winloss_list.append(0)
                     wins += 1
-                    logger.info(f"청산 시간: {current_time} - TP Hit (동일 봉 TPSL, 음봉)")
-                    logger.info(f"청산가: {tp_price}")
-                    logger.info(f"수익: {profit}")
+                    # logger.info(f"청산 시간: {current_time} - TP Hit (동일 봉 TPSL, 음봉)")
+                    # logger.info(f"청산가: {tp_price}")
+                    # logger.info(f"수익: {profit}")
                 else:  # 양봉이면 SL
                     loss = entry_price - sl_price
                     capital += loss
                     commission = position_size * sl_price * commission_rate
                     capital -= commission
                     losses += 1
-                    logger.info(f"청산 시간: {current_time} - SL Hit (동일 봉 TPSL, 양봉)")
-                    logger.info(f"청산가: {sl_price}")
-                    logger.info(f"손실: {loss}")
-                logger.info(f"수수료: {commission}")
+                    # 패배시 1
+                    save_winloss_list.append(1)
+                #     logger.info(f"청산 시간: {current_time} - SL Hit (동일 봉 TPSL, 양봉)")
+                #     logger.info(f"청산가: {sl_price}")
+                #     logger.info(f"손실: {loss}")
+                # logger.info(f"수수료: {commission}")
                 current_position = None
                
               # TP만 만족하는 경우
@@ -239,10 +248,12 @@ def evaluate_strategy(df, signal_column):
                 commission = position_size * tp_price * commission_rate
                 capital -= commission
                 wins += 1
-                logger.info(f"청산 시간: {current_time} - TP Hit")
-                logger.info(f"청산가: {tp_price}")
-                logger.info(f"수익: {profit}")
-                logger.info(f"수수료: {commission}")
+                # 승리 시 0
+                save_winloss_list.append(0)
+                # logger.info(f"청산 시간: {current_time} - TP Hit")
+                # logger.info(f"청산가: {tp_price}")
+                # logger.info(f"수익: {profit}")
+                # logger.info(f"수수료: {commission}")
                 current_position = None
                
             # SL만 만족하는 경우  
@@ -256,15 +267,31 @@ def evaluate_strategy(df, signal_column):
                 commission = position_size * sl_price * commission_rate
                 capital -= commission
                 losses += 1
-                logger.info(f"청산 시간: {current_time} - SL Hit")
-                logger.info(f"청산가: {sl_price}")
-                logger.info(f"손실: {loss}")
-                logger.info(f"수수료: {commission}")
+                # 패배시 1
+                save_winloss_list.append(1)
+                # logger.info(f"청산 시간: {current_time} - SL Hit")
+                # logger.info(f"청산가: {sl_price}")
+                # logger.info(f"손실: {loss}")
+                # logger.info(f"수수료: {commission}")
                 current_position = None
    
     total_trades = wins + losses
+    def calculate_win_rate(winloss_list):
+        # 0이 승리, 1이 패배이므로 0의 개수를 세어 승리 횟수 계산
+        wins = winloss_list.count(0)
+        
+        # 리스트에 요소가 있는 경우에만 계산
+        total_trades = len(winloss_list)
+        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    
+        return win_rate
+    save_winloss_list = save_winloss_list[-5:]
+    last_5_win_rate = calculate_win_rate(save_winloss_list)
+
     win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
     total_pnl = capital - initial_capital
+
+    
 
     logger.info(f"\n{'='*50}")
     logger.info(f"Strategy: {signal_column}")
@@ -274,9 +301,11 @@ def evaluate_strategy(df, signal_column):
     logger.info(f"Total Trades: {total_trades}")
     logger.info(f"Wins: {wins}")
     logger.info(f"Losses: {losses}")
-    logger.info(f"Win Rate: {win_rate:.2f}%")
+    logger.info(f"Total Win Rate: {win_rate:.2f}%")
+    logger.info(f"Last 5 Win Rate: {last_5_win_rate:.2f}%")
 
-    return win_rate, total_trades
+
+    return last_5_win_rate, total_trades
 
 def backtest_all_strategies(df_backtest):
     strategy_columns = {
