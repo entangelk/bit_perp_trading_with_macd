@@ -264,7 +264,7 @@ def main():
                     stg_tag = None
                     stg_side = None
 
-                if position and current_side == 'Long' and pnl < 0:
+                if position and not reversed_chaek:
                     if current_side != position and tag != 'lr': # 반대 신호가 나타났을때 종료 후 전환 / 장기 추세 기반 전략 선형회귀 전략은 적용 X 
                         close_position(symbol=config['symbol'])
                         logger.info(f"반대 신호 포지션 종료")
