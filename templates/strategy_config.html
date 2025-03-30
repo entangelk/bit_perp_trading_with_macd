@@ -30,9 +30,14 @@
                             <span class="font-medium">{{ disk_info.free }} ({{ disk_info.percent_free }})</span>
                         </div>
                         
-                        <!-- 디스크 사용량 프로그레스 바 -->
+                        <!-- 디스크 사용량 프로그레스 바
                         <div class="w-full bg-gray-300 rounded-full h-4 mt-2">
                             <div id="root-disk-bar" class="bg-blue-600 h-4 rounded-full" data-percent="{{ disk_info.percent_used|replace('%', '') }}"></div>
+                        </div> -->
+                        <!-- 전략 설정 페이지의 디스크 용량 정보 섹션에서 프로그레스 바 부분 -->
+                        <div class="w-full bg-gray-300 rounded-full h-4 mt-2">
+                            <!-- data-percent 값을 직접 숫자로 설정 -->
+                            <div id="root-disk-bar" class="bg-blue-600 h-4 rounded-full" style="width: {{ disk_info.percent_used|replace('%', '') }}%"></div>
                         </div>
                     </div>
                 </div>
@@ -53,9 +58,13 @@
                             <span class="font-medium">{{ log_disk_info.free }} ({{ log_disk_info.percent_free }})</span>
                         </div>
                         
-                        <!-- 디스크 사용량 프로그레스 바 -->
+                        <!-- 디스크 사용량 프로그레스 바
                         <div class="w-full bg-gray-300 rounded-full h-4 mt-2">
                             <div id="log-disk-bar" class="bg-green-600 h-4 rounded-full" data-percent="{{ log_disk_info.percent_used|replace('%', '') }}"></div>
+                        </div> -->
+                        <!-- 로그 디스크 프로그레스 바도 동일하게 수정 -->
+                        <div class="w-full bg-gray-300 rounded-full h-4 mt-2">
+                            <div id="log-disk-bar" class="bg-green-600 h-4 rounded-full" style="width: {{ log_disk_info.percent_used|replace('%', '') }}%"></div>
                         </div>
                     </div>
                 </div>
