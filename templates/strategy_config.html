@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>트레이딩 봇 전략 설정</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6 text-gray-800">트레이딩 봇 전략 설정</h1>
+        
+        <!-- 디스크 용량 정보 섹션은 다른 페이지와 동일 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-purple-700">서버 디스크 상태</h2>
+            <!-- 디스크 정보 내용 -->
+        </div>
+        
+        <!-- 메뉴 링크 -->
+        <div class="flex space-x-4 mb-6">
+            <a href="/" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 transition">
+                메인 페이지로 돌아가기
+            </a>
+            <a href="/trading-stats" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+                거래 통계 보기
+            </a>
+        </div>
+        
+        <!-- 전략 활성화 상태 섹션 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-700">전략 활성화 상태</h2>
+            
+            {% if strategy_enable %}
+                {% if strategy_enable.error %}
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                        <p>{{ strategy_enable.error }}</p>
+                    </div>
+                {% else %}
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {% for strategy_name, is_enabled in strategy_enable.items() %}
+                            <div class="flex items-center p-3 rounded-lg {{ 'bg-green-100 border border-green-300' if is_enabled else 'bg-gray-100 border border-gray-300' }}">
+                                <div class="h-3 w-3 rounded-full mr-2 {{ 'bg-green-500' if is_enabled else 'bg-gray-400' }}"></div>
+                                <span class="text-sm font-medium {{ 'text-green-800' if is_enabled else 'text-gray-600' }}">
+                                    {{ strategy_name }}
+                                </span>
+                                <span class="ml-auto text-xs font-semibold px-2 py-1 rounded {{ 'bg-green-200 text-green-800' if is_enabled else 'bg-gray-200 text-gray-700' }}">
+                                    {{ '활성' if is_enabled else '비활성' }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                    <p>전략 활성화 정보가 없습니다.</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- 전략 설정 표시 섹션 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-indigo-700">전략 설정 매개변수</h2>
+                {% if config_updated_at %}
+                <span class="text-sm text-gray-500">마지막 업데이트: {{ config_updated_at }}</span>
+                {% endif %}
+            </div>
+            
+            {% if error %}
+                <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+                    <p class="font-bold">오류</p>
+                    <p>{{ error }}</p>
+                </div>
+            {% elif stg_config %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for strategy_name, params in stg_config.items() %}
+                        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <h3 class="text-lg font-medium mb-3 text-indigo-600 border-b pb-2">{{ strategy_name }}</h3>
+                            <div class="space-y-2">
+                                {% for param_name, param_value in params.items() %}
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">{{ param_name }}:</span>
+                                        <span class="font-medium">{{ param_value }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                    <p>전략 설정 정보가 없습니다.</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- 프로세스 상태 모니터링 섹션 -->
+        <div class="mt-8 bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-700">프로세스 실행 상태</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- main.py (트레이딩 봇) 상태 -->
+                <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if main_status.running else 'border-red-500' }}">
+                    <div class="flex items-center mb-3">
+                        <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if main_status.running else 'bg-red-500' }}"></div>
+                        <h3 class="text-lg font-medium">트레이딩 봇 (main.py)</h3>
+                    </div>
+                    
+                    {% if main_status.running %}
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">상태:</span>
+                                <span class="font-medium text-green-600">실행 중</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">프로세스 ID:</span>
+                                <span class="font-medium">{{ main_status.pid }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">시작 시간:</span>
+                                <span class="font-medium">{{ main_status.start_time }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">메모리 사용량:</span>
+                                <span class="font-medium">{{ main_status.memory_usage }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">CPU 사용률:</span>
+                                <span class="font-medium">{{ main_status.cpu_percent }}</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="p-3 bg-red-50 rounded-md">
+                            <p class="text-red-600 font-medium">트레이딩 봇이 실행 중이 아닙니다</p>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- back_test.py (백테스트) 상태 -->
+                <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if backtest_status.running else 'border-red-500' }}">
+                    <div class="flex items-center mb-3">
+                        <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if backtest_status.running else 'bg-red-500' }}"></div>
+                        <h3 class="text-lg font-medium">백테스트 (back_test.py)</h3>
+                    </div>
+                    
+                    {% if backtest_status.running %}
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">상태:</span>
+                                <span class="font-medium text-green-600">실행 중</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">프로세스 ID:</span>
+                                <span class="font-medium">{{ backtest_status.pid }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">시작 시간:</span>
+                                <span class="font-medium">{{ backtest_status.start_time }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">메모리 사용량:</span>
+                                <span class="font-medium">{{ backtest_status.memory_usage }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">CPU 사용률:</span>
+                                <span class="font-medium">{{ backtest_status.cpu_percent }}</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="p-3 bg-red-50 rounded-md">
+                            <p class="text-red-600 font-medium">백테스트가 실행 중이 아닙니다</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- 자동 새로고침 정보 -->
+            <div class="mt-4 text-center text-sm text-gray-500">
+                <p>이 페이지는 30초마다 자동으로 새로고침됩니다</p>
+                <p>마지막 업데이트: <span id="last-update">{{ now }}</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 프로그레스 바 설정과 자동 새로고침을 위한 스크립트 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 현재 시간 표시
+            document.getElementById('last-update').textContent = new Date().toLocaleString('ko-KR');
+            
+            // 30초마다 페이지 새로고침
+            setTimeout(function() {
+                window.location.reload();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

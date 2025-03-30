@@ -4,10 +4,12 @@ from fastapi.templating import Jinja2Templates
 import os
 import re
 import shutil
+import psutil
 from datetime import datetime
 import uvicorn
 from pathlib import Path
 from routers.trading_stats import router as trading_stats_router
+import time
 
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
 app.include_router(trading_stats_router)
@@ -20,6 +22,12 @@ LOG_DIR = "/app/trading_bot"  # 올바른 경로
 LOG_FILES = {
     "trading": "trading_bot.log",
     "backtest": "strategy_backtest.log"
+}
+
+# 모니터링할 파일 설정
+MONITOR_FILES = {
+    "main": "main.py",    # 트레이딩 봇
+    "backtest": "back_test.py"  # 백테스트 
 }
 
 # 로그 레벨에 따른 색상 정의
@@ -43,6 +51,25 @@ def get_disk_usage(path="/"):
         "percent_free": f"{(free / total) * 100:.1f}%"
     }
 
+# 프로세스 실행 상태 확인 함수 추가
+def check_process_status(script_name):
+    """주어진 스크립트 이름이 실행 중인지 확인합니다."""
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+        try:
+            # python 프로세스를 찾고 커맨드라인에 스크립트 이름이 있는지 확인
+            if 'python' in proc.info['name'].lower() and any(script_name in cmd for cmd in proc.info['cmdline'] if cmd):
+                return {
+                    'running': True,
+                    'pid': proc.info['pid'],
+                    'start_time': time.strftime('%Y-%m-%d %H:%M:%S', 
+                                              time.localtime(proc.info['create_time'])),
+                    'memory_usage': f"{proc.memory_info().rss / (1024 * 1024):.2f} MB",
+                    'cpu_percent': f"{proc.cpu_percent(interval=0.1):.1f}%"
+                }
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    return {'running': False}
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """메인 페이지"""
@@ -51,13 +78,21 @@ async def root(request: Request):
     # EC2 인스턴스의 경우 루트 파일 시스템과 로그 디렉토리 파일 시스템이 다를 수 있음
     log_disk_info = get_disk_usage(LOG_DIR)
     
+
+    # 프로세스 상태 확인
+    main_status = check_process_status(MONITOR_FILES["main"])
+    backtest_status = check_process_status(MONITOR_FILES["backtest"])
+
     return templates.TemplateResponse(
         "index.html", 
         {
             "request": request, 
             "log_files": LOG_FILES,
             "disk_info": disk_info,
-            "log_disk_info": log_disk_info
+            "log_disk_info": log_disk_info,
+            "main_status": main_status,
+            "backtest_status": backtest_status,
+            "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     )
 
@@ -178,3 +213,87 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"로그 파일 읽기 오류: {str(e)}")
+    
+
+    # FastAPI 라우터에 추가할 코드
+import json
+
+
+@app.get("/strategy-config", response_class=HTMLResponse)
+async def view_strategy_config(request: Request):
+    """트레이딩 전략 설정을 표시합니다."""
+    try:
+        # 설정 파일 경로
+        config_path = '/app/trading_bot/stg_config.json'
+        enable_config_path = '/app/trading_bot/STRATEGY_ENABLE.json'
+        
+        # 디스크 용량 정보 가져오기
+        disk_info = get_disk_usage()
+        log_disk_info = get_disk_usage(LOG_DIR)
+        
+        # 프로세스 상태 확인
+        main_status = check_process_status(MONITOR_FILES["main"])
+        backtest_status = check_process_status(MONITOR_FILES["backtest"])
+        
+        # 설정 파일 존재 여부 확인
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    stg_config = json.load(f)
+                
+                # 파일 정보 (마지막 수정 시간)
+                file_stat = os.stat(config_path)
+                config_updated_at = datetime.fromtimestamp(file_stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # 전략 활성화 설정 파일 불러오기
+                strategy_enable = {}
+                if os.path.exists(enable_config_path):
+                    try:
+                        with open(enable_config_path, 'r') as f:
+                            strategy_enable = json.load(f)
+                    except json.JSONDecodeError:
+                        # 파일 형식 오류가 있더라도 계속 진행
+                        strategy_enable = {"error": "활성화 설정 파일 형식이 올바르지 않습니다."}
+                
+                return templates.TemplateResponse(
+                    "strategy_config.html", 
+                    {
+                        "request": request,
+                        "stg_config": stg_config,
+                        "strategy_enable": strategy_enable,
+                        "config_updated_at": config_updated_at,
+                        "disk_info": disk_info,
+                        "log_disk_info": log_disk_info,
+                        "main_status": main_status,
+                        "backtest_status": backtest_status,
+                        "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                )
+            except json.JSONDecodeError:
+                return templates.TemplateResponse(
+                    "strategy_config.html", 
+                    {
+                        "request": request,
+                        "error": "설정 파일 형식이 올바르지 않습니다.",
+                        "disk_info": disk_info,
+                        "log_disk_info": log_disk_info,
+                        "main_status": main_status,
+                        "backtest_status": backtest_status,
+                        "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                )
+        else:
+            return templates.TemplateResponse(
+                "strategy_config.html", 
+                {
+                    "request": request,
+                    "error": "전략 설정 파일이 아직 생성되지 않았습니다. back_test.py가 실행 중인지 확인하세요.",
+                    "disk_info": disk_info,
+                    "log_disk_info": log_disk_info,
+                    "main_status": main_status,
+                    "backtest_status": backtest_status,
+                    "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"전략 설정 페이지 오류: {str(e)}")

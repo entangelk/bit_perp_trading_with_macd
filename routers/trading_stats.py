@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 import shutil
 
+
+
 # get_disk_usage 함수를 직접 구현
 def get_disk_usage(path="/"):
     """지정된 경로의 디스크 사용량 정보를 반환합니다."""

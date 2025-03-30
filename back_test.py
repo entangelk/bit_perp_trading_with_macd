@@ -330,6 +330,7 @@ def backtest_all_strategies(df_backtest):
     return results
 
 def run_daily_backtest():
+    is_firtst_time=True
     chart_collection = database[chart_collections[set_timevalue]] 
     
     # 처음 실행시 데이터 업데이트
@@ -361,6 +362,14 @@ def run_daily_backtest():
             df_rare_chart = df
 
             df_calculated, STG_CONFIG = process_chart_data(df_rare_chart)
+
+            if is_firtst_time:
+                import json
+                # 계산된 STG_CONFIG를 파일에 저장
+                with open('/app/trading_bot/stg_config.json', 'w') as f:
+                    json.dump(STG_CONFIG, f)
+
+                is_firtst_time = False
 
             position, df_backtest, tag = cal_position(df=df_calculated, STG_CONFIG = STG_CONFIG)  # 포지션은 숏,롱,None, hma롱, hma숏
 

@@ -8,7 +8,7 @@ from docs.strategy.macd_size_di import generate_macd_size_signal
 from docs.strategy.macd_divergence import generate_macd_dive_signal
 from docs.strategy.volume_norm import check_VSTG_signal
 from docs.strategy.line_reg import check_line_reg_signal
-
+import json
 def cal_position(df, STG_CONFIG):
     # 전략 활성화 설정
     STRATEGY_ENABLE = {
@@ -19,6 +19,8 @@ def cal_position(df, STG_CONFIG):
         'MACD_SIZE': True,       # MACD 크기 전략
         'MACD_DIVERGENCE': True,  # MACD 다이버전스 전략
     }
+    with open('/app/trading_bot/STRATEGY_ENABLE.json', 'w') as f:
+        json.dump(STRATEGY_ENABLE, f)
 
     tag = None
     
