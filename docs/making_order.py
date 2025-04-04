@@ -439,14 +439,14 @@ def get_position_amount(symbol):
                 return amount, side, avgPrice, PnL
             else:
                 print("열린 포지션이 없습니다.")
-                return None, None, None
+                return None, None, None, None
         else:
             print(f"포지션 조회 중 오류 발생: {response.text}")
-            return None, None, None
+            return None, None, None, None
 
     except Exception as e:
         print(f"포지션 조회 중 오류 발생: {e}")
-        return None, None, None
+        return None, None, None, None
 
 
 def close_position(symbol):
