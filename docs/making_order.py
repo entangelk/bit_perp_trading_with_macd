@@ -28,7 +28,31 @@ bybit = ccxt.bybit({
 
 def sync_time():
     try:
-        server_time = int(bybit.fetch_time())
+
+        # Bybit 서버 시간 가져오기 (재시도 처리 추가)
+        max_retries = 3
+        retry_delay = 10
+        server_time = None
+
+        for attempt in range(max_retries):
+            try:
+                server_time = int(bybit.fetch_time())
+
+                break  # 성공하면 루프 탈출
+            except Exception as e:
+                print(f"바이비트 서버 시간 가져오기 실패 (시도 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:  # 마지막 시도가 아니면 대기 후 재시도
+                    time.sleep(retry_delay)
+                else:
+                    print(f"바이비트 서버 시간 가져오기 최종 실패: {str(e)}")
+                    # 모든 재시도 실패 시 현재 시간으로 대체
+                    server_time = int(time.time() * 1000) # 이미 초 단위로 반환됨
+                    print("주의: 로컬 시간은 바이비트 서버 시간과 약간의 차이가 있을 수 있습니다")
+
+
+
+
+
         local_time = int(datetime.now().timestamp() * 1000)
         time_offset = server_time - local_time
         bybit.options['timeDifference'] = time_offset

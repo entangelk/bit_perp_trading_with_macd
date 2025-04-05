@@ -57,14 +57,35 @@ bybit = ccxt.bybit({
 })
 
 
-# Bybit 서버 시간 가져오기
-server_time = bybit.fetch_time() / 1000
-server_datetime = datetime.utcfromtimestamp(server_time)
-print(f"서버 시간 (UTC): {server_datetime}")
+
 
 
 def chart_update(update,symbol):
     """차트를 업데이트하고 MongoDB에 저장"""
+
+    # Bybit 서버 시간 가져오기 (재시도 처리 추가)
+    max_retries = 3
+    retry_delay = 10
+    server_time = None
+
+    for attempt in range(max_retries):
+        try:
+            server_time = bybit.fetch_time() / 1000  # 밀리초를 초 단위로 변환
+            server_datetime = datetime.utcfromtimestamp(server_time)
+            print(f"바이비트 서버 시간 (UTC): {server_datetime}")
+            break  # 성공하면 루프 탈출
+        except Exception as e:
+            print(f"바이비트 서버 시간 가져오기 실패 (시도 {attempt+1}/{max_retries}): {str(e)}")
+            if attempt < max_retries - 1:  # 마지막 시도가 아니면 대기 후 재시도
+                time.sleep(retry_delay)
+            else:
+                print(f"바이비트 서버 시간 가져오기 최종 실패: {str(e)}")
+                # 모든 재시도 실패 시 현재 시간으로 대체
+                server_time = time.time()  # 이미 초 단위로 반환됨
+                server_datetime = datetime.utcfromtimestamp(server_time)
+                print(f"로컬 시간으로 대체 (UTC): {server_datetime}")
+                print("주의: 로컬 시간은 바이비트 서버 시간과 약간의 차이가 있을 수 있습니다")
+
     def fetch_and_store_ohlcv(collection, timeframe, symbol, limit, minutes_per_unit, time_description):
         # 기존 코드와 동일하지만 update_one 대신 insert_one 사용
         last_saved_data = collection.find_one(sort=[("timestamp", -1)])
@@ -165,11 +186,32 @@ def fetch_latest_ohlcv_and_update_db(symbol, timeframe, collection, max_check_ti
         break
 
 def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
+    start_time = time.time()  # 이건 실행 시간 체크용으로만 사용
+    server_time = None  # 기본값 설정
+
     try:
-                # 바이비트 서버 시간으로 시작
-        server_time = bybit.fetch_time() / 1000
-        server_datetime = datetime.utcfromtimestamp(server_time)
-        start_time = time.time()  # 이건 실행 시간 체크용으로만 사용
+        # Bybit 서버 시간 가져오기 (재시도 처리 추가)
+        max_retries = 3
+        retry_delay = 10
+        server_time = None
+
+        for attempt in range(max_retries):
+            try:
+                server_time = bybit.fetch_time() / 1000  # 밀리초를 초 단위로 변환
+                server_datetime = datetime.utcfromtimestamp(server_time)
+                print(f"바이비트 서버 시간 (UTC): {server_datetime}")
+                break  # 성공하면 루프 탈출
+            except Exception as e:
+                print(f"바이비트 서버 시간 가져오기 실패 (시도 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:  # 마지막 시도가 아니면 대기 후 재시도
+                    time.sleep(retry_delay)
+                else:
+                    print(f"바이비트 서버 시간 가져오기 최종 실패: {str(e)}")
+                    # 모든 재시도 실패 시 현재 시간으로 대체
+                    server_time = time.time()  # 이미 초 단위로 반환됨
+                    server_datetime = datetime.utcfromtimestamp(server_time)
+                    print(f"로컬 시간으로 대체 (UTC): {server_datetime}")
+                    print("주의: 로컬 시간은 바이비트 서버 시간과 약간의 차이가 있을 수 있습니다")
 
         # collection 매핑
         collection = None
@@ -205,7 +247,7 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
     except Exception as e:
         total_time = time.time() - start_time
         logger.error(f"차트 업데이트 오류: {str(e)}")  # print 대신 logger.error 사용
-        return False, server_time, total_time  # None 대신 False 반환
+        return False, server_time, total_time  # server_time은 None일 수 있음
     
     
 # 사용 예시

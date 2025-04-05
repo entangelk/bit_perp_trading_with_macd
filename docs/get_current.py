@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 import json
-
+import time
 # 환경 변수 로드
 load_dotenv()
 
@@ -25,8 +25,28 @@ bybit = ccxt.bybit({
 # 서버 시간을 클라이언트 시간과 동기화하는 방법
 def sync_time():
     try:
-        server_time = bybit.fetch_time() / 1000  # Bybit 서버의 시간 (초 단위)
-        server_datetime = datetime.utcfromtimestamp(server_time)
+        # Bybit 서버 시간 가져오기 (재시도 처리 추가)
+        max_retries = 3
+        retry_delay = 10
+        server_time = None
+
+        for attempt in range(max_retries):
+            try:
+                server_time = bybit.fetch_time() / 1000  # 밀리초를 초 단위로 변환
+                server_datetime = datetime.utcfromtimestamp(server_time)
+                print(f"바이비트 서버 시간 (UTC): {server_datetime}")
+                break  # 성공하면 루프 탈출
+            except Exception as e:
+                print(f"바이비트 서버 시간 가져오기 실패 (시도 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:  # 마지막 시도가 아니면 대기 후 재시도
+                    time.sleep(retry_delay)
+                else:
+                    print(f"바이비트 서버 시간 가져오기 최종 실패: {str(e)}")
+                    # 모든 재시도 실패 시 현재 시간으로 대체
+                    server_time = time.time()  # 이미 초 단위로 반환됨
+                    server_datetime = datetime.utcfromtimestamp(server_time)
+                    print(f"로컬 시간으로 대체 (UTC): {server_datetime}")
+                    print("주의: 로컬 시간은 바이비트 서버 시간과 약간의 차이가 있을 수 있습니다")
         print(f"Bybit 서버 시간 (UTC): {server_datetime}")
         return server_time
     except Exception as e:
