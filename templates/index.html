@@ -192,7 +192,7 @@
         });
 
 
-// 트레이딩 차트 생성 함수 - Y축 범위 수정 버전
+// 트레이딩 차트 생성 함수 - 버그 수정 버전
 function createTradingChart(data) {
     // 차트 캔버스 컨텍스트 가져오기
     const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -205,6 +205,12 @@ function createTradingChart(data) {
     let maxPrice = -Infinity;
     
     data.chart_data.forEach(item => {
+        // 데이터 타입 확인 및 변환
+        item.open = Number(item.open);
+        item.high = Number(item.high);
+        item.low = Number(item.low);
+        item.close = Number(item.close);
+        
         minPrice = Math.min(minPrice, item.low);
         maxPrice = Math.max(maxPrice, item.high);
     });
@@ -242,40 +248,45 @@ function createTradingChart(data) {
         return closestData ? closestData.close : null;
     }
     
-    // 단 하나의 데이터셋만 사용 - 오직 캔들스틱만 표시
-    const datasets = [];
-    
     // 단일 캔들스틱 데이터셋
-    datasets.push({
-        type: 'bar',
-        label: '비트코인',
-        data: data.chart_data.map(item => {
-            // 캔들 몸통 (시가-종가)
-            const isUp = item.close >= item.open;
-            return {
-                x: new Date(item.timestamp),
-                // 몸통 높이
-                y: isUp ? item.close - item.open : item.open - item.close,
-                _open: item.open,
-                _close: item.close,
-                _high: item.high,
-                _low: item.low,
-                _isUp: isUp
-            };
-        }),
-        backgroundColor: data.chart_data.map(item => 
-            item.close >= item.open ? 'rgba(0, 200, 0, 1)' : 'rgba(255, 0, 0, 1)'
-        ),
-        borderColor: data.chart_data.map(item => 
-            item.close >= item.open ? 'rgba(0, 150, 0, 1)' : 'rgba(200, 0, 0, 1)'
-        ),
-        borderWidth: 1,
-        barPercentage: 0.6,
-        categoryPercentage: 0.8,
-        base: data.chart_data.map(item => 
-            item.close >= item.open ? item.open : item.close
-        )
+    const candlestickData = data.chart_data.map(item => {
+        // 캔들 몸통 (시가-종가)
+        const isUp = item.close >= item.open;
+        return {
+            x: new Date(item.timestamp),
+            // 몸통 높이
+            y: isUp ? item.close - item.open : item.open - item.close,
+            _open: item.open,
+            _close: item.close,
+            _high: item.high,
+            _low: item.low,
+            _isUp: isUp
+        };
     });
+    
+    // 데이터셋 검증
+    console.log("데이터셋 샘플: ", candlestickData.slice(0, 2));
+    
+    // 단순화된 데이터셋
+    const datasets = [
+        {
+            type: 'bar',
+            label: '비트코인',
+            data: candlestickData,
+            backgroundColor: candlestickData.map(item => 
+                item._isUp ? 'rgba(0, 200, 0, 1)' : 'rgba(255, 0, 0, 1)'
+            ),
+            borderColor: candlestickData.map(item => 
+                item._isUp ? 'rgba(0, 150, 0, 1)' : 'rgba(200, 0, 0, 1)'
+            ),
+            borderWidth: 1,
+            barPercentage: 0.6,
+            categoryPercentage: 0.8,
+            base: candlestickData.map(item => 
+                item._isUp ? item._open : item._close
+            )
+        }
+    ];
     
     // 전략 신호 추가 (필요한 경우)
     if (data.strategy_signals && Object.keys(data.strategy_signals).length > 0) {
@@ -322,9 +333,14 @@ function createTradingChart(data) {
     
     // 마지막 데이터의 일부만 보여주기 위한 시간 범위 설정
     const lastItem = data.chart_data[data.chart_data.length - 1];
+    const firstItem = data.chart_data[0];
     const endDate = new Date(lastItem.timestamp);
     const startDate = new Date(endDate);
     startDate.setHours(startDate.getHours() - 4); // 마지막 4시간만 표시
+    
+    // 전체 데이터 범위 (확대/축소 제한 설정용)
+    const fullStartDate = new Date(firstItem.timestamp);
+    const fullEndDate = new Date(lastItem.timestamp);
     
     // 차트 생성
     const chart = new Chart(ctx, {
@@ -347,8 +363,9 @@ function createTradingChart(data) {
                     },
                     limits: {
                         x: {
-                            min: 'original', 
-                            max: 'original'
+                            min: fullStartDate.getTime(), 
+                            max: fullEndDate.getTime(),
+                            minRange: 1000 * 60 * 60 // 최소 1시간 범위
                         },
                         y: {
                             min: yAxisMin,
@@ -379,10 +396,10 @@ function createTradingChart(data) {
                             const item = context.raw;
                             if (item && (item._open !== undefined)) {
                                 return [
-                                    `시가: $${item._open.toFixed(2)}`,
-                                    `고가: $${item._high.toFixed(2)}`,
-                                    `저가: $${item._low.toFixed(2)}`,
-                                    `종가: $${item._close.toFixed(2)}`
+                                    `시가: $${Number(item._open).toFixed(2)}`,
+                                    `고가: $${Number(item._high).toFixed(2)}`,
+                                    `저가: $${Number(item._low).toFixed(2)}`,
+                                    `종가: $${Number(item._close).toFixed(2)}`
                                 ];
                             } else {
                                 return context.dataset.label;
@@ -409,7 +426,11 @@ function createTradingChart(data) {
                     },
                     // 초기 x축 범위 설정 (최근 데이터에 초점)
                     min: startDate,
-                    max: endDate
+                    max: endDate,
+                    // 축소 문제 해결을 위한 제한 설정
+                    ticks: {
+                        source: 'data'  // 데이터 포인트에 기반하여 축 눈금 생성
+                    }
                 },
                 y: {
                     title: {
@@ -418,7 +439,7 @@ function createTradingChart(data) {
                     },
                     ticks: {
                         callback: function(value) {
-                            return '$' + value.toFixed(0);
+                            return '$' + Number(value).toFixed(0);
                         }
                     },
                     // 좁은 Y축 범위 명시적 설정
@@ -461,9 +482,22 @@ function createTradingChart(data) {
     resetButton.textContent = '차트 리셋';
     resetButton.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mt-2';
     resetButton.onclick = function() {
-        chart.resetZoom();
+        // 전체 데이터 범위로 리셋
+        chart.zoomScale('x', {min: startDate, max: endDate}, 'default');
+        chart.update();
     };
     document.getElementById('tradingChart').parentNode.appendChild(resetButton);
+    
+    // 전체 보기 버튼 추가
+    const fullViewButton = document.createElement('button');
+    fullViewButton.textContent = '전체 보기';
+    fullViewButton.className = 'px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm mt-2 ml-2';
+    fullViewButton.onclick = function() {
+        // 전체 데이터 범위로 설정
+        chart.zoomScale('x', {min: fullStartDate, max: fullEndDate}, 'default');
+        chart.update();
+    };
+    document.getElementById('tradingChart').parentNode.appendChild(fullViewButton);
 }
     // 신호와 가장 가까운 차트 데이터 찾기
     function findClosestPrice(chartData, timestamp) {
