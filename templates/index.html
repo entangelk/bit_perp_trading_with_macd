@@ -159,39 +159,27 @@
             }
 
             try {
-                // 서버에서 전달받은 트레이딩 분석 데이터
-                let tradeAnalysisData = {};
-                
-                // JSON 파싱 시도
-                try {
-                    tradeAnalysisData = JSON.parse('{{ trade_analysis | safe }}');
-                } catch (e) {
-                    console.error("트레이딩 데이터 파싱 오류:", e);
-                    tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
-                }
-                
-                // 차트 생성
-                if (tradeAnalysisData && tradeAnalysisData.chart_data && tradeAnalysisData.chart_data.length > 0) {
-                    createTradingChart(tradeAnalysisData);
-                } else {
-                    document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
-                }
-            } catch (error) {
-                console.error("차트 생성 오류:", error);
-                document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
+            // 서버에서 JSON 문자열로 전달받은 트레이딩 분석 데이터를 파싱
+            let tradeAnalysisData;
+            
+            try {
+                tradeAnalysisData = JSON.parse({{ trade_analysis_json | safe }});
+            } catch (e) {
+                console.error("데이터 파싱 오류:", e);
+                tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
             }
-
-            // 현재 시간 표시 (옵션)
-            if (document.getElementById('last-update')) {
-                document.getElementById('last-update').textContent = new Date().toLocaleString('ko-KR');
+            
+            // 차트 생성
+            if (tradeAnalysisData && tradeAnalysisData.chart_data && tradeAnalysisData.chart_data.length > 0) {
+                createTradingChart(tradeAnalysisData);
+            } else {
+                document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
             }
-
-            // 30초마다 페이지 새로고침
-            setTimeout(function () {
-                window.location.reload();
-            }, 30000);
-        });
-
+        } catch (error) {
+            console.error("차트 생성 오류:", error);
+            document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
+        }
+        
         function createTradingChart(data) {
             const ctx = document.getElementById('tradingChart').getContext('2d');
             

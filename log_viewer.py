@@ -100,7 +100,7 @@ async def root(request: Request):
             "main_status": main_status,
             "backtest_status": backtest_status,
             "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "trade_analysis": trade_analysis  # 추가된 부분
+            "trade_analysis_json": json.dumps(trade_analysis)  # 추가된 부분
         }
     )
 
