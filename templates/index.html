@@ -159,14 +159,20 @@
             }
 
             try {
-            // 서버에서 JSON 문자열로 전달받은 트레이딩 분석 데이터를 파싱
+            // 서버에서 전달받은 트레이딩 분석 데이터를 파싱
             let tradeAnalysisData;
             
-            try {
-                tradeAnalysisData = JSON.parse({{ trade_analysis_json | safe }});
-            } catch (e) {
-                console.error("데이터 파싱 오류:", e);
-                tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
+            // 이미 JavaScript 객체인지 확인
+            if (typeof {{ trade_analysis_json | safe }} === 'object') {
+                tradeAnalysisData = {{ trade_analysis_json | safe }};
+            } else {
+                // 문자열이라면 파싱
+                try {
+                    tradeAnalysisData = JSON.parse({{ trade_analysis_json | safe }});
+                } catch (e) {
+                    console.error("데이터 파싱 오류:", e);
+                    tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
+                }
             }
             
             // 차트 생성
