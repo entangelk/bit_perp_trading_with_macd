@@ -42,10 +42,14 @@ class TradeAnalyzer:
         # 타임스탬프를 UTC로 변환
         for item in data:
             # JSON에 저장된 시간이 로컬 시간이라고 가정
-            local_time = datetime.strptime(item['timestamp'], "%Y-%m-%d %H:%M:%S")
-            # UTC로 변환
-            utc_time = local_time.astimezone(timezone.utc)
-            item['timestamp'] = utc_time.isoformat()
+            try:
+                local_time = datetime.strptime(item['timestamp'], "%Y-%m-%d %H:%M:%S")
+                # UTC로 변환
+                utc_time = local_time.astimezone(timezone.utc)
+                item['timestamp'] = utc_time.isoformat()
+            except Exception as e:
+                print(f"시간 변환 오류: {e}")
+                item['timestamp'] = None
             
         return data
     
@@ -69,23 +73,26 @@ class TradeAnalyzer:
                     strategy_signals[tag] = []
                 
                 # 신호와 가장 가까운 차트 데이터 찾기
-                signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                closest_chart = None
-                min_diff = float('inf')
-                
-                for chart_item in chart_data:
-                    chart_time = datetime.fromisoformat(chart_item['timestamp'].replace('Z', '+00:00'))
-                    diff = abs((chart_time - signal_time).total_seconds())
-                    if diff < min_diff:
-                        min_diff = diff
-                        closest_chart = chart_item
-                
-                if closest_chart and min_diff <= 300:  # 5분 이내
-                    strategy_signals[tag].append({
-                        'timestamp': timestamp,
-                        'position': position,
-                        'price': closest_chart['close']  # 가격 정보 추가
-                    })
+                try:
+                    signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    closest_chart = None
+                    min_diff = float('inf')
+                    
+                    for chart_item in chart_data:
+                        chart_time = datetime.fromisoformat(chart_item['timestamp'].replace('Z', '+00:00'))
+                        diff = abs((chart_time - signal_time).total_seconds())
+                        if diff < min_diff:
+                            min_diff = diff
+                            closest_chart = chart_item
+                    
+                    if closest_chart and min_diff <= 300:  # 5분 이내
+                        strategy_signals[tag].append({
+                            'timestamp': timestamp,
+                            'position': position,
+                            'price': closest_chart['close']  # 가격 정보 추가
+                        })
+                except Exception as e:
+                    print(f"타임스탬프 처리 오류: {e}")
             
             # 포지션 타임라인 생성
             position_value = 1 if position == 'Long' else -1 if position == 'Short' else 0
@@ -118,3 +125,7 @@ class TradeAnalyzer:
             'position_timeline': position_timeline,
             'position_ranges': position_ranges
         }
+    
+    def get_visualization_data(self, hours=24):
+        """FastAPI 라우터에서 호출할 메인 메서드"""
+        return self.process_data_for_visualization(hours)
