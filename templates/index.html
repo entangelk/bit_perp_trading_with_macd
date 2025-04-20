@@ -192,13 +192,29 @@
         });
 
 
-        // 트레이딩 차트 생성 함수 - 수정된 버전
+        // 트레이딩 차트 생성 함수 - Y축 문제 해결
         function createTradingChart(data) {
             // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
             
             // 시간 순서대로 정렬
             data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
+            let minPrice = Infinity;
+            let maxPrice = -Infinity;
+            
+            data.chart_data.forEach(item => {
+                minPrice = Math.min(minPrice, item.low);
+                maxPrice = Math.max(maxPrice, item.high);
+            });
+            
+            // 범위에 약간의 여유 추가 (데이터의 약 0.5% 정도)
+            const padding = (maxPrice - minPrice) * 0.005;
+            const yAxisMin = Math.floor(minPrice - padding);
+            const yAxisMax = Math.ceil(maxPrice + padding);
+            
+            console.log(`차트 Y축 범위 설정: $${yAxisMin} ~ $${yAxisMax}`);
             
             // 신호와 가장 가까운 차트 데이터 찾기 (내부 함수)
             function findClosestPrice(chartData, timestamp) {
@@ -410,7 +426,10 @@
                                 callback: function(value) {
                                     return '$' + value.toFixed(0);
                                 }
-                            }
+                            },
+                            // Y축 범위 명시적 설정 (중요 수정 부분)
+                            min: yAxisMin,
+                            max: yAxisMax
                         }
                     }
                 }
