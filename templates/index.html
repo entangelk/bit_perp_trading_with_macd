@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 </head>
 
 <body class="bg-gray-100">
@@ -161,40 +163,54 @@
             }
 
             try {
-            // 서버에서 전달받은 트레이딩 분석 데이터를 파싱
-            let tradeAnalysisData;
-            
-            // 이미 JavaScript 객체인지 확인
-            if (typeof {{ trade_analysis_json | safe }} === 'object') {
-                tradeAnalysisData = {{ trade_analysis_json | safe }};
-            } else {
-                // 문자열이라면 파싱
+                // 서버에서 JSON 문자열로 전달받은 트레이딩 분석 데이터를 파싱
+                let tradeAnalysisData;
+                
                 try {
                     tradeAnalysisData = JSON.parse({{ trade_analysis_json | safe }});
                 } catch (e) {
                     console.error("데이터 파싱 오류:", e);
                     tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
                 }
+                
+                // 차트 생성
+                if (tradeAnalysisData && tradeAnalysisData.chart_data && tradeAnalysisData.chart_data.length > 0) {
+                    createTradingChart(tradeAnalysisData);
+                } else {
+                    document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
+                }
+            } catch (error) {
+                console.error("차트 생성 오류:", error);
+                document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
             }
-            
-            // 차트 생성
-            if (tradeAnalysisData && tradeAnalysisData.chart_data && tradeAnalysisData.chart_data.length > 0) {
-                createTradingChart(tradeAnalysisData);
-            } else {
-                document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
-            }
-        } catch (error) {
-            console.error("차트 생성 오류:", error);
-            document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
-        }
         });
 
 
+        // 트레이딩 차트 생성 함수
         function createTradingChart(data) {
+            // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
             
             // 시간 순서대로 정렬
             data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            // 신호와 가장 가까운 차트 데이터 찾기 (내부 함수)
+            function findClosestPrice(chartData, timestamp) {
+                const signalTime = new Date(timestamp).getTime();
+                let closestData = null;
+                let minDiff = Infinity;
+                
+                for (const item of chartData) {
+                    const itemTime = new Date(item.timestamp).getTime();
+                    const diff = Math.abs(itemTime - signalTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestData = item;
+                    }
+                }
+                
+                return closestData ? closestData.close : null;
+            }
             
             // 차트 데이터 준비 (캔들스틱과 유사하게 구현)
             const chartData = {
@@ -299,10 +315,9 @@
                     }
                 });
             }
-        }
-
-        // 차트 생성
-        const chart = new Chart(ctx, {
+            
+            // 차트 생성
+            const chart = new Chart(ctx, {
                 type: 'bar',  // 기본 타입은 bar로 설정
                 data: {datasets: chartData.datasets},
                 options: {
@@ -388,14 +403,36 @@
                 }
             });
 
-    // 리셋 버튼 추가
-    const resetButton = document.createElement('button');
-    resetButton.textContent = '차트 리셋';
-    resetButton.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mt-2';
-    resetButton.onclick = function() {
-        chart.resetZoom();
-    };
-    document.getElementById('tradingChart').parentNode.appendChild(resetButton);
+            // 포지션 구간 배경색 추가
+            if (data.position_ranges && data.position_ranges.length > 0) {
+                // annotation 플러그인 확인 및 초기화
+                if (!chart.options.plugins.annotation) {
+                    chart.options.plugins.annotation = { annotations: {} };
+                }
+                
+                data.position_ranges.forEach((range, index) => {
+                    const color = range.position === 'Long' ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
+                    chart.options.plugins.annotation.annotations[`range_${index}`] = {
+                        type: 'box',
+                        xMin: new Date(range.start),
+                        xMax: new Date(range.end),
+                        backgroundColor: color,
+                        borderWidth: 0
+                    };
+                });
+                
+                chart.update();
+            }
+
+            // 리셋 버튼 추가
+            const resetButton = document.createElement('button');
+            resetButton.textContent = '차트 리셋';
+            resetButton.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mt-2';
+            resetButton.onclick = function() {
+                chart.resetZoom();
+            };
+            document.getElementById('tradingChart').parentNode.appendChild(resetButton);
+        }
     // 신호와 가장 가까운 차트 데이터 찾기
     function findClosestPrice(chartData, timestamp) {
         const signalTime = new Date(timestamp).getTime();
