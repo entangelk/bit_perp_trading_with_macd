@@ -192,7 +192,7 @@
         });
 
 
-// 트레이딩 차트 생성 함수 - 완전히 단순화된 버전
+// 트레이딩 차트 생성 함수 - Y축 범위 수정 버전
 function createTradingChart(data) {
     // 차트 캔버스 컨텍스트 가져오기
     const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -209,12 +209,20 @@ function createTradingChart(data) {
         maxPrice = Math.max(maxPrice, item.high);
     });
     
-    // 범위에 약간의 여유 추가 (데이터의 약 1% 정도)
-    const padding = (maxPrice - minPrice) * 0.01;
-    const yAxisMin = Math.floor(minPrice - padding);
-    const yAxisMax = Math.ceil(maxPrice + padding);
+    // Y축 범위를 데이터에 맞게 좁게 설정 (가격 변동을 더 잘 보이게)
+    // 패딩을 매우 작게 설정 (데이터 변동폭이 작기 때문)
+    const totalRange = maxPrice - minPrice;
+    const padding = totalRange * 0.1; // 10% 패딩
     
-    console.log(`차트 Y축 범위 설정: $${yAxisMin} ~ $${yAxisMax}`);
+    // 최소 범위 설정 (너무 좁은 범위를 방지)
+    const minRange = maxPrice * 0.005; // 최소 0.5% 범위
+    const adjustedPadding = Math.max(padding, minRange);
+    
+    const yAxisMin = Math.floor(minPrice - adjustedPadding);
+    const yAxisMax = Math.ceil(maxPrice + adjustedPadding);
+    
+    console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
+    console.log(`조정된 Y축 범위 설정: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
     
     // 신호와 가장 가까운 차트 데이터 찾기 (내부 함수)
     function findClosestPrice(chartData, timestamp) {
@@ -312,7 +320,7 @@ function createTradingChart(data) {
         });
     }
     
-    // 마지막 24시간의 데이터만 보여주기 위한 시간 범위 설정
+    // 마지막 데이터의 일부만 보여주기 위한 시간 범위 설정
     const lastItem = data.chart_data[data.chart_data.length - 1];
     const endDate = new Date(lastItem.timestamp);
     const startDate = new Date(endDate);
@@ -413,9 +421,15 @@ function createTradingChart(data) {
                             return '$' + value.toFixed(0);
                         }
                     },
-                    // Y축 범위 명시적 설정
+                    // 좁은 Y축 범위 명시적 설정
                     min: yAxisMin,
-                    max: yAxisMax
+                    max: yAxisMax,
+                    // 격자 설정 추가
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)',
+                        drawBorder: true,
+                        drawOnChartArea: true
+                    }
                 }
             }
         }
