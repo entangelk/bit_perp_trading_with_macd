@@ -8,6 +8,7 @@ from docs.utility.cal_close import isclowstime
 from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
 from datetime import datetime, timezone, timedelta
+from docs.utility.trade_logger import TradeLogger
 import time
 import json
 import sys
@@ -41,6 +42,8 @@ trigger_first_count = 4
 position_first_active = False  # 포지션 신호 선행
 position_first_count = 2  # 2틱으로 수정
 position_save = None
+
+trade_logger = TradeLogger()
 
 def get_time_block(dt, interval):
     """datetime 객체를 interval 분 단위로 표현"""
@@ -302,6 +305,16 @@ def main():
                         stg_tag = None
                         stg_side = None
 
+                        # 5분마다 실행되는 부분에서
+                        if server_time.minute % 5 == 0:
+                            trade_logger.log_snapshot(
+                                server_time=server_time,
+                                tag=tag,
+                                position=position
+                            )
+    
+
+
             else:  # 포지션이 없는 경우
                 stg_tag = None
                 stg_side = None
@@ -330,7 +343,14 @@ def main():
                     position_first_active = False
                     position_first_count = 2
                     position_save = None
-
+                    # 5분마다 실행되는 부분에서
+                    if server_time.minute % 5 == 0:
+                        trade_logger.log_snapshot(
+                            server_time=server_time,
+                            tag=tag,
+                            position=position
+                        )
+    
 
             remaining_time = 269 - (execution_time + error_time)
 

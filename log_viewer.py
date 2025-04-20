@@ -70,6 +70,11 @@ def check_process_status(script_name):
             pass
     return {'running': False}
 
+from docs.utility.trade_analyzer import TradeAnalyzer
+
+analyzer = TradeAnalyzer()
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """메인 페이지"""
@@ -78,11 +83,13 @@ async def root(request: Request):
     # EC2 인스턴스의 경우 루트 파일 시스템과 로그 디렉토리 파일 시스템이 다를 수 있음
     log_disk_info = get_disk_usage(LOG_DIR)
     
-
     # 프로세스 상태 확인
     main_status = check_process_status(MONITOR_FILES["main"])
     backtest_status = check_process_status(MONITOR_FILES["backtest"])
-
+    
+    # 트레이딩 분석 데이터 가져오기
+    trade_analysis = analyzer.get_visualization_data(hours=24)
+    
     return templates.TemplateResponse(
         "index.html", 
         {
@@ -92,9 +99,15 @@ async def root(request: Request):
             "log_disk_info": log_disk_info,
             "main_status": main_status,
             "backtest_status": backtest_status,
-            "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "trade_analysis": trade_analysis  # 추가된 부분
         }
     )
+
+@app.get("/api/trade_analysis")
+async def get_trade_analysis():
+    data = analyzer.get_visualization_data(hours=24)
+    return data
 
 @app.get("/log/{log_type}", response_class=HTMLResponse)
 async def view_log(request: Request, log_type: str, lines: int = 100, error_only: bool = False):

@@ -6,11 +6,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold mb-6 text-gray-800">트레이딩 봇 로그 뷰어</h1>
+
+        <!-- 트레이딩 분석 그래프 섹션 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-700">트레이딩 분석</h2>
+            <div class="relative" style="width: 100%; height: 400px;">
+                <canvas id="tradingChart"></canvas>
+            </div>
+            <div class="mt-4 text-sm text-gray-600">
+                최근 24시간 동안의 가격 변동과 트레이딩 신호를 표시합니다.
+            </div>
+        </div>
 
         <!-- 디스크 용량 정보 섹션 -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
@@ -132,28 +145,176 @@
     <!-- 프로그레스 바 설정과 자동 새로고침을 위한 스크립트 -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // 루트 디스크 프로그레스 바 설정
+            // 기존 프로그레스 바 설정
             var rootBar = document.getElementById('root-disk-bar');
             if (rootBar) {
                 var rootPercent = rootBar.getAttribute('data-percent');
                 rootBar.style.width = rootPercent + '%';
             }
 
-            // 로그 디스크 프로그레스 바 설정
             var logBar = document.getElementById('log-disk-bar');
             if (logBar) {
                 var logPercent = logBar.getAttribute('data-percent');
                 logBar.style.width = logPercent + '%';
             }
 
-            // 현재 시간 표시
-            document.getElementById('last-update').textContent = new Date().toLocaleString('ko-KR');
+            // 서버에서 전달받은 트레이딩 분석 데이터
+            const tradeAnalysisData = JSON.parse('{{ trade_analysis | safe }}');
+            
+            // 차트 생성
+            createTradingChart(tradeAnalysisData);
+
+            // 현재 시간 표시 (옵션)
+            if (document.getElementById('last-update')) {
+                document.getElementById('last-update').textContent = new Date().toLocaleString('ko-KR');
+            }
 
             // 30초마다 페이지 새로고침
             setTimeout(function () {
                 window.location.reload();
             }, 30000);
         });
+
+        function createTradingChart(data) {
+            const ctx = document.getElementById('tradingChart').getContext('2d');
+            
+            console.log("Chart data:", data.chart_data);  // 디버깅용
+            console.log("Strategy signals:", data.strategy_signals);  // 디버깅용
+            
+            // 차트 데이터 준비
+            const chartData = {
+                labels: data.chart_data.map(item => new Date(item.timestamp)),
+                datasets: [
+                    {
+                        label: '종가',
+                        data: data.chart_data.map(item => ({
+                            x: new Date(item.timestamp),
+                            y: item.close
+                        })),
+                        borderColor: 'rgb(75, 192, 192)',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
+            };
+            
+            // 전략별 신호 추가
+            Object.entries(data.strategy_signals).forEach(([strategy, signals]) => {
+                const longSignals = signals.filter(signal => signal.position === 'Long');
+                const shortSignals = signals.filter(signal => signal.position === 'Short');
+                
+                if (longSignals.length > 0) {
+                    chartData.datasets.push({
+                        label: `${strategy} - Long`,
+                        data: longSignals.map(signal => ({
+                            x: new Date(signal.timestamp),
+                            y: signal.price
+                        })),
+                        borderColor: 'green',
+                        backgroundColor: 'green',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        pointRotation: 0,
+                        showLine: false
+                    });
+                }
+                
+                if (shortSignals.length > 0) {
+                    chartData.datasets.push({
+                        label: `${strategy} - Short`,
+                        data: shortSignals.map(signal => ({
+                            x: new Date(signal.timestamp),
+                            y: signal.price
+                        })),
+                        borderColor: 'red',
+                        backgroundColor: 'red',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        pointRotation: 180,
+                        showLine: false
+                    });
+                }
+            });
+
+            // 차트 생성
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                        },
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.dataset.label === '종가') {
+                                        return `종가: $${context.parsed.y.toFixed(2)}`;
+                                    } else {
+                                        return context.dataset.label;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'HH:mm'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '시간'
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '가격 (USDT)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 백그라운드 색상 추가 (포지션 구간)
+            data.position_ranges.forEach(range => {
+                const color = range.position === 'Long' ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
+                
+                chart.options.plugins.annotation = chart.options.plugins.annotation || { annotations: [] };
+                chart.options.plugins.annotation.annotations.push({
+                    type: 'box',
+                    xMin: new Date(range.start),
+                    xMax: new Date(range.end),
+                    backgroundColor: color,
+                    borderWidth: 0
+                });
+            });
+        }
     </script>
 </body>
 

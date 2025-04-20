@@ -88,7 +88,85 @@
                 거래 통계 보기
             </a>
         </div>
-        
+                <!-- 프로세스 상태 모니터링 섹션 -->
+                <div class="mt-8 bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-indigo-700">프로세스 실행 상태</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- main.py (트레이딩 봇) 상태 -->
+                        <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if main_status.running else 'border-red-500' }}">
+                            <div class="flex items-center mb-3">
+                                <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if main_status.running else 'bg-red-500' }}"></div>
+                                <h3 class="text-lg font-medium">트레이딩 봇 (main.py)</h3>
+                            </div>
+                            
+                            {% if main_status.running %}
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">상태:</span>
+                                        <span class="font-medium text-green-600">실행 중</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">프로세스 ID:</span>
+                                        <span class="font-medium">{{ main_status.pid }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">시작 시간:</span>
+                                        <span class="font-medium">{{ main_status.start_time }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">메모리 사용량:</span>
+                                        <span class="font-medium">{{ main_status.memory_usage }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">CPU 사용률:</span>
+                                        <span class="font-medium">{{ main_status.cpu_percent }}</span>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="p-3 bg-red-50 rounded-md">
+                                    <p class="text-red-600 font-medium">트레이딩 봇이 실행 중이 아닙니다</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- back_test.py (백테스트) 상태 -->
+                        <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if backtest_status.running else 'border-red-500' }}">
+                            <div class="flex items-center mb-3">
+                                <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if backtest_status.running else 'bg-red-500' }}"></div>
+                                <h3 class="text-lg font-medium">백테스트 (back_test.py)</h3>
+                            </div>
+                            
+                            {% if backtest_status.running %}
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">상태:</span>
+                                        <span class="font-medium text-green-600">실행 중</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">프로세스 ID:</span>
+                                        <span class="font-medium">{{ backtest_status.pid }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">시작 시간:</span>
+                                        <span class="font-medium">{{ backtest_status.start_time }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">메모리 사용량:</span>
+                                        <span class="font-medium">{{ backtest_status.memory_usage }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">CPU 사용률:</span>
+                                        <span class="font-medium">{{ backtest_status.cpu_percent }}</span>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="p-3 bg-red-50 rounded-md">
+                                    <p class="text-red-600 font-medium">백테스트가 실행 중이 아닙니다</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
         <!-- 전략 활성화 상태 섹션 -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
             <h2 class="text-xl font-semibold mb-4 text-indigo-700">전략 활성화 상태</h2>
@@ -157,85 +235,7 @@
             {% endif %}
         </div>
         
-        <!-- 프로세스 상태 모니터링 섹션 -->
-        <div class="mt-8 bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold mb-4 text-indigo-700">프로세스 실행 상태</h2>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- main.py (트레이딩 봇) 상태 -->
-                <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if main_status.running else 'border-red-500' }}">
-                    <div class="flex items-center mb-3">
-                        <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if main_status.running else 'bg-red-500' }}"></div>
-                        <h3 class="text-lg font-medium">트레이딩 봇 (main.py)</h3>
-                    </div>
-                    
-                    {% if main_status.running %}
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">상태:</span>
-                                <span class="font-medium text-green-600">실행 중</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">프로세스 ID:</span>
-                                <span class="font-medium">{{ main_status.pid }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">시작 시간:</span>
-                                <span class="font-medium">{{ main_status.start_time }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">메모리 사용량:</span>
-                                <span class="font-medium">{{ main_status.memory_usage }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">CPU 사용률:</span>
-                                <span class="font-medium">{{ main_status.cpu_percent }}</span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="p-3 bg-red-50 rounded-md">
-                            <p class="text-red-600 font-medium">트레이딩 봇이 실행 중이 아닙니다</p>
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <!-- back_test.py (백테스트) 상태 -->
-                <div class="bg-gray-50 rounded-lg p-4 border {{ 'border-green-500' if backtest_status.running else 'border-red-500' }}">
-                    <div class="flex items-center mb-3">
-                        <div class="h-4 w-4 rounded-full mr-2 {{ 'bg-green-500' if backtest_status.running else 'bg-red-500' }}"></div>
-                        <h3 class="text-lg font-medium">백테스트 (back_test.py)</h3>
-                    </div>
-                    
-                    {% if backtest_status.running %}
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">상태:</span>
-                                <span class="font-medium text-green-600">실행 중</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">프로세스 ID:</span>
-                                <span class="font-medium">{{ backtest_status.pid }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">시작 시간:</span>
-                                <span class="font-medium">{{ backtest_status.start_time }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">메모리 사용량:</span>
-                                <span class="font-medium">{{ backtest_status.memory_usage }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">CPU 사용률:</span>
-                                <span class="font-medium">{{ backtest_status.cpu_percent }}</span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="p-3 bg-red-50 rounded-md">
-                            <p class="text-red-600 font-medium">백테스트가 실행 중이 아닙니다</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
+
             
             <!-- 자동 새로고침 정보 -->
             <div class="mt-4 text-center text-sm text-gray-500">
