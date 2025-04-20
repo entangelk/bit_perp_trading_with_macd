@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 </head>
 
 <body class="bg-gray-100">
@@ -192,26 +193,13 @@
         function createTradingChart(data) {
             const ctx = document.getElementById('tradingChart').getContext('2d');
             
-            console.log("Chart data:", data.chart_data);  // 디버깅용
+            // 시간 순서대로 정렬
+            data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
             
-            // 차트 데이터 준비 - 영역 차트로 고가/저가 표시
+            // 차트 데이터 준비 (캔들스틱과 유사하게 구현)
             const chartData = {
                 datasets: [
-                    // 고가-저가 영역
-                    {
-                        label: '가격 범위',
-                        data: data.chart_data.map(item => ({
-                            x: new Date(item.timestamp),
-                            y: [item.low, item.high]  // 고가-저가 범위
-                        })),
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderColor: 'rgba(75, 192, 192, 0.2)',
-                        fill: true,
-                        pointRadius: 0,
-                        type: 'line',
-                        tension: 0.1
-                    },
-                    // 종가 선
+                    // 종가 선 (주요 가격 추세)
                     {
                         label: '종가',
                         data: data.chart_data.map(item => ({
@@ -220,57 +208,102 @@
                         })),
                         borderColor: 'rgb(75, 192, 192)',
                         borderWidth: 2,
+                        tension: 0.1,
                         fill: false,
-                        pointRadius: 0,
-                        type: 'line',
-                        tension: 0.1
+                        pointRadius: 0
+                    },
+                    // 캔들스틱 바디 (시가-종가 영역)
+                    {
+                        label: '캔들',
+                        type: 'bar',
+                        data: data.chart_data.map(item => {
+                            const isUp = item.close >= item.open;
+                            return {
+                                x: new Date(item.timestamp),
+                                y: isUp ? item.close - item.open : item.open - item.close,
+                                _open: item.open,
+                                _close: item.close,
+                                _high: item.high,
+                                _low: item.low,
+                                _isUp: isUp
+                            };
+                        }),
+                        backgroundColor: data.chart_data.map(item => 
+                            item.close >= item.open ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)'
+                        ),
+                        barPercentage: 0.8,
+                        categoryPercentage: 0.9,
+                        base: data.chart_data.map(item => 
+                            item.close >= item.open ? item.open : item.close
+                        )
+                    },
+                    // 고가-저가 선 (위아래로 확장)
+                    {
+                        label: '고저가',
+                        type: 'bar',
+                        data: data.chart_data.map(item => ({
+                            x: new Date(item.timestamp),
+                            y: item.high - item.low,
+                            _high: item.high,
+                            _low: item.low
+                        })),
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        borderColor: 'rgba(0, 0, 0, 0.3)',
+                        borderWidth: 1,
+                        barPercentage: 0.1,
+                        categoryPercentage: 0.9,
+                        base: data.chart_data.map(item => item.low)
                     }
                 ]
             };
             
-            // 전략별 신호 추가
-            Object.entries(data.strategy_signals || {}).forEach(([strategy, signals]) => {
-                const longSignals = signals.filter(signal => signal.position === 'Long');
-                const shortSignals = signals.filter(signal => signal.position === 'Short');
-                
-                if (longSignals.length > 0) {
-                    chartData.datasets.push({
-                        label: `${strategy} - Long`,
-                        data: longSignals.map(signal => ({
-                            x: new Date(signal.timestamp),
-                            y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
-                        })),
-                        borderColor: 'green',
-                        backgroundColor: 'green',
-                        pointStyle: 'triangle',
-                        pointRadius: 8,
-                        pointRotation: 0,
-                        showLine: false,
-                        type: 'scatter'
-                    });
-                }
-                
-                if (shortSignals.length > 0) {
-                    chartData.datasets.push({
-                        label: `${strategy} - Short`,
-                        data: shortSignals.map(signal => ({
-                            x: new Date(signal.timestamp),
-                            y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
-                        })),
-                        borderColor: 'red',
-                        backgroundColor: 'red',
-                        pointStyle: 'triangle',
-                        pointRadius: 8,
-                        pointRotation: 180,
-                        showLine: false,
-                        type: 'scatter'
-                    });
-                }
-            });
+            // 전략 신호 표시 (별도 데이터셋으로 추가)
+            if (data.strategy_signals && Object.keys(data.strategy_signals).length > 0) {
+                Object.entries(data.strategy_signals).forEach(([strategy, signals]) => {
+                    // Long 신호 추가
+                    const longSignals = signals.filter(signal => signal.position === 'Long');
+                    if (longSignals.length > 0) {
+                        chartData.datasets.push({
+                            label: `${strategy} - Long`,
+                            type: 'scatter',
+                            data: longSignals.map(signal => ({
+                                x: new Date(signal.timestamp),
+                                y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
+                            })),
+                            borderColor: 'green',
+                            backgroundColor: 'green',
+                            pointStyle: 'triangle',
+                            pointRadius: 8,
+                            pointRotation: 0,
+                            showLine: false
+                        });
+                    }
+                    
+                    // Short 신호 추가
+                    const shortSignals = signals.filter(signal => signal.position === 'Short');
+                    if (shortSignals.length > 0) {
+                        chartData.datasets.push({
+                            label: `${strategy} - Short`,
+                            type: 'scatter',
+                            data: shortSignals.map(signal => ({
+                                x: new Date(signal.timestamp),
+                                y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
+                            })),
+                            borderColor: 'red',
+                            backgroundColor: 'red',
+                            pointStyle: 'triangle',
+                            pointRadius: 8,
+                            pointRotation: 180,
+                            showLine: false
+                        });
+                    }
+                });
+            }
+        }
 
-            // 차트 생성
-            const chart = new Chart(ctx, {
-                type: 'line',
+        // 차트 생성
+        const chart = new Chart(ctx, {
+                type: 'bar',  // 기본 타입은 bar로 설정
                 data: {datasets: chartData.datasets},
                 options: {
                     responsive: true,
@@ -280,6 +313,22 @@
                         intersect: false,
                     },
                     plugins: {
+                        zoom: {
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                                modifierKey: 'ctrl',  // ctrl 키를 누른 상태에서 드래그하면 패닝
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            }
+                        },
                         title: {
                             display: true,
                             text: '비트코인 가격 및 트레이딩 신호 (24시간)'
@@ -290,10 +339,16 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    if (context.dataset.label === '종가') {
+                                    if (context.dataset.label === '캔들') {
+                                        const item = context.raw;
+                                        return [
+                                            `시가: $${item._open.toFixed(2)}`,
+                                            `종가: $${item._close.toFixed(2)}`,
+                                            `고가: $${item._high.toFixed(2)}`,
+                                            `저가: $${item._low.toFixed(2)}`
+                                        ];
+                                    } else if (context.dataset.label === '종가') {
                                         return `종가: $${context.parsed.y.toFixed(2)}`;
-                                    } else if (context.dataset.label === '가격 범위') {
-                                        return `범위: $${context.raw.y[0].toFixed(2)} - $${context.raw.y[1].toFixed(2)}`;
                                     } else {
                                         return context.dataset.label;
                                     }
@@ -333,44 +388,31 @@
                 }
             });
 
-            // 백그라운드 색상 추가 (포지션 구간)
-            if (data.position_ranges && data.position_ranges.length > 0) {
-                data.position_ranges.forEach(range => {
-                    const color = range.position === 'Long' ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
-                    
-                    if (!chart.options.plugins.annotation) {
-                        chart.options.plugins.annotation = { annotations: [] };
-                    }
-                    
-                    chart.options.plugins.annotation.annotations.push({
-                        type: 'box',
-                        xMin: new Date(range.start),
-                        xMax: new Date(range.end),
-                        backgroundColor: color,
-                        borderWidth: 0
-                    });
-                });
-                chart.update();
+    // 리셋 버튼 추가
+    const resetButton = document.createElement('button');
+    resetButton.textContent = '차트 리셋';
+    resetButton.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mt-2';
+    resetButton.onclick = function() {
+        chart.resetZoom();
+    };
+    document.getElementById('tradingChart').parentNode.appendChild(resetButton);
+    // 신호와 가장 가까운 차트 데이터 찾기
+    function findClosestPrice(chartData, timestamp) {
+        const signalTime = new Date(timestamp).getTime();
+        let closestData = null;
+        let minDiff = Infinity;
+        
+        for (const item of chartData) {
+            const itemTime = new Date(item.timestamp).getTime();
+            const diff = Math.abs(itemTime - signalTime);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestData = item;
             }
         }
-
-        // 신호와 가장 가까운 차트 데이터 찾기
-        function findClosestPrice(chartData, timestamp) {
-            const signalTime = new Date(timestamp).getTime();
-            let closestData = null;
-            let minDiff = Infinity;
-            
-            for (const item of chartData) {
-                const itemTime = new Date(item.timestamp).getTime();
-                const diff = Math.abs(itemTime - signalTime);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestData = item;
-                }
-            }
-            
-            return closestData ? closestData.close : null;
-        }
+        
+        return closestData ? closestData.close : null;
+    }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 </body>
