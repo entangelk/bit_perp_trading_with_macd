@@ -179,7 +179,9 @@
             console.error("차트 생성 오류:", error);
             document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
         }
-        
+        });
+
+
         function createTradingChart(data) {
             const ctx = document.getElementById('tradingChart').getContext('2d');
             
@@ -321,6 +323,7 @@
             });
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 </body>
 
 </html>
