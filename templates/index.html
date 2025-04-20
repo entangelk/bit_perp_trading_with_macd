@@ -192,170 +192,142 @@
         });
 
 
-// 최대한 단순화한 OHLC(시가-고가-저가-종가) 차트
-function createTradingChart(data) {
-    // 차트 캔버스 컨텍스트 가져오기
-    const ctx = document.getElementById('tradingChart').getContext('2d');
-    
-    // 시간 순서대로 정렬
-    data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    // 모든 데이터를 명시적으로 숫자로 변환
-    data.chart_data.forEach(item => {
-        item.open = Number(item.open);
-        item.high = Number(item.high);
-        item.low = Number(item.low);
-        item.close = Number(item.close);
-        
-        // 디버깅용 로그
-        console.log(`데이터 포인트: 시간=${item.timestamp}, 시가=${item.open}, 고가=${item.high}, 저가=${item.low}, 종가=${item.close}`);
-    });
-    
-    // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
-    let minPrice = Math.min(...data.chart_data.map(item => item.low));
-    let maxPrice = Math.max(...data.chart_data.map(item => item.high));
-    
-    // Y축 범위 설정 (10% 여유)
-    const range = maxPrice - minPrice;
-    const padding = range * 0.1;
-    const yAxisMin = Math.floor(minPrice - padding);
-    const yAxisMax = Math.ceil(maxPrice + padding);
-    
-    console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
-    console.log(`Y축 범위: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
-    
-    // 종가 데이터만 사용하는 단순한 라인 차트
-    const lineDataset = {
-        label: '비트코인',
-        type: 'line',
-        data: data.chart_data.map(item => ({
-            x: new Date(item.timestamp),
-            y: item.close,
-            _open: item.open,
-            _high: item.high,
-            _low: item.low,
-            _close: item.close
-        })),
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
-        borderWidth: 2,
-        fill: false,
-        tension: 0, // 직선 라인
-        pointRadius: 3,
-        pointHoverRadius: 5
-    };
-    
-    // 막대 차트 데이터셋 (시가-종가 표현)
-    const barDataset = {
-        label: '가격 범위',
-        type: 'bar',
-        data: data.chart_data.map(item => {
-            const isUp = item.close >= item.open;
-            return {
-                x: new Date(item.timestamp),
-                y: isUp ? item.close : item.open, // 상단값
-                _bottom: isUp ? item.open : item.close, // 하단값
-                _open: item.open,
-                _high: item.high,
-                _low: item.low,
-                _close: item.close,
-                _isUp: isUp
+        // 깔끔한 라인 차트 - 포인트 없이 마우스 오버 정보만 표시
+        function createTradingChart(data) {
+            // 차트 캔버스 컨텍스트 가져오기
+            const ctx = document.getElementById('tradingChart').getContext('2d');
+            
+            // 시간 순서대로 정렬
+            data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            // 모든 데이터를 명시적으로 숫자로 변환
+            data.chart_data.forEach(item => {
+                item.open = Number(item.open);
+                item.high = Number(item.high);
+                item.low = Number(item.low);
+                item.close = Number(item.close);
+            });
+            
+            // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
+            let minPrice = Math.min(...data.chart_data.map(item => item.low));
+            let maxPrice = Math.max(...data.chart_data.map(item => item.high));
+            
+            // Y축 범위 설정 (10% 여유)
+            const range = maxPrice - minPrice;
+            const padding = range * 0.1;
+            const yAxisMin = Math.floor(minPrice - padding);
+            const yAxisMax = Math.ceil(maxPrice + padding);
+            
+            console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
+            console.log(`Y축 범위: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
+            
+            // 종가 데이터만 사용하는 깔끔한 라인 차트
+            const lineDataset = {
+                label: '비트코인',
+                data: data.chart_data.map(item => ({
+                    x: new Date(item.timestamp),
+                    y: item.close,
+                    _open: item.open,
+                    _high: item.high,
+                    _low: item.low,
+                    _close: item.close
+                })),
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1, // 약간의 곡선 효과
+                pointRadius: 0, // 포인트 표시 없음
+                pointHoverRadius: 5, // 마우스 오버 시에만 포인트 표시
+                pointHoverBackgroundColor: 'rgb(75, 192, 192)',
+                pointHoverBorderColor: 'white',
+                pointHoverBorderWidth: 2
             };
-        }),
-        backgroundColor: data.chart_data.map(item => 
-            item.close >= item.open ? 'rgba(0, 200, 0, 0.7)' : 'rgba(255, 0, 0, 0.7)'
-        ),
-        borderColor: data.chart_data.map(item => 
-            item.close >= item.open ? 'rgba(0, 150, 0, 1)' : 'rgba(200, 0, 0, 1)'
-        ),
-        borderWidth: 1,
-        barPercentage: 0.8,
-        categoryPercentage: 0.8
-    };
-    
-    // 차트 생성 옵션
-    const chartConfig = {
-        type: 'line', // 기본 타입을 라인으로 설정
-        data: {
-            datasets: [lineDataset]
-        },
-        options: {
-            animation: false, // 애니메이션 끄기 (성능 향상)
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
+            
+            // 차트 생성 옵션
+            const chartConfig = {
+                type: 'line',
+                data: {
+                    datasets: [lineDataset]
                 },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: function(context) {
-                            const item = context.raw;
-                            if (item && item._open !== undefined) {
-                                return [
-                                    `시가: $${item._open.toFixed(2)}`,
-                                    `고가: $${item._high.toFixed(2)}`,
-                                    `저가: $${item._low.toFixed(2)}`,
-                                    `종가: $${item._close.toFixed(2)}`
-                                ];
+                options: {
+                    animation: false, // 애니메이션 끄기 (성능 향상)
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    const item = context.raw;
+                                    if (item && item._open !== undefined) {
+                                        return [
+                                            `시가: $${item._open.toFixed(2)}`,
+                                            `고가: $${item._high.toFixed(2)}`,
+                                            `저가: $${item._low.toFixed(2)}`,
+                                            `종가: $${item._close.toFixed(2)}`
+                                        ];
+                                    }
+                                    return context.dataset.label;
+                                }
                             }
-                            return context.dataset.label;
+                        },
+                        title: {
+                            display: true,
+                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'HH:mm'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '시간'
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            min: yAxisMin,
+                            max: yAxisMax,
+                            title: {
+                                display: true,
+                                text: '가격 (USDT)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(0);
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
                         }
                     }
-                },
-                title: {
-                    display: true,
-                    text: '비트코인 가격 및 트레이딩 신호 (24시간)'
                 }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'hour',
-                        displayFormats: {
-                            hour: 'HH:mm'
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: '시간'
-                    },
-                    grid: {
-                        display: false
-                    }
-                },
-                y: {
-                    min: yAxisMin,
-                    max: yAxisMax,
-                    title: {
-                        display: true,
-                        text: '가격 (USDT)'
-                    },
-                    ticks: {
-                        callback: function(value) {
-                            return '$' + value.toFixed(0);
-                        }
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                    }
-                }
-            }
+            };
+            
+            // 차트 생성
+            const chart = new Chart(ctx, chartConfig);
+            
+            return chart;
         }
-    };
-    
-    // 차트 생성
-    const chart = new Chart(ctx, chartConfig);
-    
-    // 디버깅 메시지
-    console.log('차트 생성 완료');
-    
-    return chart;
-}
     // 신호와 가장 가까운 차트 데이터 찾기
     function findClosestPrice(chartData, timestamp) {
         const signalTime = new Date(timestamp).getTime();
