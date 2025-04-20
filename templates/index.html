@@ -192,7 +192,7 @@
         });
 
 
-        // 트레이딩 차트 생성 함수
+        // 트레이딩 차트 생성 함수 - 수정된 버전
         function createTradingChart(data) {
             // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -370,6 +370,13 @@
                                         ];
                                     } else if (context.dataset.label === '종가') {
                                         return `종가: $${context.parsed.y.toFixed(2)}`;
+                                    } else if (context.dataset.label === '고저가') {
+                                        // 고저가 데이터셋에 대한 툴팁 추가
+                                        const item = context.raw;
+                                        return [
+                                            `고가: $${item._high.toFixed(2)}`,
+                                            `저가: $${item._low.toFixed(2)}`
+                                        ];
                                     } else {
                                         return context.dataset.label;
                                     }
