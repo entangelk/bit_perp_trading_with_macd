@@ -192,7 +192,7 @@
         });
 
 
-        // 트레이딩 차트 생성 함수 - 표준 캔들스틱 차트 구현
+        // 트레이딩 차트 생성 함수 - 수정된 버전
         function createTradingChart(data) {
             // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -234,205 +234,59 @@
                 return closestData ? closestData.close : null;
             }
             
-            // 캔들스틱 차트 데이터 준비
-            // 하나의 통합된 데이터셋으로 표준 캔들스틱을 표현합니다
-            const ohlcData = data.chart_data.map(item => {
-                return {
-                    x: new Date(item.timestamp),
-                    o: item.open,
-                    h: item.high,
-                    l: item.low,
-                    c: item.close
-                };
-            });
-
-            // Chart.js에서 커스텀 캔들스틱 차트 구현
-            Chart.defaults.elements.candlestick = {
-                color: {
-                    up: 'rgba(0, 255, 0, 1)',
-                    down: 'rgba(255, 0, 0, 1)',
-                    unchanged: '#999',
-                },
-            };
-
-            // 커스텀 캔들스틱 차트 엘리먼트 등록
-            class CandlestickElement extends Chart.Element {
-                draw(ctx) {
-                    const { x, o, h, l, c } = this.getProps(['x', 'o', 'h', 'l', 'c']);
-                    const { width } = this.getProps(['width']);
-                    
-                    // 캔들 상승/하락 여부 결정
-                    const isUp = c >= o;
-                    
-                    // 색상 설정
-                    const color = isUp ? 'rgba(0, 255, 0, 1)' : 'rgba(255, 0, 0, 1)';
-                    const bodyColor = isUp ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
-                    
-                    // 캔들 몸통 좌표 계산
-                    const xCenter = x;
-                    const yOpen = this.getProps(['y'])[isUp ? 'o' : 'c'];
-                    const yClose = this.getProps(['y'])[isUp ? 'c' : 'o'];
-                    const bodyHeight = Math.abs(yOpen - yClose);
-                    
-                    // 윅(wick) 좌표
-                    const yHigh = this.getProps(['y']).h;
-                    const yLow = this.getProps(['y']).l;
-                    
-                    // 캔들 너비 (차트 크기에 비례)
-                    const candleWidth = width * 0.7; // 캔들 너비 조정
-                    
-                    // 윅(wick) 그리기 (고가-저가 선)
-                    ctx.beginPath();
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 1;
-                    ctx.moveTo(xCenter, yHigh);
-                    ctx.lineTo(xCenter, yLow);
-                    ctx.stroke();
-                    
-                    // 캔들 몸통 그리기
-                    ctx.fillStyle = bodyColor;
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 1;
-                    ctx.fillRect(xCenter - candleWidth / 2, yOpen, candleWidth, bodyHeight);
-                    ctx.strokeRect(xCenter - candleWidth / 2, yOpen, candleWidth, bodyHeight);
-                }
-            }
-
-            // 커스텀 캔들스틱 컨트롤러 등록
-            class CandlestickController extends Chart.DatasetController {
-                static id = 'candlestick';
-                static defaults = {};
-                static overrides = {
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'hour',
-                                displayFormats: {
-                                    hour: 'HH:mm'
-                                }
-                            }
-                        },
-                        y: {
-                            type: 'linear',
-                            position: 'right',
-                        }
-                    }
-                };
-                
-                linkScales() {
-                    const dataset = this.getDataset();
-                    const meta = this._cachedMeta;
-                    
-                    meta.xScale = this.getScaleForId(meta.xAxisID || 'x');
-                    meta.yScale = this.getScaleForId(meta.yAxisID || 'y');
-                }
-                
-                getElements() {
-                    return this._cachedMeta.data;
-                }
-                
-                // 데이터 구성 업데이트
-                update(mode) {
-                    const meta = this._cachedMeta;
-                    const data = meta.data || [];
-                    const dataset = this.getDataset();
-                    
-                    this.updateElements(data, 0, data.length, mode);
-                }
-                
-                updateElements(elements, start, count, mode) {
-                    const dataset = this.getDataset();
-                    const meta = this._cachedMeta;
-                    const xScale = meta.xScale;
-                    const yScale = meta.yScale;
-                    
-                    const firstOHLC = dataset.data[start];
-                    const last = start + count - 1;
-                    const lastOHLC = dataset.data[last];
-                    
-                    const barWidth = this._calculateBarWidth(xScale, start, count);
-                    
-                    for (let i = start; i < start + count; i++) {
-                        const ohlc = dataset.data[i];
-                        const properties = {
-                            x: xScale.getPixelForValue(ohlc.x),
-                            o: yScale.getPixelForValue(ohlc.o),
-                            h: yScale.getPixelForValue(ohlc.h),
-                            l: yScale.getPixelForValue(ohlc.l),
-                            c: yScale.getPixelForValue(ohlc.c),
-                            width: barWidth,
-                        };
-                        
-                        const element = elements[i];
-                        if (element) {
-                            element.x = properties.x;
-                            element.o = properties.o;
-                            element.h = properties.h;
-                            element.l = properties.l;
-                            element.c = properties.c;
-                            element.width = properties.width;
-                        } else {
-                            meta.data[i] = new CandlestickElement({
-                                x: properties.x,
-                                o: properties.o,
-                                h: properties.h,
-                                l: properties.l,
-                                c: properties.c,
-                                width: properties.width,
-                            });
-                        }
-                    }
-                }
-                
-                _calculateBarWidth(scale, start, count) {
-                    const dataset = this.getDataset();
-                    
-                    if (count === 1) {
-                        return 20; // 단일 데이터 포인트의 경우
-                    }
-                    
-                    // 두 포인트 사이의 너비 계산
-                    const firstDate = new Date(dataset.data[start].x);
-                    const secondDate = new Date(dataset.data[start + 1].x);
-                    const firstPixel = scale.getPixelForValue(firstDate);
-                    const secondPixel = scale.getPixelForValue(secondDate);
-                    
-                    // 적절한 바 너비 계산 (간격의 약 70%)
-                    return Math.abs(firstPixel - secondPixel) * 0.7;
-                }
-                
-                // 툴팁을 위한 데이터셋 요소 가져오기
-                getLabelAndValue(index) {
-                    const me = this;
-                    const meta = me._cachedMeta;
-                    const {xScale, yScale} = meta;
-                    const ohlc = me.getDataset().data[index];
-                    const xLabel = xScale.getLabelForValue(ohlc.x);
-                    
-                    return {
-                        label: xLabel,
-                        value: `O: ${ohlc.o.toFixed(2)}, H: ${ohlc.h.toFixed(2)}, L: ${ohlc.l.toFixed(2)}, C: ${ohlc.c.toFixed(2)}`
-                    };
-                }
-            }
-
-            // 캔들스틱 컨트롤러 등록
-            Chart.register(CandlestickController);
-            Chart.register(CandlestickElement);
-            
-            // 차트 데이터 구성
+            // 대안 접근법: 여러 개의 데이터셋을 사용하되 표준 캔들스틱처럼 보이게 구성
             const chartData = {
                 datasets: [
-                    // 캔들스틱 데이터
+                    // 심지(wick) 데이터셋: 고가-저가 선
                     {
-                        label: '비트코인',
-                        type: 'candlestick',
-                        data: ohlcData
+                        label: '고저가',
+                        type: 'bar',
+                        data: data.chart_data.map(item => ({
+                            x: new Date(item.timestamp),
+                            y: item.high - item.low,
+                            _high: item.high,
+                            _low: item.low,
+                            _open: item.open,
+                            _close: item.close
+                        })),
+                        backgroundColor: 'rgba(0, 0, 0, 0.0)', // 투명
+                        borderColor: data.chart_data.map(item => 
+                            item.close >= item.open ? 'rgba(0, 200, 0, 1)' : 'rgba(255, 0, 0, 1)'
+                        ),
+                        borderWidth: 1.5,
+                        barPercentage: 0.05, // 매우 얇게
+                        categoryPercentage: 0.9,
+                        base: data.chart_data.map(item => item.low)
+                    },
+                    
+                    // 몸통(body) 데이터셋: 시가-종가 영역
+                    {
+                        label: '캔들',
+                        type: 'bar',
+                        data: data.chart_data.map(item => {
+                            const isUp = item.close >= item.open;
+                            return {
+                                x: new Date(item.timestamp),
+                                y: isUp ? item.close - item.open : item.open - item.close,
+                                _open: item.open,
+                                _close: item.close,
+                                _high: item.high,
+                                _low: item.low,
+                                _isUp: isUp
+                            };
+                        }),
+                        backgroundColor: data.chart_data.map(item => 
+                            item.close >= item.open ? 'rgba(0, 200, 0, 0.7)' : 'rgba(255, 0, 0, 0.7)'
+                        ),
+                        borderColor: data.chart_data.map(item => 
+                            item.close >= item.open ? 'rgba(0, 200, 0, 1)' : 'rgba(255, 0, 0, 1)'
+                        ),
+                        borderWidth: 1,
+                        barPercentage: 0.5, // 중간 너비
+                        categoryPercentage: 0.9,
+                        base: data.chart_data.map(item => 
+                            item.close >= item.open ? item.open : item.close
+                        )
                     }
                 ]
             };
@@ -482,11 +336,69 @@
             
             // 차트 생성
             const chart = new Chart(ctx, {
-                type: 'candlestick',  // 기본 타입을 candlestick으로 설정
-                data: chartData,
+                type: 'bar',  // 기본 타입은 bar 사용
+                data: {datasets: chartData.datasets},
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        zoom: {
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                                modifierKey: 'ctrl',  // ctrl 키를 누른 상태에서 드래그하면 패닝
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                // 범례에서 '고저가'와 '캔들' 레이블을 하나로 통합
+                                filter: function(legendItem, chartData) {
+                                    if (legendItem.text === '고저가') {
+                                        return false; // 숨김
+                                    }
+                                    if (legendItem.text === '캔들') {
+                                        legendItem.text = '비트코인'; // 레이블 변경
+                                    }
+                                    return true;
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const item = context.raw;
+                                    if (item && (item._open !== undefined || item._high !== undefined)) {
+                                        return [
+                                            `시가: $${item._open.toFixed(2)}`,
+                                            `고가: $${item._high.toFixed(2)}`,
+                                            `저가: $${item._low.toFixed(2)}`,
+                                            `종가: $${item._close.toFixed(2)}`
+                                        ];
+                                    } else {
+                                        return context.dataset.label;
+                                    }
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
@@ -517,50 +429,6 @@
                             // Y축 범위 명시적 설정
                             min: yAxisMin,
                             max: yAxisMax
-                        }
-                    },
-                    plugins: {
-                        zoom: {
-                            pan: {
-                                enabled: true,
-                                mode: 'x',
-                                modifierKey: 'ctrl',
-                            },
-                            zoom: {
-                                wheel: {
-                                    enabled: true,
-                                },
-                                pinch: {
-                                    enabled: true
-                                },
-                                mode: 'x',
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
-                        },
-                        legend: {
-                            position: 'top',
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(context) {
-                                    if (context.dataset.type === 'candlestick') {
-                                        const dataPoint = ohlcData[context.dataIndex];
-                                        return [
-                                            `시가: $${dataPoint.o.toFixed(2)}`,
-                                            `고가: $${dataPoint.h.toFixed(2)}`,
-                                            `저가: $${dataPoint.l.toFixed(2)}`,
-                                            `종가: $${dataPoint.c.toFixed(2)}`
-                                        ];
-                                    } else {
-                                        return context.dataset.label;
-                                    }
-                                }
-                            }
                         }
                     }
                 }
