@@ -192,7 +192,7 @@
         });
 
 
-        // 깔끔한 라인 차트 - 포인트 없이 마우스 오버 정보만 표시
+        // KST 시간대(UTC+9)로 표시하는 라인 차트
         function createTradingChart(data) {
             // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -278,6 +278,18 @@
                                         ];
                                     }
                                     return context.dataset.label;
+                                },
+                                // 툴팁에 표시되는 시간도 KST로 변환
+                                title: function(context) {
+                                    if (context[0] && context[0].label) {
+                                        // Chart.js의 기본 날짜 형식 파싱
+                                        const date = new Date(context[0].label);
+                                        // UTC 시간에 9시간 추가
+                                        date.setHours(date.getHours() + 9);
+                                        // 원하는 형식으로 포맷팅 (YYYY-MM-DD HH:MM)
+                                        return date.toISOString().replace('T', ' ').substring(0, 16) + ' (KST)';
+                                    }
+                                    return '';
                                 }
                             }
                         },
@@ -293,11 +305,22 @@
                                 unit: 'hour',
                                 displayFormats: {
                                     hour: 'HH:mm'
-                                }
+                                },
+                                // KST 시간대 표시를 위한 설정
+                                // Chart.js에서는 직접적인 timezone 설정을 지원하지 않으므로
+                                // 날짜 파싱 시 UTC+9 시간을 적용하는 방식으로 구현
+                                parser: function(utcTime) {
+                                    const date = new Date(utcTime);
+                                    // UTC 시간에 9시간 추가 (KST)
+                                    date.setHours(date.getHours() + 9);
+                                    return date;
+                                },
+                                // 툴팁이나 X축 레이블에 표시될 때 'KST' 접미사 추가
+                                tooltipFormat: 'YYYY-MM-DD HH:mm (KST)'
                             },
                             title: {
                                 display: true,
-                                text: '시간'
+                                text: '시간 (KST)'
                             },
                             grid: {
                                 display: false
