@@ -194,30 +194,113 @@
             
             console.log("Chart data:", data.chart_data);  // 디버깅용
             
-            // 캔들스틱 차트로 변경
-            const chart = new Chart(ctx, {
-                type: 'candlestick',  // 캔들스틱 차트 타입으로 변경
-                data: {
-                    datasets: [{
-                        label: 'BTC/USDT',
+            // 차트 데이터 준비 - 영역 차트로 고가/저가 표시
+            const chartData = {
+                datasets: [
+                    // 고가-저가 영역
+                    {
+                        label: '가격 범위',
                         data: data.chart_data.map(item => ({
                             x: new Date(item.timestamp),
-                            o: item.open,
-                            h: item.high,
-                            l: item.low,
-                            c: item.close
+                            y: [item.low, item.high]  // 고가-저가 범위
                         })),
-                        borderColor: '#000',
-                        color: {
-                            up: 'rgb(255, 99, 132)',
-                            down: 'rgb(54, 162, 235)',
-                            unchanged: '#999',
-                        }
-                    }]
-                },
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 0.2)',
+                        fill: true,
+                        pointRadius: 0,
+                        type: 'line',
+                        tension: 0.1
+                    },
+                    // 종가 선
+                    {
+                        label: '종가',
+                        data: data.chart_data.map(item => ({
+                            x: new Date(item.timestamp),
+                            y: item.close
+                        })),
+                        borderColor: 'rgb(75, 192, 192)',
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0,
+                        type: 'line',
+                        tension: 0.1
+                    }
+                ]
+            };
+            
+            // 전략별 신호 추가
+            Object.entries(data.strategy_signals || {}).forEach(([strategy, signals]) => {
+                const longSignals = signals.filter(signal => signal.position === 'Long');
+                const shortSignals = signals.filter(signal => signal.position === 'Short');
+                
+                if (longSignals.length > 0) {
+                    chartData.datasets.push({
+                        label: `${strategy} - Long`,
+                        data: longSignals.map(signal => ({
+                            x: new Date(signal.timestamp),
+                            y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
+                        })),
+                        borderColor: 'green',
+                        backgroundColor: 'green',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        pointRotation: 0,
+                        showLine: false,
+                        type: 'scatter'
+                    });
+                }
+                
+                if (shortSignals.length > 0) {
+                    chartData.datasets.push({
+                        label: `${strategy} - Short`,
+                        data: shortSignals.map(signal => ({
+                            x: new Date(signal.timestamp),
+                            y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
+                        })),
+                        borderColor: 'red',
+                        backgroundColor: 'red',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        pointRotation: 180,
+                        showLine: false,
+                        type: 'scatter'
+                    });
+                }
+            });
+
+            // 차트 생성
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {datasets: chartData.datasets},
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                        },
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.dataset.label === '종가') {
+                                        return `종가: $${context.parsed.y.toFixed(2)}`;
+                                    } else if (context.dataset.label === '가격 범위') {
+                                        return `범위: $${context.raw.y[0].toFixed(2)} - $${context.raw.y[1].toFixed(2)}`;
+                                    } else {
+                                        return context.dataset.label;
+                                    }
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
@@ -230,6 +313,9 @@
                             title: {
                                 display: true,
                                 text: '시간'
+                            },
+                            grid: {
+                                display: false
                             }
                         },
                         y: {
@@ -246,49 +332,24 @@
                     }
                 }
             });
-            
-            // 전략 신호 표시 (별도 데이터셋으로 추가)
-            if (data.strategy_signals && Object.keys(data.strategy_signals).length > 0) {
-                Object.entries(data.strategy_signals).forEach(([strategy, signals]) => {
-                    // Long 신호 추가
-                    const longSignals = signals.filter(signal => signal.position === 'Long');
-                    if (longSignals.length > 0) {
-                        chart.data.datasets.push({
-                            label: `${strategy} - Long`,
-                            type: 'scatter',
-                            data: longSignals.map(signal => ({
-                                x: new Date(signal.timestamp),
-                                y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
-                            })),
-                            borderColor: 'green',
-                            backgroundColor: 'green',
-                            pointStyle: 'triangle',
-                            pointRadius: 8,
-                            pointRotation: 0,
-                            showLine: false
-                        });
+
+            // 백그라운드 색상 추가 (포지션 구간)
+            if (data.position_ranges && data.position_ranges.length > 0) {
+                data.position_ranges.forEach(range => {
+                    const color = range.position === 'Long' ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
+                    
+                    if (!chart.options.plugins.annotation) {
+                        chart.options.plugins.annotation = { annotations: [] };
                     }
                     
-                    // Short 신호 추가
-                    const shortSignals = signals.filter(signal => signal.position === 'Short');
-                    if (shortSignals.length > 0) {
-                        chart.data.datasets.push({
-                            label: `${strategy} - Short`,
-                            type: 'scatter',
-                            data: shortSignals.map(signal => ({
-                                x: new Date(signal.timestamp),
-                                y: signal.price || findClosestPrice(data.chart_data, signal.timestamp)
-                            })),
-                            borderColor: 'red',
-                            backgroundColor: 'red',
-                            pointStyle: 'triangle',
-                            pointRadius: 8,
-                            pointRotation: 180,
-                            showLine: false
-                        });
-                    }
+                    chart.options.plugins.annotation.annotations.push({
+                        type: 'box',
+                        xMin: new Date(range.start),
+                        xMax: new Date(range.end),
+                        backgroundColor: color,
+                        borderWidth: 0
+                    });
                 });
-                
                 chart.update();
             }
         }
