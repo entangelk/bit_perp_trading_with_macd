@@ -305,9 +305,7 @@ def main():
                         stg_tag = None
                         stg_side = None
 
-                        # 5분마다 실행되는 부분에서
-                        if server_time.minute % 5 == 0:
-                            trade_logger.log_snapshot(
+                        trade_logger.log_snapshot(
                                 server_time=server_time,
                                 tag=tag,
                                 position=position
@@ -343,9 +341,8 @@ def main():
                     position_first_active = False
                     position_first_count = 2
                     position_save = None
-                    # 5분마다 실행되는 부분에서
-                    if server_time.minute % 5 == 0:
-                        trade_logger.log_snapshot(
+
+                    trade_logger.log_snapshot(
                             server_time=server_time,
                             tag=tag,
                             position=position
