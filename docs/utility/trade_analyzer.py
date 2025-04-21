@@ -39,17 +39,43 @@ class TradeAnalyzer:
         with open(self.logs_file, 'r') as f:
             data = json.load(f)
         
-        # 타임스탬프를 UTC로 변환
+        # 타임스탬프 처리
         for item in data:
-            # JSON에 저장된 시간이 로컬 시간이라고 가정
             try:
-                local_time = datetime.strptime(item['timestamp'], "%Y-%m-%d %H:%M:%S")
-                # UTC로 변환
-                utc_time = local_time.astimezone(timezone.utc)
-                item['timestamp'] = utc_time.isoformat()
+                # 밀리초 타임스탬프인 경우 (JavaScript 타임스탬프 형식)
+                if isinstance(item['timestamp'], (int, float)) or (
+                    isinstance(item['timestamp'], str) and item['timestamp'].isdigit() and len(item['timestamp']) > 10
+                ):
+                    # 이미 밀리초 형태라면 그대로 유지 (정수로 변환하여 확실히 함)
+                    item['timestamp'] = int(float(item['timestamp']))
+                
+                # 초 단위 타임스탬프인 경우 (UNIX 타임스탬프)
+                elif isinstance(item['timestamp'], (int, float)) or (
+                    isinstance(item['timestamp'], str) and item['timestamp'].isdigit() and len(item['timestamp']) <= 10
+                ):
+                    # 초에서 밀리초로 변환
+                    item['timestamp'] = int(float(item['timestamp']) * 1000)
+                
+                # 문자열 형태의 시간이라면
+                else:
+                    try:
+                        # 기본 포맷 시도
+                        local_time = datetime.strptime(item['timestamp'], "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        try:
+                            # ISO 포맷 시도
+                            local_time = datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00'))
+                        except:
+                            # 다른 포맷이 있다면 필요에 따라 추가
+                            raise ValueError(f"지원되지 않는 시간 형식: {item['timestamp']}")
+                    
+                    # 밀리초 타임스탬프로 변환 (JavaScript에서 사용하는 형식)
+                    item['timestamp'] = int(local_time.timestamp() * 1000)
+                    
             except Exception as e:
-                print(f"시간 변환 오류: {e}")
-                item['timestamp'] = None
+                print(f"시간 변환 오류: {e} (값: {item['timestamp']})")
+                # 오류 발생 시 현재 시간으로 대체하거나 None 처리
+                item['timestamp'] = int(datetime.now().timestamp() * 1000)
             
         return data
     
