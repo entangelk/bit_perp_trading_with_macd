@@ -304,12 +304,14 @@ def main():
                         position_save = None
                         stg_tag = None
                         stg_side = None
-
-                        trade_logger.log_snapshot(
-                                server_time=server_time,
-                                tag=tag,
-                                position=position
-                            )
+                        try:
+                            trade_logger.log_snapshot(
+                                    server_time=server_time,
+                                    tag=tag,
+                                    position=position
+                                )
+                        except:
+                            logger.info(f"그래프 신호 표시 오류")
     
 
 
@@ -342,11 +344,14 @@ def main():
                     position_first_count = 2
                     position_save = None
 
-                    trade_logger.log_snapshot(
-                            server_time=server_time,
-                            tag=tag,
-                            position=position
-                        )
+                    try:
+                        trade_logger.log_snapshot(
+                                server_time=server_time,
+                                tag=tag,
+                                position=position
+                            )
+                    except:
+                        logger.info(f"그래프 신호 표시 오류")
     
 
             remaining_time = 269 - (execution_time + error_time)
