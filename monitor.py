@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -15,9 +16,9 @@ MONITOR_FILES = {
 }
 
 # 이메일 설정
-EMAIL_ADDRESS = "EMAIL_ADDRESS"
-EMAIL_PASSWORD = "EMAIL_PASSWORD"  # Gmail 앱 비밀번호
-RECIPIENT_EMAIL = "RECIPIENT_EMAIL"
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")  # Gmail 앱 비밀번호
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 
 
 ALERT_INTERVAL = 28800  # 8시간마다 알림 반복 (초 단위: 8시간 = 8 * 60 * 60 = 28800초)
