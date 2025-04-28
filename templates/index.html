@@ -204,10 +204,15 @@
                 const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
                 const label = item.position;
                 
+                // timestamp를 직접 Date 객체로 변환 (문자열 변환 없이)
+                const timestampValue = typeof item.timestamp === 'number' 
+                    ? new Date(item.timestamp) 
+                    : new Date(parseInt(item.timestamp));
+                
                 annotations[`timeline-line-${index}`] = {
                     type: 'line',
                     scaleID: 'x',
-                    value: new Date(parseInt(item.timestamp)),
+                    value: timestampValue,
                     borderColor: color,
                     borderWidth: 2,
                     label: {
@@ -241,11 +246,20 @@
                 const borderColor = range.position === 'Short' 
                     ? 'rgba(255, 99, 132, 0.5)' 
                     : 'rgba(75, 192, 192, 0.5)';
+                
+                // 숫자 타입 검사 및 직접 Date 변환
+                const startTime = typeof range.start === 'number' 
+                    ? new Date(range.start) 
+                    : new Date(parseInt(range.start));
+                
+                const endTime = typeof range.end === 'number' 
+                    ? new Date(range.end) 
+                    : new Date(parseInt(range.end));
                     
                 annotations[`range-${index}`] = {
                     type: 'box',
-                    xMin: new Date(parseInt(range.start)),
-                    xMax: new Date(parseInt(range.end)),
+                    xMin: startTime,
+                    xMax: endTime,
                     yMin: 'min',
                     yMax: 'max',
                     backgroundColor: backgroundColor,
