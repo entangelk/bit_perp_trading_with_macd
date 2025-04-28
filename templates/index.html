@@ -192,6 +192,72 @@
         });
 
 
+        // 포지션 타임라인을 수직선 어노테이션으로 변환하는 함수
+        function generatePositionTimelineAnnotations(positionTimeline) {
+            if (!positionTimeline || !Array.isArray(positionTimeline) || positionTimeline.length === 0) {
+                return {};
+            }
+            
+            const annotations = {};
+            
+            positionTimeline.forEach((item, index) => {
+                const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
+                const label = item.position;
+                
+                annotations[`timeline-line-${index}`] = {
+                    type: 'line',
+                    scaleID: 'x',
+                    value: new Date(parseInt(item.timestamp)),
+                    borderColor: color,
+                    borderWidth: 2,
+                    label: {
+                        content: label,
+                        enabled: true,
+                        position: 'top',
+                        backgroundColor: color,
+                        color: 'white',
+                        font: {
+                            size: 12
+                        }
+                    }
+                };
+            });
+            
+            return annotations;
+        }
+
+        // 포지션 범위를 배경색 어노테이션으로 변환하는 함수
+        function generatePositionRangeAnnotations(positionRanges) {
+            if (!positionRanges || !Array.isArray(positionRanges) || positionRanges.length === 0) {
+                return {};
+            }
+            
+            const annotations = {};
+            
+            positionRanges.forEach((range, index) => {
+                const backgroundColor = range.position === 'Short' 
+                    ? 'rgba(255, 99, 132, 0.1)' 
+                    : 'rgba(75, 192, 192, 0.1)';
+                const borderColor = range.position === 'Short' 
+                    ? 'rgba(255, 99, 132, 0.5)' 
+                    : 'rgba(75, 192, 192, 0.5)';
+                    
+                annotations[`range-${index}`] = {
+                    type: 'box',
+                    xMin: new Date(parseInt(range.start)),
+                    xMax: new Date(parseInt(range.end)),
+                    yMin: 'min',
+                    yMax: 'max',
+                    backgroundColor: backgroundColor,
+                    borderColor: borderColor,
+                    borderWidth: 1
+                };
+            });
+            
+            return annotations;
+        }
+
+
         // KST 시간대(UTC+9)로 표시하는 라인 차트
         function createTradingChart(data) {
             // 차트 캔버스 컨텍스트 가져오기
@@ -297,7 +363,16 @@
                             display: true,
                             text: '비트코인 가격 및 트레이딩 신호 (24시간)'
                         }
-                    },
+                    },    
+                    annotation: {
+                            annotations: {
+                                // position_timeline을 수직선으로 표시
+                                ...generatePositionTimelineAnnotations(data.position_timeline),
+                                
+                                // position_ranges를 배경색 영역으로 표시
+                                ...generatePositionRangeAnnotations(data.position_ranges)
+                            }
+                        },
                     scales: {
                         x: {
                             type: 'time',
