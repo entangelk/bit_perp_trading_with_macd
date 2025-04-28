@@ -39,7 +39,8 @@ class TradeLogger:
         
         # 오래된 데이터 제거 (24시간 이전)
         cutoff_time = server_time - timedelta(hours=24)
-        data = [log for log in data if datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S") > cutoff_time]
+        # ISO 형식으로 파싱하도록 수정
+        data = [log for log in data if datetime.fromisoformat(log["timestamp"]) > cutoff_time]
         
         # 시간 순으로 정렬
         data.sort(key=lambda x: x["timestamp"])
