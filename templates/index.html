@@ -274,6 +274,72 @@
 
         // KST 시간대(UTC+9)로 표시하는 라인 차트
         function createTradingChart(data) {
+            // 포지션 어노테이션 준비
+            const annotations = {};
+
+            // 포지션 타임라인 어노테이션 추가
+            if (data.position_timeline && Array.isArray(data.position_timeline)) {
+                data.position_timeline.forEach((item, index) => {
+                    try {
+                        const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
+                        
+                        // 타임스탬프가 이미 숫자인지 확인하고 처리
+                        const timestamp = typeof item.timestamp === 'number' ? 
+                            item.timestamp : 
+                            parseInt(item.timestamp, 10);
+                        
+                        annotations[`timeline-${index}`] = {
+                            type: 'line',
+                            scaleID: 'x',
+                            value: new Date(timestamp),
+                            borderColor: color,
+                            borderWidth: 2,
+                            label: {
+                                content: item.position,
+                                enabled: true,
+                                position: 'top',
+                                backgroundColor: color
+                            }
+                        };
+                        console.log(`타임라인 어노테이션 추가: ${item.position} at ${new Date(timestamp)}`);
+                    } catch (e) {
+                        console.error('타임라인 어노테이션 생성 오류:', e, item);
+                    }
+                });
+            }
+
+            // 포지션 범위 어노테이션 추가
+            if (data.position_ranges && Array.isArray(data.position_ranges)) {
+                data.position_ranges.forEach((range, index) => {
+                    try {
+                        const bgColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.1)' : 'rgba(75, 192, 192, 0.1)';
+                        const borderColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.5)' : 'rgba(75, 192, 192, 0.5)';
+                        
+                        // 타임스탬프가 이미 숫자인지 확인하고 처리
+                        const start = typeof range.start === 'number' ? 
+                            range.start : 
+                            parseInt(range.start, 10);
+                            
+                        const end = typeof range.end === 'number' ? 
+                            range.end : 
+                            parseInt(range.end, 10);
+                        
+                        annotations[`range-${index}`] = {
+                            type: 'box',
+                            xMin: new Date(start),
+                            xMax: new Date(end),
+                            backgroundColor: bgColor,
+                            borderColor: borderColor,
+                            borderWidth: 1
+                        };
+                        console.log(`범위 어노테이션 추가: ${range.position} from ${new Date(start)} to ${new Date(end)}`);
+                    } catch (e) {
+                        console.error('범위 어노테이션 생성 오류:', e, range);
+                    }
+                });
+            }
+
+
             // 차트 캔버스 컨텍스트 가져오기
             const ctx = document.getElementById('tradingChart').getContext('2d');
             
