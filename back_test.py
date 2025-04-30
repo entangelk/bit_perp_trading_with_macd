@@ -393,7 +393,7 @@ def run_daily_backtest():
             logger.info("백테스트 완료")
             
             # 6시간 대기
-            time.sleep(6 * 60 * 60)
+            time.sleep(3 * 60 * 60)
             
         except Exception as e:
             logger.error(f"백테스트 중 오류 발생: {e}")
