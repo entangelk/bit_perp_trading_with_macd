@@ -207,7 +207,7 @@
             }
         });
 
-        // normalizeTimestamp 함수도 개선해보세요
+        // normalizeTimestamp 함수 수정 - KST 변환 제거
         function normalizeTimestamp(timestamp) {
             if (!timestamp) return null;
             
@@ -215,66 +215,62 @@
                 // 이미 Date 객체인 경우
                 if (timestamp instanceof Date) return timestamp;
                 
-                // 숫자형 또는 숫자 문자열 타임스탬프
-                if (typeof timestamp === 'number' || 
-                    (typeof timestamp === 'string' && !isNaN(Number(timestamp)))) {
-                    
+                // 숫자형 타임스탬프 (밀리초)
+                if (typeof timestamp === 'number') {
+                    // 중요: 단순히 Date 객체 생성만 하고 시간대 조정 없음
+                    return new Date(timestamp);
+                }
+                
+                // 문자열 타임스탬프 (숫자로 변환 가능한 경우)
+                if (typeof timestamp === 'string' && !isNaN(Number(timestamp))) {
                     const num = Number(timestamp);
-                    
-                    // 밀리초 단위 타임스탬프 (13자리 이상)가 미래 시간인지 확인
-                    if (String(num).length >= 13) {
-                        const date = new Date(num);
-                        const now = new Date();
-                        
-                        // 미래 시간인 경우 초 단위로 변환 (밀리초/1000)
-                        if (date.getFullYear() > 2030) {
-                            console.warn("타임스탬프가 미래 시간으로 해석됨, 초 단위로 변환 시도:", timestamp);
-                            return new Date(num / 1000);
-                        }
-                        
-                        return date;
-                    }
-                    
-                    // 초 단위 타임스탬프 (10자리) - 밀리초로 변환
+                    // 밀리초 타임스탬프 (13자리)
+                    if (String(num).length >= 13) return new Date(num);
+                    // 초 타임스탬프 (10자리) - 밀리초로 변환
                     return new Date(num * 1000);
                 }
                 
                 // ISO 형식 문자열 (예: '2025-05-02T02:00:00')
+                // 중요: 여기서도 시간대 조정 없이 그대로 사용
                 return new Date(timestamp);
             } catch (e) {
                 console.error("타임스탬프 변환 오류:", e, timestamp);
-                return new Date(); // 오류 시 현재 시간 반환
+                return null;
             }
         }
         // 어노테이션 통합 처리 함수
         function generateAnnotations(data) {
             const annotations = {};
-
+            
             // 포지션 타임라인 어노테이션 추가
             if (data.position_timeline && Array.isArray(data.position_timeline)) {
                 console.log("포지션 타임라인 처리:", data.position_timeline);
-
+                
                 data.position_timeline.forEach((item, index) => {
                     try {
                         if (!item.position || !item.timestamp) {
                             console.warn("포지션 정보 누락:", item);
                             return;
                         }
-
+                        
                         const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
+                        
+                        // 중요: 시간 변환 과정에서 KST 보정을 적용하지 않음
+                        // 원본 타임스탬프를 그대로 사용하고, 차트의 x축 설정에서 KST로 표시하도록 함
                         const timestamp = normalizeTimestamp(item.timestamp);
-
+                        
+                        // 중요: UTC 기준으로 타임스탬프 사용 (KST 변환 없음)
                         console.log(`포지션 ${item.position} 타임스탬프:`, item.timestamp, "→ 변환:", timestamp);
-
+                        
                         if (!timestamp) {
                             console.warn("타임스탬프 변환 실패:", item.timestamp);
                             return;
                         }
-
+                        
                         annotations[`timeline-${index}`] = {
                             type: 'line',
                             scaleID: 'x',
-                            value: timestamp,
+                            value: timestamp,  // UTC 타임스탬프 그대로 사용
                             borderColor: color,
                             borderWidth: 2,
                             label: {
@@ -287,50 +283,6 @@
                         console.log(`어노테이션 생성 성공: timeline-${index}`);
                     } catch (e) {
                         console.error('타임라인 어노테이션 생성 오류:', e, item);
-                    }
-                });
-            } else {
-                console.log("포지션 타임라인 데이터 없음");
-            }
-
-            // 포지션 범위 어노테이션 추가
-            if (data.position_ranges && Array.isArray(data.position_ranges)) {
-                console.log("포지션 범위 처리:", data.position_ranges);
-
-                data.position_ranges.forEach((range, index) => {
-                    try {
-                        if (!range.position || !range.start || !range.end) {
-                            console.warn("범위 정보 누락:", range);
-                            return;
-                        }
-
-                        const bgColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.1)' : 'rgba(75, 192, 192, 0.1)';
-                        const borderColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.5)' : 'rgba(75, 192, 192, 0.5)';
-
-                        const start = normalizeTimestamp(range.start);
-                        const end = normalizeTimestamp(range.end);
-
-                        console.log(`범위 ${range.position} 시작:`, range.start, "→ 변환:", start);
-                        console.log(`범위 ${range.position} 종료:`, range.end, "→ 변환:", end);
-
-                        if (!start || !end) {
-                            console.warn("범위 타임스탬프 변환 실패:", range);
-                            return;
-                        }
-
-                        annotations[`range-${index}`] = {
-                            type: 'box',
-                            xMin: start,
-                            xMax: end,
-                            yMin: 'min',
-                            yMax: 'max',
-                            backgroundColor: bgColor,
-                            borderColor: borderColor,
-                            borderWidth: 1
-                        };
-                        console.log(`어노테이션 생성 성공: range-${index}`);
-                    } catch (e) {
-                        console.error('범위 어노테이션 생성 오류:', e, range);
                     }
                 });
             } else {
@@ -521,35 +473,31 @@
                             }
                         },
                         scales: {
-                            x: {
-                                type: 'time',
-                                time: {
-                                    unit: 'hour',
-                                    displayFormats: {
-                                        hour: 'HH:mm'
-                                    },
-                                    // KST 시간대 표시를 위한 설정
-                                    parser: function (utcTime) {
-                                        try {
-                                            const date = new Date(utcTime);
-                                            // UTC 시간에 9시간 추가 (KST)
-                                            date.setHours(date.getHours() + 9);
-                                            return date;
-                                        } catch (e) {
-                                            console.error("시간 파싱 오류:", e, utcTime);
-                                            return new Date();
-                                        }
-                                    },
-                                    tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
-                                },
-                                title: {
-                                    display: true,
-                                    text: '시간 (KST)'
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            },
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'hour',
+                        displayFormats: {
+                            hour: 'HH:mm'
+                        },
+                        // 중요: KST 표시를 위한 설정에서 일관성 유지
+                        // 데이터는 UTC 기준으로 사용하고 표시만 KST로 변환
+                        parser: function(utcTime) {
+                            const date = new Date(utcTime);
+                            // UTC 시간에 9시간 추가 (KST)
+                            date.setHours(date.getHours() + 9);
+                            return date;
+                        },
+                        tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
+                    },
+                    title: {
+                        display: true,
+                        text: '시간 (KST)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
                             y: {
                                 min: yAxisMin,
                                 max: yAxisMax,
