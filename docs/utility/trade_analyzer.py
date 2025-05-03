@@ -42,12 +42,23 @@ class TradeAnalyzer:
         # 타임스탬프 처리
         for item in data:
             try:
+                # 타임스탬프 확인 로깅 추가
+                original_timestamp = item['timestamp']
+                print(f"원본 타임스탬프: {original_timestamp}, 타입: {type(original_timestamp)}")
+                
                 # 밀리초 타임스탬프인 경우 (JavaScript 타임스탬프 형식)
                 if isinstance(item['timestamp'], (int, float)) or (
                     isinstance(item['timestamp'], str) and item['timestamp'].isdigit() and len(item['timestamp']) > 10
                 ):
                     # 이미 밀리초 형태라면 그대로 유지 (정수로 변환하여 확실히 함)
                     item['timestamp'] = int(float(item['timestamp']))
+                    
+                    # 2025년 이후의 타임스탬프는 초 단위일 수 있음
+                    dt = datetime.fromtimestamp(item['timestamp'] / 1000)
+                    if dt.year > 2025:
+                        # 초 단위로 간주하고 밀리초로 변환
+                        item['timestamp'] = int(float(item['timestamp']) * 1000)
+                        print(f"미래 시간 감지, 초->밀리초 변환: {item['timestamp']}")
                 
                 # 초 단위 타임스탬프인 경우 (UNIX 타임스탬프)
                 elif isinstance(item['timestamp'], (int, float)) or (
@@ -55,6 +66,7 @@ class TradeAnalyzer:
                 ):
                     # 초에서 밀리초로 변환
                     item['timestamp'] = int(float(item['timestamp']) * 1000)
+                    print(f"초->밀리초 변환: {item['timestamp']}")
                 
                 # 문자열 형태의 시간이라면
                 else:
@@ -71,6 +83,9 @@ class TradeAnalyzer:
                     
                     # 밀리초 타임스탬프로 변환 (JavaScript에서 사용하는 형식)
                     item['timestamp'] = int(local_time.timestamp() * 1000)
+                    print(f"문자열->밀리초 변환: {item['timestamp']}")
+                    
+                print(f"변환 후 타임스탬프: {item['timestamp']}")
                     
             except Exception as e:
                 print(f"시간 변환 오류: {e} (값: {item['timestamp']})")

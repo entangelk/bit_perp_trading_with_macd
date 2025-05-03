@@ -13,6 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    
 </head>
 
 <body class="bg-gray-100">
@@ -206,7 +207,7 @@
             }
         });
 
-        // 타임스탬프 정규화 함수
+        // normalizeTimestamp 함수도 개선해보세요
         function normalizeTimestamp(timestamp) {
             if (!timestamp) return null;
             
@@ -214,15 +215,27 @@
                 // 이미 Date 객체인 경우
                 if (timestamp instanceof Date) return timestamp;
                 
-                // 숫자형 타임스탬프 (밀리초)
-                if (typeof timestamp === 'number') return new Date(timestamp);
-                
-                // 문자열 타임스탬프 (숫자로 변환 가능한 경우)
-                if (typeof timestamp === 'string' && !isNaN(Number(timestamp))) {
+                // 숫자형 또는 숫자 문자열 타임스탬프
+                if (typeof timestamp === 'number' || 
+                    (typeof timestamp === 'string' && !isNaN(Number(timestamp)))) {
+                    
                     const num = Number(timestamp);
-                    // 밀리초 타임스탬프 (13자리)
-                    if (String(num).length >= 13) return new Date(num);
-                    // 초 타임스탬프 (10자리) - 밀리초로 변환
+                    
+                    // 밀리초 단위 타임스탬프 (13자리 이상)가 미래 시간인지 확인
+                    if (String(num).length >= 13) {
+                        const date = new Date(num);
+                        const now = new Date();
+                        
+                        // 미래 시간인 경우 초 단위로 변환 (밀리초/1000)
+                        if (date.getFullYear() > 2030) {
+                            console.warn("타임스탬프가 미래 시간으로 해석됨, 초 단위로 변환 시도:", timestamp);
+                            return new Date(num / 1000);
+                        }
+                        
+                        return date;
+                    }
+                    
+                    // 초 단위 타임스탬프 (10자리) - 밀리초로 변환
                     return new Date(num * 1000);
                 }
                 
@@ -348,12 +361,11 @@
             try {
                 console.log("차트 데이터 처리 중...");
 
-                // 데이터 복사 및 검증
-                const chartData = data.chart_data.map(item => {
-                    // 타임스탬프 변환
+            // 차트 데이터 처리
+            const chartData = data.chart_data.map(item => {
+                    // 타임스탬프 변환 (ISO 문자열 → Date 객체)
                     const timestamp = normalizeTimestamp(item.timestamp);
-
-                    // 숫자형 변환
+                    
                     return {
                         timestamp: timestamp,
                         x: timestamp, // Chart.js용 x 좌표
@@ -364,7 +376,42 @@
                         volume: Number(item.volume) || 0
                     };
                 }).filter(item => item.timestamp); // 유효한 타임스탬프만 유지
-
+                
+                // 차트 데이터의 시간 범위 확인
+                if (chartData.length > 0) {
+                    const firstTimestamp = chartData[0].timestamp;
+                    const lastTimestamp = chartData[chartData.length - 1].timestamp;
+                    
+                    console.log("차트 데이터 첫 시간:", new Date(firstTimestamp).toISOString());
+                    console.log("차트 데이터 마지막 시간:", new Date(lastTimestamp).toISOString());
+                    
+                    // 어노테이션 타임스탬프 확인
+                    if (data.position_timeline && data.position_timeline.length > 0) {
+                        const annotationTime = normalizeTimestamp(data.position_timeline[0].timestamp);
+                        console.log("어노테이션 시간:", annotationTime.toISOString());
+                        
+                        // 밀리초 타임스탬프가 실제 시간보다 미래에 있는지 확인
+                        const now = new Date();
+                        if (annotationTime > now) {
+                            console.warn("어노테이션 타임스탬프가 현재 시간보다 미래에 있습니다!");
+                            console.warn("현재 시간:", now.toISOString());
+                            
+                            // 밀리초 대신 초 단위로 처리해보기 (1000으로 나눔)
+                            const correctedTime = new Date(annotationTime.getTime() / 1000);
+                            console.log("보정된 시간:", correctedTime.toISOString());
+                            
+                            // 보정된 시간이 차트 범위 내에 있는지 확인
+                            if (correctedTime >= firstTimestamp && correctedTime <= lastTimestamp) {
+                                console.log("보정된 시간이 차트 범위 내에 있습니다!");
+                                
+                                // 어노테이션 시간 업데이트
+                                if (annotations['timeline-0']) {
+                                    annotations['timeline-0'].value = correctedTime;
+                                }
+                            }
+                        }
+                    }
+                }
                 console.log(`데이터 처리 완료: ${chartData.length}개 항목`);
 
                 // 시간 순서대로 정렬
