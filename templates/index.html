@@ -473,31 +473,30 @@
                             }
                         },
                         scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'hour',
-                        displayFormats: {
-                            hour: 'HH:mm'
-                        },
-                        // 중요: KST 표시를 위한 설정에서 일관성 유지
-                        // 데이터는 UTC 기준으로 사용하고 표시만 KST로 변환
-                        parser: function(utcTime) {
-                            const date = new Date(utcTime);
-                            // UTC 시간에 9시간 추가 (KST)
-                            date.setHours(date.getHours() + 9);
-                            return date;
-                        },
-                        tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
-                    },
-                    title: {
-                        display: true,
-                        text: '시간 (KST)'
-                    },
-                    grid: {
-                        display: false
-                    }
-                },
+    x: {
+        type: 'time',
+        time: {
+            unit: 'hour',
+            displayFormats: {
+                hour: 'HH:mm'
+            },
+            // 모든 시간을 KST로 표시하되, 데이터 자체는 UTC 그대로 사용
+            tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
+        },
+        adapters: {
+            date: {
+                // 9시간 오프셋 직접 적용
+                zone: '+09:00'
+            }
+        },
+        title: {
+            display: true,
+            text: '시간 (KST)'
+        },
+        grid: {
+            display: false
+        }
+    },
                             y: {
                                 min: yAxisMin,
                                 max: yAxisMax,
