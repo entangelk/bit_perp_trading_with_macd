@@ -337,32 +337,21 @@
                     console.log("차트 데이터 첫 시간:", new Date(firstTimestamp).toISOString());
                     console.log("차트 데이터 마지막 시간:", new Date(lastTimestamp).toISOString());
                     
-                    // 어노테이션 타임스탬프 확인
-                    if (data.position_timeline && data.position_timeline.length > 0) {
-                        const annotationTime = normalizeTimestamp(data.position_timeline[0].timestamp);
-                        console.log("어노테이션 시간:", annotationTime.toISOString());
-                        
-                        // 밀리초 타임스탬프가 실제 시간보다 미래에 있는지 확인
-                        const now = new Date();
-                        if (annotationTime > now) {
-                            console.warn("어노테이션 타임스탬프가 현재 시간보다 미래에 있습니다!");
-                            console.warn("현재 시간:", now.toISOString());
-                            
-                            // 밀리초 대신 초 단위로 처리해보기 (1000으로 나눔)
-                            const correctedTime = new Date(annotationTime.getTime() / 1000);
-                            console.log("보정된 시간:", correctedTime.toISOString());
-                            
-                            // 보정된 시간이 차트 범위 내에 있는지 확인
-                            if (correctedTime >= firstTimestamp && correctedTime <= lastTimestamp) {
-                                console.log("보정된 시간이 차트 범위 내에 있습니다!");
-                                
-                                // 어노테이션 시간 업데이트
-                                if (annotations['timeline-0']) {
-                                    annotations['timeline-0'].value = correctedTime;
-                                }
-                            }
-                        }
-                    }
+// 포지션 타임라인에 직접 시간 조정
+if (data.position_timeline && data.position_timeline.length > 0) {
+    data.position_timeline.forEach(item => {
+        // UTC 시간을 9시간 빼서 보정 (표시할 때 다시 9시간 더해질 것이므로)
+        if (typeof item.timestamp === 'number') {
+            const date = new Date(item.timestamp);
+            // UTC 시간을 9시간 빼서 저장
+            date.setHours(date.getHours() - 9);
+            item.timestamp = date.getTime();
+            console.log("타임스탬프 보정:", date.toISOString());
+        }
+    });
+}
+                } else {
+                    console.warn("차트 데이터가 비어 있습니다");
                 }
                 console.log(`데이터 처리 완료: ${chartData.length}개 항목`);
 
