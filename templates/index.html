@@ -145,7 +145,8 @@
         </div>
     </div>
 </div>
-
+    <!-- index.html 파일에 추가 -->
+    <script id="trade-analysis-data" type="application/json">{{ trade_analysis_json | safe }}</script>
     <!-- 프로그레스 바 설정과 자동 새로고침을 위한 스크립트 -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -163,349 +164,321 @@
             }
 
             try {
-            // 서버에서 전달받은 트레이딩 분석 데이터를 파싱
-            let tradeAnalysisData;
+        // 서버에서 전달받은 트레이딩 분석 데이터를 파싱
+        console.log("차트 데이터 초기화 시작");
+        
+        let tradeAnalysisData;
+        const rawData = document.getElementById('trade-analysis-data').textContent;
+        
+        try {
+            // JSON 파싱 시도
+            tradeAnalysisData = JSON.parse(rawData);
+            console.log("차트 데이터 파싱 성공:", tradeAnalysisData);
+        } catch (e) {
+            console.error("데이터 파싱 오류:", e);
+            console.error("원본 데이터:", rawData);
+            tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
+        }
+        
+        // 차트 데이터 검증
+        if (tradeAnalysisData && Array.isArray(tradeAnalysisData.chart_data) && tradeAnalysisData.chart_data.length > 0) {
+            console.log(`차트 데이터 ${tradeAnalysisData.chart_data.length}개 항목 확인됨`);
+            createTradingChart(tradeAnalysisData);
+        } else {
+            console.error("유효한 차트 데이터가 없습니다:", tradeAnalysisData);
+            document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
+        }
+    } catch (error) {
+        console.error("차트 초기화 오류:", error);
+        document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
+    }
+    });
+
+    // 타임스탬프 정규화 함수 - 모든 형식의 타임스탬프를 Date 객체로 변환
+    function normalizeTimestamp(timestamp) {
+        if (!timestamp) return null;
+        
+        try {
+            // 이미 Date 객체인 경우
+            if (timestamp instanceof Date) return timestamp;
             
-            // 이미 JavaScript 객체인지 확인
-            if (typeof {{ trade_analysis_json | safe }} === 'object') {
-                tradeAnalysisData = {{ trade_analysis_json | safe }};
-            } else {
-                // 문자열이라면 파싱
+            // 숫자형 타임스탬프 (밀리초)
+            if (typeof timestamp === 'number') return new Date(timestamp);
+            
+            // 문자열 타임스탬프 (숫자로 변환 가능한 경우)
+            if (typeof timestamp === 'string' && !isNaN(Number(timestamp))) {
+                const num = Number(timestamp);
+                // 밀리초 타임스탬프 (13자리)
+                if (String(num).length >= 13) return new Date(num);
+                // 초 타임스탬프 (10자리) - 밀리초로 변환
+                return new Date(num * 1000);
+            }
+            
+            // ISO 형식 문자열
+            return new Date(timestamp);
+        } catch (e) {
+            console.error("타임스탬프 변환 오류:", e, timestamp);
+            return null;
+        }
+    }
+    // 어노테이션 통합 처리 함수
+    function generateAnnotations(data) {
+        const annotations = {};
+        
+        // 포지션 타임라인 어노테이션 추가
+        if (data.position_timeline && Array.isArray(data.position_timeline)) {
+            data.position_timeline.forEach((item, index) => {
                 try {
-                    tradeAnalysisData = JSON.parse({{ trade_analysis_json | safe }});
-                } catch (e) {
-                    console.error("데이터 파싱 오류:", e);
-                    tradeAnalysisData = { chart_data: [], strategy_signals: {}, position_timeline: [], position_ranges: [] };
-                }
-            }
-            
-            // 차트 생성
-            if (tradeAnalysisData && tradeAnalysisData.chart_data && tradeAnalysisData.chart_data.length > 0) {
-                createTradingChart(tradeAnalysisData);
-            } else {
-                document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">표시할 차트 데이터가 없습니다.</div>';
-            }
-        } catch (error) {
-            console.error("차트 생성 오류:", error);
-            document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
-        }
-        });
-
-
-        // 포지션 타임라인을 수직선 어노테이션으로 변환하는 함수
-        function generatePositionTimelineAnnotations(positionTimeline) {
-            if (!positionTimeline || !Array.isArray(positionTimeline) || positionTimeline.length === 0) {
-                return {};
-            }
-            
-            const annotations = {};
-            
-            positionTimeline.forEach((item, index) => {
-                const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
-                const label = item.position;
-                
-                // timestamp를 직접 Date 객체로 변환 (문자열 변환 없이)
-                const timestampValue = typeof item.timestamp === 'number' 
-                    ? new Date(item.timestamp) 
-                    : new Date(parseInt(item.timestamp));
-                
-                annotations[`timeline-line-${index}`] = {
-                    type: 'line',
-                    scaleID: 'x',
-                    value: timestampValue,
-                    borderColor: color,
-                    borderWidth: 2,
-                    label: {
-                        content: label,
-                        enabled: true,
-                        position: 'top',
-                        backgroundColor: color,
-                        color: 'white',
-                        font: {
-                            size: 12
-                        }
-                    }
-                };
-            });
-            
-            return annotations;
-        }
-
-        // 포지션 범위를 배경색 어노테이션으로 변환하는 함수
-        function generatePositionRangeAnnotations(positionRanges) {
-            if (!positionRanges || !Array.isArray(positionRanges) || positionRanges.length === 0) {
-                return {};
-            }
-            
-            const annotations = {};
-            
-            positionRanges.forEach((range, index) => {
-                const backgroundColor = range.position === 'Short' 
-                    ? 'rgba(255, 99, 132, 0.1)' 
-                    : 'rgba(75, 192, 192, 0.1)';
-                const borderColor = range.position === 'Short' 
-                    ? 'rgba(255, 99, 132, 0.5)' 
-                    : 'rgba(75, 192, 192, 0.5)';
-                
-                // 숫자 타입 검사 및 직접 Date 변환
-                const startTime = typeof range.start === 'number' 
-                    ? new Date(range.start) 
-                    : new Date(parseInt(range.start));
-                
-                const endTime = typeof range.end === 'number' 
-                    ? new Date(range.end) 
-                    : new Date(parseInt(range.end));
+                    if (!item.position || !item.timestamp) return;
                     
-                annotations[`range-${index}`] = {
-                    type: 'box',
-                    xMin: startTime,
-                    xMax: endTime,
-                    yMin: 'min',
-                    yMax: 'max',
-                    backgroundColor: backgroundColor,
-                    borderColor: borderColor,
-                    borderWidth: 1
-                };
+                    const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
+                    const timestamp = normalizeTimestamp(item.timestamp);
+                    
+                    if (!timestamp) {
+                        console.warn("유효하지 않은 타임스탬프:", item.timestamp);
+                        return;
+                    }
+                    
+                    annotations[`timeline-${index}`] = {
+                        type: 'line',
+                        scaleID: 'x',
+                        value: timestamp,
+                        borderColor: color,
+                        borderWidth: 2,
+                        label: {
+                            content: item.position,
+                            enabled: true,
+                            position: 'top',
+                            backgroundColor: color
+                        }
+                    };
+                } catch (e) {
+                    console.error('타임라인 어노테이션 생성 오류:', e, item);
+                }
             });
-            
-            return annotations;
         }
-
-
-        // KST 시간대(UTC+9)로 표시하는 라인 차트
-        function createTradingChart(data) {
-            // 포지션 어노테이션 준비
-            const annotations = {};
-
-            // 포지션 타임라인 어노테이션 추가
-            if (data.position_timeline && Array.isArray(data.position_timeline)) {
-                data.position_timeline.forEach((item, index) => {
-                    try {
-                        const color = item.position === 'Short' ? 'rgba(255, 99, 132, 1)' : 'rgba(75, 192, 192, 1)';
-                        
-                        // 타임스탬프가 이미 숫자인지 확인하고 처리
-                        const timestamp = typeof item.timestamp === 'number' ? 
-                            item.timestamp : 
-                            parseInt(item.timestamp, 10);
-                        
-                        annotations[`timeline-${index}`] = {
-                            type: 'line',
-                            scaleID: 'x',
-                            value: new Date(timestamp),
-                            borderColor: color,
-                            borderWidth: 2,
-                            label: {
-                                content: item.position,
-                                enabled: true,
-                                position: 'top',
-                                backgroundColor: color
-                            }
-                        };
-                        console.log(`타임라인 어노테이션 추가: ${item.position} at ${new Date(timestamp)}`);
-                    } catch (e) {
-                        console.error('타임라인 어노테이션 생성 오류:', e, item);
+        
+        // 포지션 범위 어노테이션 추가
+        if (data.position_ranges && Array.isArray(data.position_ranges)) {
+            data.position_ranges.forEach((range, index) => {
+                try {
+                    if (!range.position || !range.start || !range.end) return;
+                    
+                    const bgColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.1)' : 'rgba(75, 192, 192, 0.1)';
+                    const borderColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.5)' : 'rgba(75, 192, 192, 0.5)';
+                    
+                    const start = normalizeTimestamp(range.start);
+                    const end = normalizeTimestamp(range.end);
+                    
+                    if (!start || !end) {
+                        console.warn("유효하지 않은 범위 타임스탬프:", range);
+                        return;
                     }
-                });
-            }
-
-            // 포지션 범위 어노테이션 추가
-            if (data.position_ranges && Array.isArray(data.position_ranges)) {
-                data.position_ranges.forEach((range, index) => {
-                    try {
-                        const bgColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.1)' : 'rgba(75, 192, 192, 0.1)';
-                        const borderColor = range.position === 'Short' ? 'rgba(255, 99, 132, 0.5)' : 'rgba(75, 192, 192, 0.5)';
-                        
-                        // 타임스탬프가 이미 숫자인지 확인하고 처리
-                        const start = typeof range.start === 'number' ? 
-                            range.start : 
-                            parseInt(range.start, 10);
-                            
-                        const end = typeof range.end === 'number' ? 
-                            range.end : 
-                            parseInt(range.end, 10);
-                        
-                        annotations[`range-${index}`] = {
-                            type: 'box',
-                            xMin: new Date(start),
-                            xMax: new Date(end),
-                            backgroundColor: bgColor,
-                            borderColor: borderColor,
-                            borderWidth: 1
-                        };
-                        console.log(`범위 어노테이션 추가: ${range.position} from ${new Date(start)} to ${new Date(end)}`);
-                    } catch (e) {
-                        console.error('범위 어노테이션 생성 오류:', e, range);
-                    }
-                });
-            }
-
-
-            // 차트 캔버스 컨텍스트 가져오기
-            const ctx = document.getElementById('tradingChart').getContext('2d');
-            
-            // 시간 순서대로 정렬
-            data.chart_data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            // 모든 데이터를 명시적으로 숫자로 변환
-            data.chart_data.forEach(item => {
-                item.open = Number(item.open);
-                item.high = Number(item.high);
-                item.low = Number(item.low);
-                item.close = Number(item.close);
+                    
+                    annotations[`range-${index}`] = {
+                        type: 'box',
+                        xMin: start,
+                        xMax: end,
+                        yMin: 'min',
+                        yMax: 'max',
+                        backgroundColor: bgColor,
+                        borderColor: borderColor,
+                        borderWidth: 1
+                    };
+                } catch (e) {
+                    console.error('범위 어노테이션 생성 오류:', e, range);
+                }
             });
-            
-            // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
-            let minPrice = Math.min(...data.chart_data.map(item => item.low));
-            let maxPrice = Math.max(...data.chart_data.map(item => item.high));
-            
-            // Y축 범위 설정 (10% 여유)
-            const range = maxPrice - minPrice;
-            const padding = range * 0.1;
-            const yAxisMin = Math.floor(minPrice - padding);
-            const yAxisMax = Math.ceil(maxPrice + padding);
-            
-            console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
-            console.log(`Y축 범위: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
-            
-            // 종가 데이터만 사용하는 깔끔한 라인 차트
-            const lineDataset = {
-                label: '비트코인',
-                data: data.chart_data.map(item => ({
-                    x: new Date(item.timestamp),
-                    y: item.close,
-                    _open: item.open,
-                    _high: item.high,
-                    _low: item.low,
-                    _close: item.close
-                })),
-                borderColor: 'rgb(75, 192, 192)',
-                backgroundColor: 'rgba(75, 192, 192, 0.5)',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.1, // 약간의 곡선 효과
-                pointRadius: 0, // 포인트 표시 없음
-                pointHoverRadius: 5, // 마우스 오버 시에만 포인트 표시
-                pointHoverBackgroundColor: 'rgb(75, 192, 192)',
-                pointHoverBorderColor: 'white',
-                pointHoverBorderWidth: 2
-            };
-            
-            // 차트 생성 옵션
-            const chartConfig = {
-                type: 'line',
-                data: {
-                    datasets: [lineDataset]
+        }
+        
+        return annotations;
+    }
+
+// 개선된 차트 생성 함수
+function createTradingChart(data) {
+    console.log("차트 생성 시작");
+    
+    // 차트 캔버스 컨텍스트 가져오기
+    const ctx = document.getElementById('tradingChart').getContext('2d');
+    if (!ctx) {
+        console.error("차트 캔버스를 찾을 수 없습니다");
+        return;
+    }
+    
+    // 데이터 유효성 검사
+    if (!data.chart_data || !Array.isArray(data.chart_data) || data.chart_data.length === 0) {
+        console.error("유효한 차트 데이터가 없습니다");
+        return;
+    }
+    
+    try {
+        // 시간 순서대로 정렬
+        data.chart_data.sort((a, b) => {
+            const dateA = normalizeTimestamp(a.timestamp);
+            const dateB = normalizeTimestamp(b.timestamp);
+            return dateA - dateB;
+        });
+        
+        // 모든 데이터를 명시적으로 숫자로 변환
+        data.chart_data.forEach(item => {
+            item.open = Number(item.open) || 0;
+            item.high = Number(item.high) || 0;
+            item.low = Number(item.low) || 0;
+            item.close = Number(item.close) || 0;
+        });
+        
+        // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
+        let minPrice = Math.min(...data.chart_data.map(item => item.low));
+        let maxPrice = Math.max(...data.chart_data.map(item => item.high));
+        
+        // Y축 범위 설정 (10% 여유)
+        const range = maxPrice - minPrice;
+        const padding = range * 0.1;
+        const yAxisMin = Math.floor(minPrice - padding);
+        const yAxisMax = Math.ceil(maxPrice + padding);
+        
+        console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
+        console.log(`Y축 범위: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
+        
+        // 종가 데이터만 사용하는 깔끔한 라인 차트
+        const lineDataset = {
+            label: '비트코인',
+            data: data.chart_data.map(item => ({
+                x: normalizeTimestamp(item.timestamp),
+                y: item.close,
+                _open: item.open,
+                _high: item.high,
+                _low: item.low,
+                _close: item.close
+            })),
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'rgba(75, 192, 192, 0.5)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1, // 약간의 곡선 효과
+            pointRadius: 0, // 포인트 표시 없음
+            pointHoverRadius: 5, // 마우스 오버 시에만 포인트 표시
+            pointHoverBackgroundColor: 'rgb(75, 192, 192)',
+            pointHoverBorderColor: 'white',
+            pointHoverBorderWidth: 2
+        };
+        
+        // 어노테이션 생성
+        const annotations = generateAnnotations(data);
+        
+        // 차트 생성 옵션
+        const chartConfig = {
+            type: 'line',
+            data: {
+                datasets: [lineDataset]
+            },
+            options: {
+                animation: false, // 애니메이션 끄기 (성능 향상)
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
                 },
-                options: {
-                    animation: false, // 애니메이션 끄기 (성능 향상)
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
                     },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(context) {
-                                    const item = context.raw;
-                                    if (item && item._open !== undefined) {
-                                        return [
-                                            `시가: $${item._open.toFixed(2)}`,
-                                            `고가: $${item._high.toFixed(2)}`,
-                                            `저가: $${item._low.toFixed(2)}`,
-                                            `종가: $${item._close.toFixed(2)}`
-                                        ];
-                                    }
-                                    return context.dataset.label;
-                                },
-                                // 툴팁에 표시되는 시간도 KST로 변환
-                                title: function(context) {
-                                    if (context[0] && context[0].label) {
-                                        // Chart.js의 기본 날짜 형식 파싱
-                                        const date = new Date(context[0].label);
-                                        // UTC 시간에 9시간 추가
-                                        date.setHours(date.getHours() + 9);
-                                        // 원하는 형식으로 포맷팅 (YYYY-MM-DD HH:MM)
-                                        return date.toISOString().replace('T', ' ').substring(0, 16) + ' (KST)';
-                                    }
-                                    return '';
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                const item = context.raw;
+                                if (item && item._open !== undefined) {
+                                    return [
+                                        `시가: $${item._open.toFixed(2)}`,
+                                        `고가: $${item._high.toFixed(2)}`,
+                                        `저가: $${item._low.toFixed(2)}`,
+                                        `종가: $${item._close.toFixed(2)}`
+                                    ];
                                 }
+                                return context.dataset.label;
+                            },
+                            // 툴팁에 표시되는 시간도 KST로 변환
+                            title: function(context) {
+                                if (context[0] && context[0].label) {
+                                    const date = new Date(context[0].label);
+                                    // UTC 시간에 9시간 추가
+                                    date.setHours(date.getHours() + 9);
+                                    // 원하는 형식으로 포맷팅 (YYYY-MM-DD HH:MM)
+                                    return date.toISOString().replace('T', ' ').substring(0, 16) + ' (KST)';
+                                }
+                                return '';
                             }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                    },
+                    annotation: {
+                        annotations: annotations
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'HH:mm'
+                            },
+                            // KST 시간대 표시를 위한 설정
+                            parser: function(utcTime) {
+                                const date = new Date(utcTime);
+                                // UTC 시간에 9시간 추가 (KST)
+                                date.setHours(date.getHours() + 9);
+                                return date;
+                            },
+                            tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
                         },
                         title: {
                             display: true,
-                            text: '비트코인 가격 및 트레이딩 신호 (24시간)'
+                            text: '시간 (KST)'
+                        },
+                        grid: {
+                            display: false
                         }
-                    },    
-                    annotation: {
-                            annotations: {
-                                // position_timeline을 수직선으로 표시
-                                ...generatePositionTimelineAnnotations(data.position_timeline),
-                                
-                                // position_ranges를 배경색 영역으로 표시
-                                ...generatePositionRangeAnnotations(data.position_ranges)
+                    },
+                    y: {
+                        min: yAxisMin,
+                        max: yAxisMax,
+                        title: {
+                            display: true,
+                            text: '가격 (USDT)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toFixed(0);
                             }
                         },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'hour',
-                                displayFormats: {
-                                    hour: 'HH:mm'
-                                },
-                                // KST 시간대 표시를 위한 설정
-                                // Chart.js에서는 직접적인 timezone 설정을 지원하지 않으므로
-                                // 날짜 파싱 시 UTC+9 시간을 적용하는 방식으로 구현
-                                parser: function(utcTime) {
-                                    const date = new Date(utcTime);
-                                    // UTC 시간에 9시간 추가 (KST)
-                                    date.setHours(date.getHours() + 9);
-                                    return date;
-                                },
-                                // 툴팁이나 X축 레이블에 표시될 때 'KST' 접미사 추가
-                                tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
-                            },
-                            title: {
-                                display: true,
-                                text: '시간 (KST)'
-                            },
-                            grid: {
-                                display: false
-                            }
-                        },
-                        y: {
-                            min: yAxisMin,
-                            max: yAxisMax,
-                            title: {
-                                display: true,
-                                text: '가격 (USDT)'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return '$' + value.toFixed(0);
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            }
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
                         }
                     }
                 }
-            };
-            
-            // 차트 생성
-            const chart = new Chart(ctx, chartConfig);
-            
-            return chart;
-        }
+            }
+        };
+        
+        // 차트 생성
+        console.log("차트 렌더링 시작");
+        const chart = new Chart(ctx, chartConfig);
+        console.log("차트 렌더링 완료");
+        
+        return chart;
+    } catch (error) {
+        console.error("차트 생성 중 오류 발생:", error);
+        document.getElementById('tradingChart').innerHTML = 
+            `<div class="p-4 text-red-600">차트 생성 오류: ${error.message}</div>`;
+    }
+}
     // 신호와 가장 가까운 차트 데이터 찾기
     function findClosestPrice(chartData, timestamp) {
         const signalTime = new Date(timestamp).getTime();
