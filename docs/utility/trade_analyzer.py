@@ -100,7 +100,19 @@ class TradeAnalyzer:
                 
                 # 신호와 가장 가까운 차트 데이터 찾기
                 try:
-                    signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    # 이 부분에서 오류 발생 - int 타입의 timestamp에 replace 메서드를 호출
+                    # 타임스탬프 타입 확인하여 처리
+                    if isinstance(timestamp, (int, float)) or (
+                        isinstance(timestamp, str) and timestamp.isdigit()
+                    ):
+                        # 숫자형 타임스탬프는 datetime 객체로 변환
+                        signal_time = datetime.fromtimestamp(int(timestamp) / 1000 
+                                                            if len(str(int(timestamp))) > 10 
+                                                            else int(timestamp))
+                    else:
+                        # 문자열 타임스탬프 처리
+                        signal_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    
                     closest_chart = None
                     min_diff = float('inf')
                     
@@ -127,6 +139,7 @@ class TradeAnalyzer:
                 'position': position,
                 'value': position_value
             })
+        
         
         # 포지션 구간 계산 (배경색 영역을 위해)
         position_ranges = []
