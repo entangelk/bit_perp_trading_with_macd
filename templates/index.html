@@ -221,7 +221,18 @@
                 return null;
             }
         }
-
+        // 타임스탬프 변환 후 시간대 조정 함수
+        function adjustTimestampForKST(timestamp) {
+            if (!timestamp) return null;
+            
+            const date = normalizeTimestamp(timestamp);
+            if (!date) return null;
+            
+            // 9시간 전으로 조정 (UTC+9 보정)
+            const adjustedDate = new Date(date.getTime() - (9 * 60 * 60 * 1000));
+            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (-9시간)`);
+            return adjustedDate;
+        }
         // 차트 생성 함수
         function createTradingChart(data) {
             console.log("차트 생성 시작");
@@ -401,6 +412,7 @@
                 // 포지션 범위 어노테이션 (배경색 영역)
                 const annotations = {};
 
+                // 포지션 범위 처리 부분 수정
                 if (data.position_ranges && Array.isArray(data.position_ranges)) {
                     data.position_ranges.forEach((range, index) => {
                         try {
@@ -410,16 +422,25 @@
                             const bgColor = isShort ? 'rgba(255, 60, 60, 0.1)' : 'rgba(60, 120, 255, 0.1)';
                             const borderColor = isShort ? 'rgba(255, 60, 60, 0.3)' : 'rgba(60, 120, 255, 0.3)';
                             
-                            // 타임스탬프 변환 및 로깅
-                            const start = normalizeTimestamp(range.start);
-                            const end = normalizeTimestamp(range.end);
-                            
                             console.log(`범위 ${range.position} 변환 전:`, {
                                 start: range.start,
                                 end: range.end
                             });
                             
-                            console.log(`범위 ${range.position} 변환 후:`, {
+                            // 타임스탬프 변환 및 시간대 조정 (9시간 전으로)
+                            const normalizedStart = normalizeTimestamp(range.start);
+                            const normalizedEnd = normalizeTimestamp(range.end);
+                            
+                            console.log(`범위 ${range.position} 정규화:`, {
+                                start: normalizedStart ? normalizedStart.toISOString() : null,
+                                end: normalizedEnd ? normalizedEnd.toISOString() : null
+                            });
+                            
+                            // 9시간 시간대 조정 적용
+                            const start = adjustTimestampForKST(range.start);
+                            const end = adjustTimestampForKST(range.end);
+                            
+                            console.log(`범위 ${range.position} 조정 후:`, {
                                 start: start ? start.toISOString() : null,
                                 end: end ? end.toISOString() : null
                             });
@@ -431,17 +452,36 @@
                                 const firstTimestamp = chartData[0].timestamp;
                                 const lastTimestamp = chartData[chartData.length - 1].timestamp;
                                 
-                                // 시간 범위 조정 필요 여부 확인
-                                const needsAdjustment = (start > lastTimestamp || end > lastTimestamp || 
-                                                        start < firstTimestamp || end < firstTimestamp);
+                                const startInRange = start >= firstTimestamp && start <= lastTimestamp;
+                                const endInRange = end >= firstTimestamp && end <= lastTimestamp;
                                 
-                                if (needsAdjustment) {
-                                    console.warn(`범위 ${index}가 차트 범위를 벗어남. 조정 필요`, {
+                                if (!startInRange || !endInRange) {
+                                    console.warn(`범위 ${index}가 차트 범위를 벗어남:`, {
                                         차트범위시작: firstTimestamp.toISOString(),
                                         차트범위끝: lastTimestamp.toISOString(),
                                         범위시작: start.toISOString(),
-                                        범위끝: end.toISOString()
+                                        범위끝: end.toISOString(),
+                                        시작점_범위내: startInRange,
+                                        끝점_범위내: endInRange
                                     });
+                                    
+                                    // 범위가 완전히 벗어난 경우 건너뛰기
+                                    if (!startInRange && !endInRange && 
+                                        (start > lastTimestamp || end < firstTimestamp)) {
+                                        console.log(`범위 ${index} 제외: 차트 범위 완전히 벗어남`);
+                                        return;
+                                    }
+                                    
+                                    // 범위 조정 (범위의 일부만 차트에 표시)
+                                    if (!startInRange) {
+                                        console.log(`범위 ${index} 시작점 조정: ${start.toISOString()} → ${firstTimestamp.toISOString()}`);
+                                        start = new Date(firstTimestamp);
+                                    }
+                                    
+                                    if (!endInRange) {
+                                        console.log(`범위 ${index} 끝점 조정: ${end.toISOString()} → ${lastTimestamp.toISOString()}`);
+                                        end = new Date(lastTimestamp);
+                                    }
                                 }
                             }
                             
