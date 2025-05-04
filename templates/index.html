@@ -405,16 +405,46 @@
                     data.position_ranges.forEach((range, index) => {
                         try {
                             if (!range.position || !range.start || !range.end) return;
-
+                            
                             const isShort = range.position === 'Short';
                             const bgColor = isShort ? 'rgba(255, 60, 60, 0.1)' : 'rgba(60, 120, 255, 0.1)';
                             const borderColor = isShort ? 'rgba(255, 60, 60, 0.3)' : 'rgba(60, 120, 255, 0.3)';
-
+                            
+                            // 타임스탬프 변환 및 로깅
                             const start = normalizeTimestamp(range.start);
                             const end = normalizeTimestamp(range.end);
-
+                            
+                            console.log(`범위 ${range.position} 변환 전:`, {
+                                start: range.start,
+                                end: range.end
+                            });
+                            
+                            console.log(`범위 ${range.position} 변환 후:`, {
+                                start: start ? start.toISOString() : null,
+                                end: end ? end.toISOString() : null
+                            });
+                            
                             if (!start || !end) return;
-
+                            
+                            // 차트 데이터 범위와 비교
+                            if (chartData.length > 0) {
+                                const firstTimestamp = chartData[0].timestamp;
+                                const lastTimestamp = chartData[chartData.length - 1].timestamp;
+                                
+                                // 시간 범위 조정 필요 여부 확인
+                                const needsAdjustment = (start > lastTimestamp || end > lastTimestamp || 
+                                                        start < firstTimestamp || end < firstTimestamp);
+                                
+                                if (needsAdjustment) {
+                                    console.warn(`범위 ${index}가 차트 범위를 벗어남. 조정 필요`, {
+                                        차트범위시작: firstTimestamp.toISOString(),
+                                        차트범위끝: lastTimestamp.toISOString(),
+                                        범위시작: start.toISOString(),
+                                        범위끝: end.toISOString()
+                                    });
+                                }
+                            }
+                            
                             annotations[`range-${index}`] = {
                                 type: 'box',
                                 xMin: start,
@@ -425,6 +455,8 @@
                                 borderColor: borderColor,
                                 borderWidth: 1
                             };
+                            
+                            console.log(`범위 어노테이션 생성 성공: range-${index}`);
                         } catch (e) {
                             console.error('범위 어노테이션 생성 오류:', e, range);
                         }
