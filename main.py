@@ -9,6 +9,7 @@ from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
 from datetime import datetime, timezone, timedelta
 from docs.utility.trade_logger import TradeLogger
+from docs.utility.check_pnl import get_7win_rate
 import time
 import json
 import sys
@@ -34,7 +35,12 @@ TIME_VALUES = {
     '5m': 5,
     '15m': 15
 }
+# Bybit API 키와 시크릿 가져오기
+BYBIT_ACCESS_KEY = os.getenv("BYBIT_ACCESS_KEY")
+BYBIT_SECRET_KEY = os.getenv("BYBIT_SECRET_KEY")
 
+api_key = BYBIT_ACCESS_KEY
+api_secret = BYBIT_SECRET_KEY
 # 전역 변수 수정
 trigger_first_active = False  # 트리거 시그널 선행
 trigger_first_count = 4
@@ -183,7 +189,18 @@ def main():
             
             # 데이터 정합성을 위한 대기
             time.sleep(1.0)  # 1초 대기
+            # 7거래 승률 확인
+            try:
+                get_7win_rate(api_key, api_secret)
+            except Exception as e:
+                # win_rate.json 파일 존재 확인
+                if os.path.exists('win_rate.json'):
+                    pass
+                else:
+                    with open('win_rate.json', 'w') as f:
+                        json.dump({'win_rate': True}, f)
 
+            # 차트 데이터 처리
             df_calculated, STG_CONFIG = process_chart_data(df_rare_chart)
             
 
@@ -210,7 +227,7 @@ def main():
                     return config['is_reverse']
                 return None
 
-            # 사용 예시
+            # 전략 리버싱 체크
             is_reverse = load_config()
 
             if is_reverse and tag:
@@ -218,6 +235,16 @@ def main():
 
                 if reversed_chaek:
                     position = 'Long' if position == 'Short' else 'Short'
+
+            # 승률 리버싱 체크
+            with open('win_rate.json', 'r') as f:
+                win_rate_data = json.load(f)
+            win_rate = win_rate_data.get('win_rate', True)
+            if win_rate == False:
+                if position == 'Long':
+                    position = 'Short'
+                elif position == 'Short':
+                    position = 'Long'
 
 
             # 포지션 상태 확인
