@@ -89,6 +89,16 @@ async def root(request: Request):
     
     # 트레이딩 분석 데이터 가져오기
     trade_analysis = analyzer.get_visualization_data(hours=24)
+
+    # 승률 리버싱 json 데이터 가져오기
+    try:
+        with open('win_rate.json', 'r') as f:
+            win_rate_data = json.load(f)
+    except FileNotFoundError:
+        win_rate_data = {"win_rate": True}  # 기본값 설정
+
+    # 승률 리버싱 데이터
+    win_rate = win_rate_data.get("win_rate", True)
     
     return templates.TemplateResponse(
         "index.html", 
@@ -100,7 +110,8 @@ async def root(request: Request):
             "main_status": main_status,
             "backtest_status": backtest_status,
             "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "trade_analysis_json": json.dumps(trade_analysis)  # 추가된 부분
+            "trade_analysis_json": json.dumps(trade_analysis),  # 추가된 부분
+            "win_rate": win_rate  # 추가된 부분
         }
     )
 
