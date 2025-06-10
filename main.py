@@ -49,6 +49,9 @@ position_first_active = False  # 포지션 신호 선행
 position_first_count = 2  # 2틱으로 수정
 position_save = None
 
+# 승률 리버싱 플래그
+win_reverse_flag = False
+
 trade_logger = TradeLogger()
 
 def get_time_block(dt, interval):
@@ -240,6 +243,11 @@ def main():
             with open('win_rate.json', 'r') as f:
                 win_rate_data = json.load(f)
             win_rate = win_rate_data.get('win_rate', True)
+
+            # 승률 리버싱 플레그 체크
+            if win_reverse_flag:
+                win_rate = True
+
             if win_rate == False:
                 if position == 'Long':
                     position = 'Short'
