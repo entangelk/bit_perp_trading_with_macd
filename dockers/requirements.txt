@@ -1,0 +1,15 @@
+pyarrow
+numpy
+wget
+pymongo
+requests
+pandas
+urllib3
+python-dotenv
+tqdm
+ccxt
+ta
+
+fastapi==0.104.1
+uvicorn==0.23.2
+jinja2==3.1.2
