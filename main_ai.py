@@ -24,6 +24,7 @@ from logger import logger
 
 # AI 시스템 모듈
 from docs.investment_ai.ai_trading_integration import AITradingIntegration
+from docs.investment_ai.data_scheduler import get_data_scheduler, get_data_status
 
 # 설정값
 TRADING_CONFIG = {
@@ -208,6 +209,16 @@ async def main():
         ai_integration = AITradingIntegration(config)
         logger.info("AI 통합 시스템 초기화 완료")
         
+        # 데이터 스케줄러 초기화
+        data_scheduler = get_data_scheduler()
+        logger.info("데이터 스케줄러 초기화 완료")
+        
+        # 데이터 스케줄러 상태 로깅
+        data_status = get_data_status()
+        logger.info(f"데이터 수집 작업: {len(data_status)}개 등록됨")
+        for task_name, info in data_status.items():
+            logger.info(f"  {task_name}: 수집주기 {info['interval_minutes']}분")
+        
         # 메인 트레이딩 루프
         cycle_count = 0
         while True:
@@ -268,6 +279,12 @@ async def main():
                 else:
                     logger.warning(f"AI 사이클 실패: {ai_result.get('error', 'Unknown error')}")
                 
+                # 주기적으로 데이터 스케줄러 상태 로깅 (10사이클마다)
+                if cycle_count % 10 == 0:
+                    data_status = get_data_status()
+                    fresh_data_count = sum(1 for info in data_status.values() if info['cache_age_minutes'] < 30)
+                    logger.info(f"데이터 상태: {fresh_data_count}/{len(data_status)} 신선한 데이터")
+                
                 # 사이클 완료 후 대기
                 remaining_time = max(0, 270 - execution_time)  # 4.5분 - 실행시간
                 if remaining_time > 0:
@@ -308,6 +325,13 @@ async def main():
                     with open('ai_decision_history.json', 'w') as f:
                         json.dump(history, f, indent=2, ensure_ascii=False)
                     logger.info("AI 결정 히스토리 저장 완료")
+                
+                # 데이터 스케줄러 상태 저장
+                final_data_status = get_data_status()
+                with open('data_scheduler_status.json', 'w') as f:
+                    json.dump(final_data_status, f, indent=2, ensure_ascii=False)
+                logger.info("데이터 스케줄러 상태 저장 완료")
+                
             except Exception as e:
                 logger.error(f"종료 정리 작업 중 오류: {e}")
         

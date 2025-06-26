@@ -18,6 +18,13 @@ from docs.get_current import fetch_investment_status
 from docs.current_price import get_current_price
 from docs.making_order import execute_order, close_position, get_position_amount
 
+# 데이터 스케줄러 import
+from docs.investment_ai.data_scheduler import (
+    get_data_scheduler, run_scheduled_data_collection, get_data_status,
+    get_chart_data, get_fear_greed_data, get_news_data, get_macro_data,
+    get_onchain_data, get_institutional_data, get_position_data
+)
+
 logger = logging.getLogger("ai_trading_integration")
 
 class AITradingIntegration:
@@ -92,14 +99,17 @@ class AITradingIntegration:
             }
     
     async def run_all_analyses(self) -> Dict:
-        """모든 AI 분석을 병렬로 실행"""
+        """모든 AI 분석을 병렬로 실행 (스케줄러 사용)"""
         try:
-            logger.info("모든 AI 분석 시작")
+            logger.info("모든 AI 분석 시작 (스케줄러 사용)")
             
-            # 현재 포지션 정보 수집
+            # 예정된 데이터 수집 실행 (15분마다)
+            await run_scheduled_data_collection()
+            
+            # 현재 포지션 정보 수집 (실시간)
             current_position = await self.get_current_position_data()
             
-            # 모든 분석을 병렬로 실행
+            # 모든 분석을 병렬로 실행 (스케줄러에서 캐시된 데이터 사용)
             analysis_tasks = [
                 analyze_position_status(current_position),
                 analyze_market_sentiment(),

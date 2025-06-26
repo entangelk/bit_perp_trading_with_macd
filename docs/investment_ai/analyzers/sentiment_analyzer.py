@@ -434,16 +434,76 @@ class SentimentAnalyzer:
         else:
             return "극도의 공포로 반등 기회 모색"
     
-    async def analyze_market_sentiment(self) -> Dict:
-        """시장 심리 분석 메인 함수"""
+    def _process_cached_fear_greed(self, cached_data: Dict) -> Dict:
+        """스케줄러에서 가져온 캐시된 공포/탐욕 데이터 처리"""
         try:
-            logger.info("시장 심리 분석 시작")
+            if 'data' not in cached_data:
+                return self._get_dummy_fear_greed()
             
-            # 1. 공포/탐욕 지수 수집
-            fear_greed_data = self.get_fear_greed_index()
+            fear_greed_data = []
+            for item in cached_data['data']:
+                fear_greed_data.append({
+                    'value': int(item['value']),
+                    'classification': item['value_classification'],
+                    'timestamp': item['timestamp'],
+                    'date': datetime.fromtimestamp(int(item['timestamp'])).strftime('%Y-%m-%d')
+                })
             
-            # 2. 뉴스 수집
-            recent_news = self.get_crypto_news()
+            # 최신 데이터와 평균 계산
+            latest = fear_greed_data[0]
+            avg_value = sum(item['value'] for item in fear_greed_data) / len(fear_greed_data)
+            
+            # 추세 계산
+            if len(fear_greed_data) >= 7:
+                trend = fear_greed_data[0]['value'] - fear_greed_data[6]['value']
+                trend_direction = 'increasing' if trend > 5 else 'decreasing' if trend < -5 else 'stable'
+            else:
+                trend = 0
+                trend_direction = 'stable'
+            
+            return {
+                'current_value': latest['value'],
+                'current_classification': latest['classification'],
+                'week_average': round(avg_value, 1),
+                'trend_change': trend,
+                'trend_direction': trend_direction,
+                'historical_data': fear_greed_data,
+                'market_sentiment': self._classify_market_sentiment(latest['value']),
+                'cached': True
+            }
+            
+        except Exception as e:
+            logger.error(f"캐시된 공포/탐욕 데이터 처리 오류: {e}")
+            return self._get_dummy_fear_greed()
+    
+    async def analyze_market_sentiment(self) -> Dict:
+        """시장 심리 분석 메인 함수 (스케줄러 사용)"""
+        try:
+            logger.info("시장 심리 분석 시작 (스케줄러 사용)")
+            
+            # 스케줄러에서 캐시된 데이터 사용
+            try:
+                from docs.investment_ai.data_scheduler import get_fear_greed_data, get_news_data
+                
+                # 1. 공포/탐욕 지수 (캐시된 데이터 또는 새로 수집)
+                fg_cached = await get_fear_greed_data()
+                if fg_cached and fg_cached.get('data'):
+                    fear_greed_data = self._process_cached_fear_greed(fg_cached['data'])
+                else:
+                    fear_greed_data = self.get_fear_greed_index()
+                
+                # 2. 뉴스 (캐시된 데이터 또는 새로 수집)
+                news_cached = await get_news_data()
+                if news_cached and news_cached.get('news'):
+                    recent_news = news_cached['news']
+                else:
+                    recent_news = self.get_crypto_news()
+                
+            except Exception as e:
+                logger.warning(f"스케줄러 데이터 사용 실패, 직접 수집: {e}")
+                # 백업: 직접 수집
+                fear_greed_data = self.get_fear_greed_index()
+                recent_news = self.get_crypto_news()
             
             # 3. 뉴스 감정 분석
             news_sentiment = self.analyze_news_sentiment(recent_news)
