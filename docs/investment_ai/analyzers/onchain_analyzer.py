@@ -21,7 +21,8 @@ class OnchainAnalyzer:
     """온체인 데이터 분석 AI - 4단계 (무료 API 기반)"""
     
     def __init__(self):
-        self.client, self.model_name = self.get_model()
+        self.client = None
+        self.model_name = None
         
         # 캐싱 TTL 설정 (초 단위)
         self.cache_ttl = {
@@ -82,14 +83,6 @@ class OnchainAnalyzer:
             # 우선순위에 따라 모델 시도
             for model_name in MODEL_PRIORITY:
                 try:
-                    # 간단한 테스트로 모델 동작 확인
-                    test_response = client.models.generate_content(
-                        model=model_name,
-                        contents="test",
-                        config=types.GenerateContentConfig(
-                            thinking_config=types.ThinkingConfig(thinking_budget=-1)
-                        )
-                    )
                     logger.info(f"온체인 분석 모델 {model_name} 초기화 성공")
                     return client, model_name
                     
@@ -703,6 +696,9 @@ class OnchainAnalyzer:
     
     async def analyze_with_ai(self, onchain_data: Dict) -> Dict:
         """AI 모델을 사용하여 온체인 데이터 종합 분석"""
+        if self.client is None:
+            self.client, self.model_name = self.get_model()
+        
         if self.client is None:
             logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
             return self.rule_based_analysis(onchain_data)

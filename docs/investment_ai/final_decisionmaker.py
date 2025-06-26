@@ -20,7 +20,9 @@ class FinalDecisionMaker:
     """최종 투자 결정 AI - 모든 분석 통합"""
     
     def __init__(self):
-        self.client, self.model_name = self.get_model()
+        # AI 모델 초기화 제거 - 실제 호출 시에만 초기화
+        self.client = None
+        self.model_name = None
         
         # 분석별 기본 가중치 (상황에 따라 동적 조정)
         self.default_weights = {
@@ -51,37 +53,24 @@ class FinalDecisionMaker:
         }
     
     def get_model(self):
-        """AI 모델을 초기화하는 함수"""
+        """AI 모델을 필요할 때만 초기화"""
         if not API_KEY:
-            logger.warning("API 키가 설정되지 않았습니다. 더미 분석기가 사용됩니다.")
             return None, None
             
         try:
             client = genai.Client(api_key=API_KEY)
             
-            # 우선순위에 따라 모델 시도
             for model_name in MODEL_PRIORITY:
                 try:
-                    # 간단한 테스트로 모델 동작 확인
-                    test_response = client.models.generate_content(
-                        model=model_name,
-                        contents="test",
-                        config=types.GenerateContentConfig(
-                            thinking_config=types.ThinkingConfig(thinking_budget=0)
-                        )
-                    )
-                    logger.info(f"최종 결정 모델 {model_name} 초기화 성공")
                     return client, model_name
-                    
                 except Exception as e:
                     logger.warning(f"최종 결정 모델 {model_name} 초기화 실패: {e}")
                     continue
             
-            logger.error("최종 결정용 모든 모델 초기화 실패")
             return None, None
             
         except Exception as e:
-            logger.error(f"최종 결정 모델 초기화 중 전체 오류: {e}")
+            logger.error(f"최종 결정 모델 초기화 중 오류: {e}")
             return None, None
     
     def validate_analysis_results(self, analysis_results: Dict) -> Dict:
@@ -548,6 +537,10 @@ class FinalDecisionMaker:
     
     async def analyze_with_ai(self, integrated_data: Dict) -> Dict:
         """AI 모델을 사용하여 최종 투자 결정"""
+        # 필요할 때만 모델 초기화
+        if self.client is None:
+            self.client, self.model_name = self.get_model()
+        
         if self.client is None:
             logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
             return self.rule_based_final_decision(integrated_data)

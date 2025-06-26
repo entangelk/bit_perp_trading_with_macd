@@ -22,7 +22,9 @@ class SentimentAnalyzer:
     """시장 심리 분석 AI - 1단계 (뉴스 + 공포/탐욕 지수)"""
     
     def __init__(self):
-        self.client, self.model_name = self.get_model()
+        # AI 모델 초기화 제거 - 실제 호출 시에만 초기화
+        self.client = None
+        self.model_name = None
         
         # 뉴스 소스 설정
         self.news_sources = {
@@ -34,40 +36,6 @@ class SentimentAnalyzer:
         
         # Fear & Greed Index API
         self.fear_greed_api = "https://api.alternative.me/fng/"
-    
-    def get_model(self):
-        """AI 모델을 초기화하는 함수"""
-        if not API_KEY:
-            logger.warning("API 키가 설정되지 않았습니다. 더미 분석기가 사용됩니다.")
-            return None, None
-            
-        try:
-            client = genai.Client(api_key=API_KEY)
-            
-            # 우선순위에 따라 모델 시도
-            for model_name in MODEL_PRIORITY:
-                try:
-                    # 간단한 테스트로 모델 동작 확인
-                    test_response = client.models.generate_content(
-                        model=model_name,
-                        contents="test",
-                        config=types.GenerateContentConfig(
-                            thinking_config=types.ThinkingConfig(thinking_budget=-1)
-                        )
-                    )
-                    logger.info(f"시장 심리 분석 모델 {model_name} 초기화 성공")
-                    return client, model_name
-                    
-                except Exception as e:
-                    logger.warning(f"시장 심리 분석 모델 {model_name} 초기화 실패: {e}")
-                    continue
-            
-            logger.error("시장 심리 분석용 모든 모델 초기화 실패")
-            return None, None
-            
-        except Exception as e:
-            logger.error(f"시장 심리 분석 모델 초기화 중 전체 오류: {e}")
-            return None, None
     
     def get_fear_greed_index(self, days: int = 7) -> Dict:
         """공포/탐욕 지수 수집"""
@@ -291,8 +259,33 @@ class SentimentAnalyzer:
                 'error': str(e)
             }
     
+    def get_model(self):
+        """AI 모델을 필요할 때만 초기화"""
+        if not API_KEY:
+            return None, None
+            
+        try:
+            client = genai.Client(api_key=API_KEY)
+            
+            for model_name in MODEL_PRIORITY:
+                try:
+                    return client, model_name
+                except Exception as e:
+                    logger.warning(f"시장 심리 분석 모델 {model_name} 초기화 실패: {e}")
+                    continue
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"시장 심리 분석 모델 초기화 중 오류: {e}")
+            return None, None
+
     async def analyze_with_ai(self, sentiment_data: Dict) -> Dict:
         """AI 모델을 사용하여 시장 심리 종합 분석"""
+        # 필요할 때만 모델 초기화
+        if self.client is None:
+            self.client, self.model_name = self.get_model()
+        
         if self.client is None:
             logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
             return self.rule_based_analysis(sentiment_data)
