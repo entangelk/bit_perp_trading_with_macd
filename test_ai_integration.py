@@ -17,7 +17,7 @@ from docs.investment_ai.ai_trading_integration import AITradingIntegration
 from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
 from docs.investment_ai.analyzers.sentiment_analyzer import analyze_market_sentiment
 from docs.investment_ai.analyzers.technical_analyzer import analyze_technical_indicators
-from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_environment
+from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_economics
 from docs.investment_ai.analyzers.onchain_analyzer import analyze_onchain_data
 from docs.investment_ai.analyzers.institution_analyzer import analyze_institutional_flow
 from docs.investment_ai.final_decisionmaker import make_final_investment_decision
@@ -44,7 +44,7 @@ class AIIntegrationTester:
             ("Position Analyzer", analyze_position_status),
             ("Sentiment Analyzer", analyze_market_sentiment),
             ("Technical Analyzer", lambda: analyze_technical_indicators('BTCUSDT', '15m', 300)),
-            ("Macro Analyzer", analyze_macro_environment),
+            ("Macro Analyzer", analyze_macro_economics),
             ("Onchain Analyzer", analyze_onchain_data),
             ("Institution Analyzer", analyze_institutional_flow)
         ]
