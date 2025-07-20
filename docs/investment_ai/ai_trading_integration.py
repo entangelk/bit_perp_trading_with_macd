@@ -22,7 +22,9 @@ from docs.making_order import execute_order, close_position, get_position_amount
 from docs.investment_ai.data_scheduler import (
     get_data_scheduler, run_scheduled_data_collection, get_data_status,
     get_chart_data, get_fear_greed_data, get_news_data, get_macro_data,
-    get_onchain_data, get_institutional_data, get_position_data
+    get_onchain_data, get_institutional_data, get_position_data,
+    get_ai_sentiment_analysis, get_ai_technical_analysis, get_ai_macro_analysis,
+    get_ai_onchain_analysis, get_ai_institutional_analysis
 )
 
 logger = logging.getLogger("ai_trading_integration")
@@ -99,56 +101,121 @@ class AITradingIntegration:
             }
     
     async def run_all_analyses(self) -> Dict:
-        """모든 AI 분석을 병렬로 실행 (스케줄러 사용)"""
+        """모든 AI 분석 결과 조회 (캐시 우선, 필요시 실행)"""
         try:
-            logger.info("모든 AI 분석 시작 (스케줄러 사용)")
+            logger.info("AI 분석 결과 조회 시작 (캐시 우선)")
             
-            # 예정된 데이터 수집 실행 (15분마다)
+            # 예정된 데이터 수집 및 AI 분석 실행 (스케줄링된 작업)
             await run_scheduled_data_collection()
             
-            # 현재 포지션 정보 수집 (실시간)
+            # 현재 포지션 정보 수집 (실시간, 항상 최신)
             current_position = await self.get_current_position_data()
             
-            # 모든 분석을 병렬로 실행 (스케줄러에서 캐시된 데이터 사용)
-            analysis_tasks = [
-                analyze_position_status(current_position),
-                analyze_market_sentiment(),
-                analyze_technical_indicators(self.symbol, self.timeframe, 300),
-                analyze_macro_economics(),
-                analyze_onchain_data(),
-                analyze_institutional_flow()
+            # 포지션 분석은 실시간 데이터를 사용하므로 즉시 실행
+            position_analysis = await analyze_position_status(current_position)
+            
+            # 캐시된 AI 분석 결과들을 병렬로 조회
+            cached_analysis_tasks = [
+                get_ai_sentiment_analysis(),
+                get_ai_technical_analysis(), 
+                get_ai_macro_analysis(),
+                get_ai_onchain_analysis(),
+                get_ai_institutional_analysis()
             ]
             
-            analysis_names = [
-                'position_analysis',
-                'sentiment_analysis', 
-                'technical_analysis',
+            cached_analysis_names = [
+                'sentiment_analysis',
+                'technical_analysis', 
                 'macro_analysis',
                 'onchain_analysis',
                 'institutional_analysis'
             ]
             
-            # 병렬 실행
-            results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+            # 병렬로 캐시된 결과 조회
+            cached_results = await asyncio.gather(*cached_analysis_tasks, return_exceptions=True)
             
             # 결과 정리
-            all_analysis_results = {'current_position': current_position}
+            all_analysis_results = {
+                'current_position': current_position,
+                'position_analysis': position_analysis
+            }
             
-            for name, result in zip(analysis_names, results):
-                if isinstance(result, Exception):
-                    logger.error(f"{name} 분석 중 오류: {result}")
+            # 캐시된 분석 결과 처리
+            fresh_analysis_needed = []
+            for name, cached_result in zip(cached_analysis_names, cached_results):
+                if isinstance(cached_result, Exception):
+                    logger.error(f"{name} 캐시 조회 중 오류: {cached_result}")
+                    fresh_analysis_needed.append(name)
                     all_analysis_results[name] = {
                         'success': False,
-                        'error': str(result)
+                        'error': f'캐시 조회 실패: {str(cached_result)}',
+                        'fallback_needed': True
+                    }
+                elif cached_result is None:
+                    logger.warning(f"{name} 캐시된 결과 없음, 실시간 분석 필요")
+                    fresh_analysis_needed.append(name)
+                    all_analysis_results[name] = {
+                        'success': False,
+                        'error': '캐시된 분석 결과 없음',
+                        'fallback_needed': True
                     }
                 else:
-                    all_analysis_results[name] = result
+                    # 캐시된 분석 결과에서 실제 analysis_result 추출
+                    if isinstance(cached_result, dict) and 'analysis_result' in cached_result:
+                        all_analysis_results[name] = cached_result['analysis_result']
+                        logger.debug(f"{name} 캐시된 결과 사용 (생성시간: {cached_result.get('analysis_timestamp', 'unknown')})")
+                    else:
+                        all_analysis_results[name] = cached_result
+                        logger.debug(f"{name} 캐시된 결과 사용")
             
-            logger.info("모든 AI 분석 완료")
+            # 캐시 미스된 분석들을 실시간으로 실행 (fallback)
+            if fresh_analysis_needed:
+                logger.info(f"실시간 분석 실행 필요: {fresh_analysis_needed}")
+                
+                fallback_tasks = []
+                fallback_task_names = []
+                
+                for missing_analysis in fresh_analysis_needed:
+                    if missing_analysis == 'sentiment_analysis':
+                        fallback_tasks.append(analyze_market_sentiment())
+                        fallback_task_names.append('sentiment_analysis')
+                    elif missing_analysis == 'technical_analysis':
+                        fallback_tasks.append(analyze_technical_indicators(self.symbol, self.timeframe, 300))
+                        fallback_task_names.append('technical_analysis')
+                    elif missing_analysis == 'macro_analysis':
+                        fallback_tasks.append(analyze_macro_economics())
+                        fallback_task_names.append('macro_analysis')
+                    elif missing_analysis == 'onchain_analysis':
+                        fallback_tasks.append(analyze_onchain_data())
+                        fallback_task_names.append('onchain_analysis')
+                    elif missing_analysis == 'institutional_analysis':
+                        fallback_tasks.append(analyze_institutional_flow())
+                        fallback_task_names.append('institutional_analysis')
+                
+                # 실시간 분석 실행
+                if fallback_tasks:
+                    fallback_results = await asyncio.gather(*fallback_tasks, return_exceptions=True)
+                    
+                    for task_name, result in zip(fallback_task_names, fallback_results):
+                        if isinstance(result, Exception):
+                            logger.error(f"{task_name} 실시간 분석 실패: {result}")
+                            all_analysis_results[task_name] = {
+                                'success': False,
+                                'error': f'실시간 분석 실패: {str(result)}',
+                                'used_fallback': True
+                            }
+                        else:
+                            all_analysis_results[task_name] = result
+                            logger.info(f"{task_name} 실시간 분석 완료 (fallback)")
+            
+            # 최종 통계
+            cached_count = len(cached_analysis_names) - len(fresh_analysis_needed)
+            logger.info(f"AI 분석 결과 조회 완료 - 캐시 사용: {cached_count}개, 실시간 실행: {len(fresh_analysis_needed)}개")
+            
             return all_analysis_results
             
         except Exception as e:
-            logger.error(f"AI 분석 실행 중 오류: {e}")
+            logger.error(f"AI 분석 결과 조회 중 오류: {e}")
             return {
                 'error': str(e),
                 'current_position': await self.get_current_position_data()

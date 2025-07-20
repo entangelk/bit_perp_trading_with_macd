@@ -20,13 +20,12 @@ templates = Jinja2Templates(directory="/app/trading_bot/templates")
 # 로그 파일 경로 설정
 LOG_DIR = "/app/trading_bot"  # 올바른 경로
 LOG_FILES = {
-    "trading": "trading_bot.log",
-    "backtest": "strategy_backtest.log"
+    "trading": "trading_bot.log"
 }
 
 # 모니터링할 파일 설정
 MONITOR_FILES = {
-    "main": "main.py",    # 트레이딩 봇
+    "main": "main_ai_new.py",    # AI 트레이딩 봇
     "backtest": "back_test.py"  # 백테스트 
 }
 
@@ -71,8 +70,10 @@ def check_process_status(script_name):
     return {'running': False}
 
 from docs.utility.trade_analyzer import TradeAnalyzer
+from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status
 
-analyzer = TradeAnalyzer()
+# 15분 차트 데이터를 사용하도록 초기화
+analyzer = TradeAnalyzer(collection_name="chart_15m")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -85,7 +86,14 @@ async def root(request: Request):
     
     # 프로세스 상태 확인
     main_status = check_process_status(MONITOR_FILES["main"])
-    backtest_status = check_process_status(MONITOR_FILES["backtest"])
+    
+    # AI 시스템 상태 확인
+    try:
+        ai_data_status = get_data_status()
+        ai_recovery_status = get_recovery_status()
+    except Exception as e:
+        ai_data_status = {}
+        ai_recovery_status = {'disabled_tasks': [], 'recovery_timestamps': {}}
     
     # 트레이딩 분석 데이터 가져오기
     trade_analysis = analyzer.get_visualization_data(hours=24)
@@ -108,10 +116,11 @@ async def root(request: Request):
             "disk_info": disk_info,
             "log_disk_info": log_disk_info,
             "main_status": main_status,
-            "backtest_status": backtest_status,
+            "ai_data_status": ai_data_status,
+            "ai_recovery_status": ai_recovery_status,
             "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "trade_analysis_json": json.dumps(trade_analysis),  # 추가된 부분
-            "win_rate": win_rate  # 추가된 부분
+            "trade_analysis_json": json.dumps(trade_analysis),
+            "win_rate": win_rate
         }
     )
 
@@ -243,81 +252,3 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
 import json
 
 
-@app.get("/strategy-config", response_class=HTMLResponse)
-async def view_strategy_config(request: Request):
-    """트레이딩 전략 설정을 표시합니다."""
-    try:
-        # 설정 파일 경로
-        config_path = '/app/trading_bot/stg_config.json'
-        enable_config_path = '/app/trading_bot/STRATEGY_ENABLE.json'
-        
-        # 디스크 용량 정보 가져오기
-        disk_info = get_disk_usage()
-        log_disk_info = get_disk_usage(LOG_DIR)
-        
-        # 프로세스 상태 확인
-        main_status = check_process_status(MONITOR_FILES["main"])
-        backtest_status = check_process_status(MONITOR_FILES["backtest"])
-        
-        # 설정 파일 존재 여부 확인
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r') as f:
-                    stg_config = json.load(f)
-                
-                # 파일 정보 (마지막 수정 시간)
-                file_stat = os.stat(config_path)
-                config_updated_at = datetime.fromtimestamp(file_stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-                
-                # 전략 활성화 설정 파일 불러오기
-                strategy_enable = {}
-                if os.path.exists(enable_config_path):
-                    try:
-                        with open(enable_config_path, 'r') as f:
-                            strategy_enable = json.load(f)
-                    except json.JSONDecodeError:
-                        # 파일 형식 오류가 있더라도 계속 진행
-                        strategy_enable = {"error": "활성화 설정 파일 형식이 올바르지 않습니다."}
-                
-                return templates.TemplateResponse(
-                    "strategy_config.html", 
-                    {
-                        "request": request,
-                        "stg_config": stg_config,
-                        "strategy_enable": strategy_enable,
-                        "config_updated_at": config_updated_at,
-                        "disk_info": disk_info,
-                        "log_disk_info": log_disk_info,
-                        "main_status": main_status,
-                        "backtest_status": backtest_status,
-                        "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                )
-            except json.JSONDecodeError:
-                return templates.TemplateResponse(
-                    "strategy_config.html", 
-                    {
-                        "request": request,
-                        "error": "설정 파일 형식이 올바르지 않습니다.",
-                        "disk_info": disk_info,
-                        "log_disk_info": log_disk_info,
-                        "main_status": main_status,
-                        "backtest_status": backtest_status,
-                        "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                )
-        else:
-            return templates.TemplateResponse(
-                "strategy_config.html", 
-                {
-                    "request": request,
-                    "error": "전략 설정 파일이 아직 생성되지 않았습니다. back_test.py가 실행 중인지 확인하세요.",
-                    "disk_info": disk_info,
-                    "log_disk_info": log_disk_info,
-                    "main_status": main_status,
-                    "backtest_status": backtest_status,
-                    "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-            )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"전략 설정 페이지 오류: {str(e)}")

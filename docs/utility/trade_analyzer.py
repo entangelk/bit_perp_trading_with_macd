@@ -5,12 +5,15 @@ from pymongo import MongoClient
 from pathlib import Path
 
 class TradeAnalyzer:
-    def __init__(self, mongo_uri="mongodb://mongodb:27017", db_name="bitcoin", collection_name="chart_5m", logs_dir="logs"):
+    def __init__(self, mongo_uri="mongodb://mongodb:27017", db_name="bitcoin", collection_name="chart_15m", logs_dir="logs"):
         self.client = MongoClient(mongo_uri)
         self.db = self.client[db_name]
         self.collection = self.db[collection_name]
         self.logs_dir = Path(logs_dir)
         self.logs_file = self.logs_dir / "snapshots_daily.json"
+        
+        # 시간 간격 설정 (15분 = 900초)
+        self.time_threshold = 900  # 15분 간격에 맞춘 임계값
         
     def get_chart_data(self, hours=24):
         """MongoDB에서 차트 데이터 가져오기"""
@@ -138,7 +141,7 @@ class TradeAnalyzer:
                             min_diff = diff
                             closest_chart = chart_item
                     
-                    if closest_chart and min_diff <= 300:  # 5분 이내
+                    if closest_chart and min_diff <= self.time_threshold:  # 15분 이내
                         strategy_signals[tag].append({
                             'timestamp': timestamp,
                             'position': position,

@@ -32,8 +32,8 @@ TRADING_CONFIG = {
     'leverage': 5,
     'usdt_amount': 0.3,  # 자산 대비 비율
     'set_timevalue': '15m',  # AI 분석에 최적화된 15분봉
-    'take_profit': 400,
-    'stop_loss': 400
+    'take_profit': 800,
+    'stop_loss': 800
 }
 
 TIME_VALUES = {

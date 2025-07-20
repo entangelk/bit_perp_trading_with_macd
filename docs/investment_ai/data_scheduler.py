@@ -25,6 +25,9 @@ class DataTask:
     is_running: bool = False
     error_count: int = 0
     max_errors: int = 3
+    last_error_time: Optional[datetime] = None  # 마지막 에러 발생 시간
+    auto_recovery_enabled: bool = True  # 자동 복구 활성화
+    recovery_interval_hours: int = 2  # 복구 시도 간격 (시간)
 
 class DataScheduler:
     """데이터 수집 스케줄러"""
@@ -119,6 +122,48 @@ class DataScheduler:
             interval_minutes=0,  # 항상 실시간
             cache_duration_minutes=0  # 캐시 없음
         )
+        
+        # ========= AI 분석 결과 작업들 =========
+        
+        # 8. 시장 감정 AI 분석 - 30분마다
+        self.register_task(
+            name="ai_sentiment_analysis",
+            func=self._collect_ai_sentiment_analysis,
+            interval_minutes=30,
+            cache_duration_minutes=25  # 25분 캐시
+        )
+        
+        # 9. 기술적 분석 AI 분석 - 15분마다 (메인 주기와 동일)
+        self.register_task(
+            name="ai_technical_analysis",
+            func=self._collect_ai_technical_analysis,
+            interval_minutes=15,
+            cache_duration_minutes=10  # 10분 캐시
+        )
+        
+        # 10. 거시경제 AI 분석 - 6시간마다
+        self.register_task(
+            name="ai_macro_analysis",
+            func=self._collect_ai_macro_analysis,
+            interval_minutes=360,  # 6시간
+            cache_duration_minutes=300  # 5시간 캐시
+        )
+        
+        # 11. 온체인 AI 분석 - 1시간마다
+        self.register_task(
+            name="ai_onchain_analysis",
+            func=self._collect_ai_onchain_analysis,
+            interval_minutes=60,
+            cache_duration_minutes=50  # 50분 캐시
+        )
+        
+        # 12. 기관투자 AI 분석 - 2시간마다
+        self.register_task(
+            name="ai_institutional_analysis",
+            func=self._collect_ai_institutional_analysis,
+            interval_minutes=120,
+            cache_duration_minutes=100  # 100분 캐시
+        )
     
     def register_task(self, name: str, func: Callable, interval_minutes: int, 
                      cache_duration_minutes: int = 0):
@@ -195,12 +240,14 @@ class DataScheduler:
                 logger.debug(f"데이터 수집 완료: {task.name} ({duration:.2f}초)")
             else:
                 task.error_count += 1
+                task.last_error_time = datetime.now(timezone.utc)
                 logger.warning(f"데이터 수집 실패: {task.name} (오류 {task.error_count}/{task.max_errors})")
             
             return result
             
         except Exception as e:
             task.error_count += 1
+            task.last_error_time = datetime.now(timezone.utc)
             logger.error(f"데이터 수집 중 오류: {task.name} - {str(e)}")
             return None
         finally:
@@ -214,10 +261,35 @@ class DataScheduler:
         
         task = self.tasks[task_name]
         
-        # 에러가 너무 많으면 스킵
+        # 에러가 너무 많으면 스킵 (AI 분석 작업에 대해서는 더 엄격하게 처리)
         if task.error_count >= task.max_errors:
-            logger.warning(f"데이터 작업 스킵 (최대 오류 횟수 초과): {task_name}")
-            return self.get_cached_data(task_name)  # 마지막 성공 데이터라도 반환
+            # 자동 복구 시도
+            if self._should_attempt_auto_recovery(task):
+                logger.info(f"자동 복구 시도: {task_name} (에러 후 {self._get_hours_since_last_error(task):.1f}시간 경과)")
+                task.error_count = max(0, task.error_count - 1)  # 에러 카운트 1 감소
+                task.last_error_time = datetime.now(timezone.utc)  # 복구 시도 시간 기록
+                
+                # 복구 시도 후 다시 실행 가능하므로 계속 진행
+            else:
+                if task_name.startswith('ai_'):
+                    hours_since_error = self._get_hours_since_last_error(task)
+                    logger.warning(f"AI 분석 작업 비활성화 (연속 {task.error_count}회 실패): {task_name} - 다음 자동 복구까지 {task.recovery_interval_hours - hours_since_error:.1f}시간")
+                    # AI 분석 실패 시 실패 정보를 포함한 결과 반환
+                    return {
+                        'analysis_result': {
+                            'success': False,
+                            'skip_reason': 'analyzer_disabled',
+                            'error': f'연속 {task.error_count}회 실패로 분석기 비활성화',
+                            'error_count': task.error_count,
+                            'max_errors': task.max_errors,
+                            'next_recovery_in_hours': task.recovery_interval_hours - hours_since_error
+                        },
+                        'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                        'disabled': True
+                    }
+                else:
+                    logger.warning(f"데이터 작업 스킵 (최대 오류 횟수 초과): {task_name}")
+                    return self.get_cached_data(task_name)  # 마지막 성공 데이터라도 반환
         
         # 캐시된 데이터 확인
         cached_data = self.get_cached_data(task_name)
@@ -236,9 +308,17 @@ class DataScheduler:
         logger.info("예정된 데이터 수집 작업 실행")
         
         tasks_to_run = []
+        disabled_tasks = []
+        
         for task_name, task in self.tasks.items():
-            if self.should_run_task(task) and task.interval_minutes > 0:
-                tasks_to_run.append((task_name, task))
+            if task.interval_minutes > 0:  # 스케줄링된 작업만
+                if task.error_count >= task.max_errors:
+                    disabled_tasks.append(task_name)
+                elif self.should_run_task(task):
+                    tasks_to_run.append((task_name, task))
+        
+        if disabled_tasks:
+            logger.warning(f"비활성화된 작업들 (최대 오류 초과): {disabled_tasks}")
         
         if not tasks_to_run:
             logger.debug("실행할 예정 작업 없음")
@@ -291,16 +371,108 @@ class DataScheduler:
                 except Exception as e:
                     logger.error(f"캐시 상태 확인 오류: {e}")
             
+            # 복구 정보 계산
+            hours_since_error = self._get_hours_since_last_error(task)
+            is_disabled = task.error_count >= task.max_errors
+            can_auto_recover = self._should_attempt_auto_recovery(task)
+            
             status[task_name] = {
                 'interval_minutes': task.interval_minutes,
                 'last_run': task.last_run.isoformat() if task.last_run else None,
                 'has_cache': has_cache,
                 'is_running': task.is_running,
                 'error_count': task.error_count,
-                'cache_age_minutes': cache_age_minutes
+                'max_errors': task.max_errors,
+                'is_disabled': is_disabled,
+                'cache_age_minutes': cache_age_minutes,
+                'auto_recovery': {
+                    'enabled': task.auto_recovery_enabled,
+                    'last_error_time': task.last_error_time.isoformat() if task.last_error_time else None,
+                    'hours_since_error': round(hours_since_error, 1),
+                    'recovery_interval_hours': task.recovery_interval_hours,
+                    'can_recover_now': can_auto_recover,
+                    'next_recovery_in_hours': max(0, task.recovery_interval_hours - hours_since_error) if is_disabled else 0
+                }
             }
         
         return status
+    
+    def reset_task_errors(self, task_name: str) -> bool:
+        """특정 작업의 에러 카운트 리셋 (수동 복구용)"""
+        if task_name in self.tasks:
+            old_count = self.tasks[task_name].error_count
+            self.tasks[task_name].error_count = 0
+            logger.info(f"작업 에러 카운트 리셋: {task_name} ({old_count} → 0)")
+            return True
+        return False
+    
+    def reset_all_errors(self) -> int:
+        """모든 작업의 에러 카운트 리셋"""
+        reset_count = 0
+        for task_name, task in self.tasks.items():
+            if task.error_count > 0:
+                task.error_count = 0
+                reset_count += 1
+        logger.info(f"모든 작업 에러 카운트 리셋: {reset_count}개 작업")
+        return reset_count
+    
+    def _should_attempt_auto_recovery(self, task: DataTask) -> bool:
+        """자동 복구 시도 여부 판단"""
+        if not task.auto_recovery_enabled:
+            return False
+        
+        if task.last_error_time is None:
+            return False
+        
+        hours_since_error = self._get_hours_since_last_error(task)
+        return hours_since_error >= task.recovery_interval_hours
+    
+    def _get_hours_since_last_error(self, task: DataTask) -> float:
+        """마지막 에러 이후 경과 시간 (시간 단위)"""
+        if task.last_error_time is None:
+            return 0
+        
+        time_diff = datetime.now(timezone.utc) - task.last_error_time
+        return time_diff.total_seconds() / 3600
+    
+    def get_recovery_status(self) -> Dict:
+        """자동 복구 상태 확인"""
+        recovery_info = {
+            'disabled_tasks': [],
+            'recovering_tasks': [],
+            'healthy_tasks': [],
+            'next_recovery_times': {}
+        }
+        
+        for task_name, task in self.tasks.items():
+            if task.error_count >= task.max_errors:
+                hours_since_error = self._get_hours_since_last_error(task)
+                time_to_recovery = max(0, task.recovery_interval_hours - hours_since_error)
+                
+                if time_to_recovery <= 0:
+                    recovery_info['recovering_tasks'].append(task_name)
+                else:
+                    recovery_info['disabled_tasks'].append(task_name)
+                    recovery_info['next_recovery_times'][task_name] = time_to_recovery
+            else:
+                recovery_info['healthy_tasks'].append(task_name)
+        
+        return recovery_info
+    
+    def force_recovery_attempt(self, task_name: str) -> bool:
+        """특정 작업의 강제 복구 시도"""
+        if task_name not in self.tasks:
+            return False
+        
+        task = self.tasks[task_name]
+        if task.error_count >= task.max_errors:
+            old_count = task.error_count
+            task.error_count = max(0, task.error_count - 2)  # 강제 복구는 2 감소
+            task.last_error_time = datetime.now(timezone.utc)
+            logger.info(f"강제 복구 시도: {task_name} (에러 카운트: {old_count} → {task.error_count})")
+            return True
+        
+        return False
     
     # ============= 데이터 수집 함수들 =============
     
@@ -427,6 +599,352 @@ class DataScheduler:
         except Exception as e:
             logger.error(f"포지션 데이터 수집 오류: {e}")
         return None
+    
+    # ============= AI 분석 결과 수집 함수들 =============
+    
+    async def _collect_ai_sentiment_analysis(self):
+        """시장 감정 AI 분석 수집 및 저장"""
+        try:
+            from docs.investment_ai.analyzers.sentiment_analyzer import analyze_market_sentiment
+            
+            # 원시 데이터 확인 (뉴스, 공포/탐욕 지수)
+            news_data = self.get_cached_data("crypto_news")
+            fear_greed_data = self.get_cached_data("fear_greed_index")
+            
+            # 최소 데이터 요구사항 확인
+            available_data_sources = 0
+            if news_data:
+                available_data_sources += 1
+            if fear_greed_data:
+                available_data_sources += 1
+            
+            if available_data_sources == 0:
+                logger.warning("감정 분석: 모든 원시 데이터 소스 실패 - AI 분석 스킵")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'insufficient_raw_data',
+                        'error': '모든 원시 데이터 소스 실패 (뉴스, 공포/탐욕 지수)'
+                    },
+                    'raw_data_used': {
+                        'has_news': False,
+                        'has_fear_greed': False
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'skipped': True
+                }
+            
+            # 데이터 품질 확인
+            data_quality_issues = []
+            if not news_data:
+                data_quality_issues.append("뉴스 데이터 없음")
+            if not fear_greed_data:
+                data_quality_issues.append("공포/탐욕 지수 없음")
+            
+            # AI 분석 실행 (최소 1개 데이터 소스 있을 때만)
+            logger.info(f"감정 분석 실행: {available_data_sources}개 데이터 소스 사용")
+            analysis_result = await analyze_market_sentiment()
+            
+            if analysis_result and analysis_result.get('success', False):
+                return {
+                    'analysis_result': analysis_result,
+                    'raw_data_used': {
+                        'has_news': news_data is not None,
+                        'has_fear_greed': fear_greed_data is not None,
+                        'available_sources': available_data_sources,
+                        'quality_issues': data_quality_issues
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'data_freshness': {
+                        'news_age_minutes': self._get_data_age_minutes("crypto_news"),
+                        'fear_greed_age_minutes': self._get_data_age_minutes("fear_greed_index")
+                    }
+                }
+            else:
+                logger.error("감정 분석 AI 호출 실패")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'ai_analysis_failed',
+                        'error': 'AI 분석 실행 실패'
+                    },
+                    'raw_data_used': {
+                        'has_news': news_data is not None,
+                        'has_fear_greed': fear_greed_data is not None
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"AI 감정 분석 수집 오류: {e}")
+            return {
+                'analysis_result': {
+                    'success': False,
+                    'skip_reason': 'exception',
+                    'error': f'분석 중 예외 발생: {str(e)}'
+                },
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'failed': True
+            }
+    
+    async def _collect_ai_technical_analysis(self):
+        """기술적 분석 AI 분석 수집 및 저장"""
+        try:
+            from docs.investment_ai.analyzers.technical_analyzer import analyze_technical_indicators
+            
+            # 차트 데이터 확인 (필수)
+            chart_data = self.get_cached_data("chart_data")
+            if not chart_data:
+                logger.warning("기술적 분석: 차트 데이터 없음 - AI 분석 스킵")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'insufficient_raw_data',
+                        'error': '차트 데이터 없음 - 기술적 분석 불가'
+                    },
+                    'raw_data_used': {
+                        'has_chart': False
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'skipped': True
+                }
+            
+            # 차트 데이터 품질 확인
+            chart_age = self._get_data_age_minutes("chart_data")
+            if chart_age > 30:  # 30분 이상 오래된 데이터
+                logger.warning(f"기술적 분석: 차트 데이터가 {chart_age:.1f}분 전 데이터임")
+            
+            # AI 분석 실행
+            logger.info("기술적 분석 실행: 차트 데이터 사용")
+            analysis_result = await analyze_technical_indicators('BTCUSDT', '15m', 300)
+            
+            if analysis_result and analysis_result.get('success', False):
+                return {
+                    'analysis_result': analysis_result,
+                    'raw_data_used': {
+                        'has_chart': True,
+                        'chart_quality': 'fresh' if chart_age <= 30 else 'stale'
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'data_freshness': {
+                        'chart_age_minutes': chart_age
+                    }
+                }
+            else:
+                logger.error("기술적 분석 AI 호출 실패")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'ai_analysis_failed',
+                        'error': 'AI 분석 실행 실패'
+                    },
+                    'raw_data_used': {
+                        'has_chart': True
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"AI 기술적 분석 수집 오류: {e}")
+            return {
+                'analysis_result': {
+                    'success': False,
+                    'skip_reason': 'exception',
+                    'error': f'분석 중 예외 발생: {str(e)}'
+                },
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'failed': True
+            }
+    
+    async def _collect_ai_macro_analysis(self):
+        """거시경제 AI 분석 수집 및 저장"""
+        try:
+            from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_economics
+            
+            # 거시경제 데이터 확인 (필수)
+            macro_data = self.get_cached_data("macro_economic")
+            if not macro_data:
+                logger.warning("거시경제 분석: 데이터 없음 - AI 분석 스킵")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'insufficient_raw_data',
+                        'error': '거시경제 데이터 없음'
+                    },
+                    'raw_data_used': {'has_macro': False},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'skipped': True
+                }
+            
+            # AI 분석 실행
+            logger.info("거시경제 분석 실행")
+            analysis_result = await analyze_macro_economics()
+            
+            if analysis_result and analysis_result.get('success', False):
+                return {
+                    'analysis_result': analysis_result,
+                    'raw_data_used': {'has_macro': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'data_freshness': {
+                        'macro_age_minutes': self._get_data_age_minutes("macro_economic")
+                    }
+                }
+            else:
+                logger.error("거시경제 분석 AI 호출 실패")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'ai_analysis_failed',
+                        'error': 'AI 분석 실행 실패'
+                    },
+                    'raw_data_used': {'has_macro': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"AI 거시경제 분석 수집 오류: {e}")
+            return {
+                'analysis_result': {
+                    'success': False,
+                    'skip_reason': 'exception',
+                    'error': f'분석 중 예외 발생: {str(e)}'
+                },
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'failed': True
+            }
+    
+    async def _collect_ai_onchain_analysis(self):
+        """온체인 AI 분석 수집 및 저장"""
+        try:
+            from docs.investment_ai.analyzers.onchain_analyzer import analyze_onchain_data
+            
+            # 온체인 데이터 확인 (필수)
+            onchain_data = self.get_cached_data("onchain_data")
+            if not onchain_data:
+                logger.warning("온체인 분석: 데이터 없음 - AI 분석 스킵")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'insufficient_raw_data',
+                        'error': '온체인 데이터 없음'
+                    },
+                    'raw_data_used': {'has_onchain': False},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'skipped': True
+                }
+            
+            # AI 분석 실행
+            logger.info("온체인 분석 실행")
+            analysis_result = await analyze_onchain_data()
+            
+            if analysis_result and analysis_result.get('success', False):
+                return {
+                    'analysis_result': analysis_result,
+                    'raw_data_used': {'has_onchain': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'data_freshness': {
+                        'onchain_age_minutes': self._get_data_age_minutes("onchain_data")
+                    }
+                }
+            else:
+                logger.error("온체인 분석 AI 호출 실패")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'ai_analysis_failed',
+                        'error': 'AI 분석 실행 실패'
+                    },
+                    'raw_data_used': {'has_onchain': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"AI 온체인 분석 수집 오류: {e}")
+            return {
+                'analysis_result': {
+                    'success': False,
+                    'skip_reason': 'exception',
+                    'error': f'분석 중 예외 발생: {str(e)}'
+                },
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'failed': True
+            }
+    
+    async def _collect_ai_institutional_analysis(self):
+        """기관투자 AI 분석 수집 및 저장"""
+        try:
+            from docs.investment_ai.analyzers.institution_analyzer import analyze_institutional_flow
+            
+            # 기관투자 데이터 확인 (필수)
+            institutional_data = self.get_cached_data("institutional_data")
+            if not institutional_data:
+                logger.warning("기관투자 분석: 데이터 없음 - AI 분석 스킵")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'insufficient_raw_data',
+                        'error': '기관투자 데이터 없음'
+                    },
+                    'raw_data_used': {'has_institutional': False},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'skipped': True
+                }
+            
+            # AI 분석 실행
+            logger.info("기관투자 분석 실행")
+            analysis_result = await analyze_institutional_flow()
+            
+            if analysis_result and analysis_result.get('success', False):
+                return {
+                    'analysis_result': analysis_result,
+                    'raw_data_used': {'has_institutional': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'data_freshness': {
+                        'institutional_age_minutes': self._get_data_age_minutes("institutional_data")
+                    }
+                }
+            else:
+                logger.error("기관투자 분석 AI 호출 실패")
+                return {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'ai_analysis_failed',
+                        'error': 'AI 분석 실행 실패'
+                    },
+                    'raw_data_used': {'has_institutional': True},
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"AI 기관투자 분석 수집 오류: {e}")
+            return {
+                'analysis_result': {
+                    'success': False,
+                    'skip_reason': 'exception',
+                    'error': f'분석 중 예외 발생: {str(e)}'
+                },
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'failed': True
+            }
+    
+    def _get_data_age_minutes(self, task_name: str) -> float:
+        """특정 데이터의 생성 시간으로부터 경과 시간 계산 (분 단위)"""
+        try:
+            if self.cache_collection is None:
+                return 0
+            
+            cache_doc = self.cache_collection.find_one({"task_name": task_name})
+            if cache_doc and cache_doc.get("created_at"):
+                age = datetime.now(timezone.utc) - cache_doc["created_at"]
+                return age.total_seconds() / 60
+            return 0
+        except Exception:
+            return 0
 
 # 전역 스케줄러 인스턴스
 _global_scheduler: Optional[DataScheduler] = None
@@ -474,6 +992,32 @@ async def get_position_data():
     scheduler = get_data_scheduler()
     return await scheduler.get_data("position_data")
 
+# AI 분석 결과 요청 함수들
+async def get_ai_sentiment_analysis():
+    """AI 시장 감정 분석 결과 요청"""
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_sentiment_analysis")
+
+async def get_ai_technical_analysis():
+    """AI 기술적 분석 결과 요청"""
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_technical_analysis")
+
+async def get_ai_macro_analysis():
+    """AI 거시경제 분석 결과 요청"""
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_macro_analysis")
+
+async def get_ai_onchain_analysis():
+    """AI 온체인 분석 결과 요청"""
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_onchain_analysis")
+
+async def get_ai_institutional_analysis():
+    """AI 기관투자 분석 결과 요청"""
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_institutional_analysis")
+
 async def run_scheduled_data_collection():
     """예정된 데이터 수집 실행"""
     scheduler = get_data_scheduler()
@@ -483,6 +1027,27 @@ def get_data_status():
     """데이터 수집 상태 확인"""
     scheduler = get_data_scheduler()
     return scheduler.get_task_status()
+
+def get_recovery_status():
+    """자동 복구 상태 확인"""
+    scheduler = get_data_scheduler()
+    return scheduler.get_recovery_status()
+
+def force_recovery(task_name: str = None):
+    """강제 복구 실행 (특정 작업 또는 전체)"""
+    scheduler = get_data_scheduler()
+    if task_name:
+        return scheduler.force_recovery_attempt(task_name)
+    else:
+        return scheduler.reset_all_errors()
+
+def reset_errors(task_name: str = None):
+    """에러 카운트 리셋 (특정 작업 또는 전체)"""
+    scheduler = get_data_scheduler()
+    if task_name:
+        return scheduler.reset_task_errors(task_name)
+    else:
+        return scheduler.reset_all_errors()
 
 # 테스트용 코드
 if __name__ == "__main__":

@@ -115,18 +115,40 @@
             </div>
 
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4 text-green-700">백테스트 로그</h2>
-                <p class="text-gray-600 mb-4">전략 백테스트 과정의 로그를 확인합니다.</p>
-                <div class="flex space-x-4">
-                    <a href="/log/backtest"
-                        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
-                        전체 로그 보기
-                    </a>
-                    <a href="/log/backtest?error_only=true"
-                        class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">
-                        에러만 보기
-                    </a>
+                <h2 class="text-xl font-semibold mb-4 text-green-700">AI 시스템 상태</h2>
+                <p class="text-gray-600 mb-4">AI 분석기 상태 및 에러 카운터를 확인합니다.</p>
+                
+                <!-- AI 분석기 상태 -->
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-700 mb-2">AI 분석기 상태</h3>
+                    {% if ai_data_status %}
+                        {% for task_name, status in ai_data_status.items() %}
+                            {% if task_name.startswith('ai_') %}
+                            <div class="flex justify-between items-center py-1">
+                                <span class="text-sm text-gray-600">{{ task_name.replace('ai_', '').replace('_', ' ').title() }}</span>
+                                {% if status.is_disabled %}
+                                <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
+                                    비활성 ({{ status.error_count }}/3)
+                                </span>
+                                {% else %}
+                                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                    정상 ({{ status.error_count }}/3)
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-sm text-gray-500">AI 상태 정보를 불러올 수 없습니다.</p>
+                    {% endif %}
                 </div>
+                
+                <!-- 복구 상태 -->
+                {% if ai_recovery_status.disabled_tasks %}
+                <div class="mt-3 p-2 bg-yellow-50 rounded">
+                    <p class="text-xs text-yellow-700">복구 대기: {{ ai_recovery_status.disabled_tasks|join(', ') }}</p>
+                </div>
+                {% endif %}
             </div>
 
             <div class="bg-white rounded-lg shadow p-6">
@@ -141,15 +163,27 @@
             </div>
         </div>
 
-        <!-- 새로 추가된 전략 설정 카드 -->
+        <!-- AI 트레이딩 시스템 정보 -->
         <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold mb-4 text-indigo-700">전략 설정</h2>
-            <p class="text-gray-600 mb-4">현재 사용 중인 트레이딩 전략의 매개변수를 확인합니다.</p>
-            <div class="flex space-x-4">
-                <a href="/strategy-config"
-                    class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
-                    전략 설정 보기
-                </a>
+            <h2 class="text-xl font-semibold mb-4 text-indigo-700">AI 트레이딩 시스템</h2>
+            <p class="text-gray-600 mb-4">15분 간격 AI 분석 기반 자동 트레이딩 시스템입니다.</p>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-600">분석 주기:</span>
+                    <span class="font-medium">15분</span>
+                </div>
+                <div>
+                    <span class="text-gray-600">시스템 유형:</span>
+                    <span class="font-medium">AI 전용</span>
+                </div>
+                <div>
+                    <span class="text-gray-600">데이터 캐싱:</span>
+                    <span class="font-medium">활성화</span>
+                </div>
+                <div>
+                    <span class="text-gray-600">에러 복구:</span>
+                    <span class="font-medium">자동</span>
+                </div>
             </div>
         </div>
     </div>
