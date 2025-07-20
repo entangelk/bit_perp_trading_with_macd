@@ -330,6 +330,12 @@ async def main():
                     # 새 포지션 진입
                     await execute_ai_order(config['symbol'], ai_decision, config)
                     
+                # AI가 포지션 추가를 권장하는 경우
+                elif ((current_side_str == 'Long' and action == 'add_long') or 
+                      (current_side_str == 'Short' and action == 'add_short')):
+                    logger.info(f"AI 권장에 따른 포지션 추가: {action}")
+                    await execute_ai_order(config['symbol'], ai_decision, config)
+                
                 # 기존 포지션과 반대 신호인 경우 (일반적인 반전)
                 elif ((current_side_str == 'Long' and action in ['open_short']) or 
                       (current_side_str == 'Short' and action in ['open_long'])):
@@ -344,8 +350,12 @@ async def main():
                     logger.info(f"기존 포지션 유지: {current_side_str}")
             
             else:  # 포지션이 없는 경우
-                if action in ['open_long', 'open_short']:
-                    logger.info("새 포지션 진입")
+                if action in ['open_long', 'open_short', 'add_long', 'add_short']:
+                    # add_long, add_short도 포지션이 없으면 새 포지션 오픈으로 처리
+                    if action in ['add_long', 'add_short']:
+                        logger.info(f"포지션 없음 - {action}을 새 포지션 오픈으로 처리")
+                    else:
+                        logger.info("새 포지션 진입")
                     order_success = await execute_ai_order(config['symbol'], ai_decision, config)
                     
                     if order_success:
