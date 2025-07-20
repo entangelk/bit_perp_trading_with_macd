@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
 from docs.investment_ai.analyzers.sentiment_analyzer import analyze_market_sentiment
 from docs.investment_ai.analyzers.technical_analyzer import analyze_technical_indicators
-from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_environment
+from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_economics
 from docs.investment_ai.analyzers.onchain_analyzer import analyze_onchain_data
 from docs.investment_ai.analyzers.institution_analyzer import analyze_institutional_flow
 from docs.investment_ai.final_decisionmaker import make_final_investment_decision
@@ -114,7 +114,7 @@ class AITradingIntegration:
                 analyze_position_status(current_position),
                 analyze_market_sentiment(),
                 analyze_technical_indicators(self.symbol, self.timeframe, 300),
-                analyze_macro_environment(),
+                analyze_macro_economics(),
                 analyze_onchain_data(),
                 analyze_institutional_flow()
             ]
