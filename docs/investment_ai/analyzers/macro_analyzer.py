@@ -22,6 +22,19 @@ from docs.investment_ai.config import CONFIG, API_KEY, MODEL_PRIORITY
 # 로깅 설정
 logger = logging.getLogger("macro_analyzer")
 
+# CoinGecko API 키 설정
+COINGECKO_API_KEY = os.getenv("GEKCO_API_KEY")
+
+def get_coingecko_headers():
+    """CoinGecko API 헤더 생성 (API 키 포함)"""
+    headers = {'User-Agent': 'trading-bot/1.0'}
+    if COINGECKO_API_KEY:
+        headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
+        logger.debug("CoinGecko API 키 적용됨")
+    else:
+        logger.warning("CoinGecko API 키가 설정되지 않음 - 무료 한도 적용")
+    return headers
+
 class MacroAnalyzer:
     """거시경제 지표 분석 AI - 3단계 (yfinance 기반)"""
     
@@ -122,7 +135,7 @@ class MacroAnalyzer:
         """CoinGecko에서 글로벌 암호화폐 데이터 수집"""
         try:
             import requests
-            response = requests.get(self.coingecko_url, timeout=10)
+            response = requests.get(self.coingecko_url, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             
             data = response.json()

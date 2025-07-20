@@ -17,6 +17,19 @@ from docs.investment_ai.config import CONFIG, API_KEY, MODEL_PRIORITY
 # 로깅 설정
 logger = logging.getLogger("onchain_analyzer")
 
+# CoinGecko API 키 설정
+COINGECKO_API_KEY = os.getenv("GEKCO_API_KEY")
+
+def get_coingecko_headers():
+    """CoinGecko API 헤더 생성 (API 키 포함)"""
+    headers = {'User-Agent': 'trading-bot/1.0'}
+    if COINGECKO_API_KEY:
+        headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
+        logger.debug("CoinGecko API 키 적용됨")
+    else:
+        logger.warning("CoinGecko API 키가 설정되지 않음 - 무료 한도 적용")
+    return headers
+
 class OnchainAnalyzer:
     """온체인 데이터 분석 AI - 4단계 (무료 API 기반)"""
     
@@ -175,7 +188,7 @@ class OnchainAnalyzer:
                 'developer_data': 'false'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
@@ -217,7 +230,7 @@ class OnchainAnalyzer:
                 'interval': 'daily'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             

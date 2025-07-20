@@ -17,6 +17,19 @@ from docs.investment_ai.config import CONFIG, API_KEY, MODEL_PRIORITY
 # 로깅 설정
 logger = logging.getLogger("institution_analyzer")
 
+# CoinGecko API 키 설정
+COINGECKO_API_KEY = os.getenv("GEKCO_API_KEY")
+
+def get_coingecko_headers():
+    """CoinGecko API 헤더 생성 (API 키 포함)"""
+    headers = {'User-Agent': 'trading-bot/1.0'}
+    if COINGECKO_API_KEY:
+        headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
+        logger.debug("CoinGecko API 키 적용됨")
+    else:
+        logger.warning("CoinGecko API 키가 설정되지 않음 - 무료 한도 적용")
+    return headers
+
 class InstitutionAnalyzer:
     """기관 투자 흐름 분석 AI - 5단계 (순수 기관 지표만)"""
     
@@ -103,7 +116,7 @@ class InstitutionAnalyzer:
         """기업 BTC 보유량 데이터 (캐싱 권장: 6시간)"""
         try:
             url = f"{self.data_sources['coingecko']['base_url']}/companies/public_treasury/bitcoin"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
@@ -156,7 +169,7 @@ class InstitutionAnalyzer:
                 'interval': 'daily'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
@@ -208,7 +221,7 @@ class InstitutionAnalyzer:
         try:
             # CoinGecko 글로벌 데이터
             url = f"{self.data_sources['coingecko']['base_url']}/global"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
@@ -268,7 +281,7 @@ class InstitutionAnalyzer:
                 'developer_data': 'false'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
@@ -330,7 +343,7 @@ class InstitutionAnalyzer:
             url = f"{self.data_sources['coingecko']['base_url']}/exchanges"
             params = {'per_page': 20, 'page': 1}
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, headers=get_coingecko_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
             
