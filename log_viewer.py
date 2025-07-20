@@ -9,10 +9,12 @@ from datetime import datetime
 import uvicorn
 from pathlib import Path
 from routers.trading_stats import router as trading_stats_router
+from routers.ai_analysis import router as ai_analysis_router
 import time
 
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
 app.include_router(trading_stats_router)
+app.include_router(ai_analysis_router)
 
 # 템플릿 디렉토리 설정
 templates = Jinja2Templates(directory="/app/trading_bot/templates")
@@ -70,7 +72,7 @@ def check_process_status(script_name):
     return {'running': False}
 
 from docs.utility.trade_analyzer import TradeAnalyzer
-from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status, get_ai_api_status_summary
+from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status, get_ai_api_status_summary, test_ai_api_connection
 
 # 15분 차트 데이터를 사용하도록 초기화
 analyzer = TradeAnalyzer(collection_name="chart_15m")
@@ -91,11 +93,29 @@ async def root(request: Request):
     try:
         ai_data_status = get_data_status()
         ai_recovery_status = get_recovery_status()
+        
+        # AI API 상태 실시간 테스트 (웹 페이지 로드 시 실제 테스트)
+        print("[DEBUG] AI API 실시간 테스트 시작...")
+        import asyncio
+        try:
+            # 비동기 함수를 동기적으로 실행
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            api_test_result = loop.run_until_complete(test_ai_api_connection())
+            loop.close()
+            print(f"[DEBUG] AI API 테스트 결과: {api_test_result}")
+        except Exception as test_error:
+            print(f"[ERROR] AI API 테스트 중 오류: {test_error}")
+            api_test_result = False
+        
         ai_api_status = get_ai_api_status_summary()
+        print(f"[DEBUG] AI API 상태 확인: {ai_api_status}")
+        
     except Exception as e:
+        print(f"[ERROR] AI 상태 확인 중 오류: {e}")
         ai_data_status = {}
         ai_recovery_status = {'disabled_tasks': [], 'recovery_timestamps': {}}
-        ai_api_status = {'is_working': False, 'status_text': 'AI API 상태 확인 불가'}
+        ai_api_status = {'is_working': False, 'status_text': f'AI API 상태 확인 오류: {str(e)}'}
     
     # 트레이딩 분석 데이터 가져오기
     trade_analysis = analyzer.get_visualization_data(hours=24)
@@ -131,6 +151,34 @@ async def root(request: Request):
 async def get_trade_analysis():
     data = analyzer.get_visualization_data(hours=24)
     return data
+
+@app.get("/api/ai_status")
+async def get_ai_status():
+    """AI 시스템 상태를 실시간으로 확인하는 API"""
+    try:
+        # AI API 실시간 테스트
+        api_test_result = await test_ai_api_connection()
+        
+        # 상태 정보 수집
+        ai_data_status = get_data_status()
+        ai_recovery_status = get_recovery_status()
+        ai_api_status = get_ai_api_status_summary()
+        
+        return {
+            "success": True,
+            "api_test_result": api_test_result,
+            "ai_data_status": ai_data_status,
+            "ai_recovery_status": ai_recovery_status,
+            "ai_api_status": ai_api_status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "ai_api_status": {"is_working": False, "status_text": f"API 상태 확인 실패: {str(e)}"},
+            "timestamp": datetime.now().isoformat()
+        }
 
 @app.get("/log/{log_type}", response_class=HTMLResponse)
 async def view_log(request: Request, log_type: str, lines: int = 100, error_only: bool = False):

@@ -251,13 +251,57 @@ class DataScheduler:
                 task.error_count += 1
                 task.last_error_time = datetime.now(timezone.utc)
                 logger.warning(f"데이터 수집 실패: {task.name} (오류 {task.error_count}/{task.max_errors})")
+                
+                # 실패한 결과도 캐시에 저장 (AI 분석 작업만)
+                if task.name.startswith('ai_'):
+                    failure_result = {
+                        'analysis_result': {
+                            'success': False,
+                            'skip_reason': 'execution_failed',
+                            'error': f'분석 실행 실패 (시도 {task.error_count}/{task.max_errors})',
+                            'error_count': task.error_count,
+                            'max_errors': task.max_errors,
+                            'duration_seconds': duration
+                        },
+                        'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                        'failed': True,
+                        'execution_details': {
+                            'start_time': start_time.isoformat(),
+                            'end_time': end_time.isoformat(),
+                            'duration_seconds': duration
+                        }
+                    }
+                    self._update_cache(task, failure_result)
             
             return result
             
         except Exception as e:
             task.error_count += 1
             task.last_error_time = datetime.now(timezone.utc)
-            logger.error(f"데이터 수집 중 오류: {task.name} - {str(e)}")
+            error_msg = str(e)
+            logger.error(f"데이터 수집 중 오류: {task.name} - {error_msg}")
+            
+            # 예외 발생한 결과도 캐시에 저장 (AI 분석 작업만)
+            if task.name.startswith('ai_'):
+                exception_result = {
+                    'analysis_result': {
+                        'success': False,
+                        'skip_reason': 'exception',
+                        'error': f'분석 중 예외 발생: {error_msg}',
+                        'error_count': task.error_count,
+                        'max_errors': task.max_errors,
+                        'exception_type': type(e).__name__
+                    },
+                    'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'failed': True,
+                    'exception_details': {
+                        'exception_type': type(e).__name__,
+                        'exception_message': error_msg,
+                        'start_time': start_time.isoformat()
+                    }
+                }
+                self._update_cache(task, exception_result)
+            
             return None
         finally:
             task.is_running = False
@@ -312,7 +356,7 @@ class DataScheduler:
             # 수집 주기가 아니면 마지막 데이터 반환
             return self.get_cached_data(task_name)
     
-    async def run_scheduled_collections(self):
+    async def run_scheduled_collections(self, initial_run=False):
         """예정된 수집 작업들 실행"""
         logger.info("예정된 데이터 수집 작업 실행")
         
@@ -335,8 +379,16 @@ class DataScheduler:
         
         logger.info(f"실행할 작업: {[name for name, _ in tasks_to_run]}")
         
-        # 병렬 실행
-        await asyncio.gather(*[self.run_task(task) for _, task in tasks_to_run])
+        if initial_run:
+            # 초기 실행은 직렬로 처리 (API 과부화 방지)
+            logger.info("초기 실행 - 직렬 처리로 API 과부화 방지")
+            for task_name, task in tasks_to_run:
+                logger.info(f"실행 중: {task_name}")
+                await self.run_task(task)
+                await asyncio.sleep(10)  # 10초 대기
+        else:
+            # 일반 실행은 병렬 처리
+            await asyncio.gather(*[self.run_task(task) for _, task in tasks_to_run])
     
     def _update_cache(self, task: DataTask, data: Any):
         """MongoDB에 캐시 데이터 저장"""
@@ -1027,10 +1079,10 @@ async def get_ai_institutional_analysis():
     scheduler = get_data_scheduler()
     return await scheduler.get_data("ai_institutional_analysis")
 
-async def run_scheduled_data_collection():
+async def run_scheduled_data_collection(initial_run=False):
     """예정된 데이터 수집 실행"""
     scheduler = get_data_scheduler()
-    await scheduler.run_scheduled_collections()
+    await scheduler.run_scheduled_collections(initial_run=initial_run)
 
 def get_data_status():
     """데이터 수집 상태 확인"""

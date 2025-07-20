@@ -155,6 +155,47 @@ class SentimentAnalyzer:
             logger.error(f"캐시된 공포/탐욕 데이터 조회 실패: {e}")
             return None
     
+    def _clean_summary(self, summary: str) -> str:
+        """HTML 태그와 불필요한 내용을 제거하고 유의미한 텍스트 추출"""
+        if not summary:
+            return ""
+        
+        # HTML 태그 제거
+        import re
+        clean_text = re.sub(r'<[^>]+>', '', summary)
+        
+        # HTML 엔티티 디코딩
+        import html
+        clean_text = html.unescape(clean_text)
+        
+        # 불필요한 공백 정리
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        
+        # 텍스트가 너무 짧으면 원본 반환 (최소 50자)
+        if len(clean_text) < 50:
+            return clean_text[:300] if clean_text else ""
+        
+        # 문장 단위로 분할하여 중간 부분 추출
+        sentences = re.split(r'[.!?]+', clean_text)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+        
+        if len(sentences) <= 1:
+            # 문장이 1개 이하면 전체 텍스트 사용
+            return clean_text[:300]
+        elif len(sentences) == 2:
+            # 문장이 2개면 둘 다 사용
+            return '. '.join(sentences)[:300]
+        else:
+            # 문장이 3개 이상이면 중간 부분 우선 사용
+            if len(sentences) >= 3:
+                # 첫 번째 문장 제외하고 중간부터 사용
+                middle_text = '. '.join(sentences[1:])
+                if len(middle_text) >= 100:  # 중간 부분이 충분히 길면 사용
+                    return middle_text[:300]
+            
+            # 중간 부분이 짧으면 전체 사용
+            return '. '.join(sentences)[:300]
+
     def get_crypto_news(self, limit: int = 20) -> List[Dict]:
         """암호화폐 뉴스 수집"""
         try:
@@ -187,9 +228,12 @@ class SentimentAnalyzer:
                             
                             # 24시간 이내 뉴스만
                             if published_time > datetime.now() - timedelta(hours=24):
+                                # summary 정리 처리
+                                clean_summary = self._clean_summary(entry.get('summary', ''))
+                                
                                 all_news.append({
                                     'title': entry.get('title', ''),
-                                    'summary': entry.get('summary', '')[:300],  # 요약 길이 제한
+                                    'summary': clean_summary,
                                     'source': source_name,
                                     'published_time': published_time.isoformat(),
                                     'link': entry.get('link', '')

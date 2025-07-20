@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ detail.display_name }} 상세 결과 - 트레이딩 봇</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .json-container {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .json-key {
+            color: #0066cc;
+            font-weight: bold;
+        }
+        
+        .json-string {
+            color: #009900;
+        }
+        
+        .json-number {
+            color: #ff6600;
+        }
+        
+        .json-boolean {
+            color: #cc0066;
+            font-weight: bold;
+        }
+        
+        .json-null {
+            color: #999999;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- 헤더 -->
+        <div class="mb-6">
+            <nav class="text-sm text-gray-600 mb-2">
+                <a href="/" class="hover:text-blue-600">홈</a> &gt; 
+                <a href="/ai-analysis" class="hover:text-blue-600">AI 분석 결과</a> &gt;
+                <span class="text-gray-800">{{ detail.display_name }}</span>
+            </nav>
+            <h1 class="text-3xl font-bold text-gray-800">{{ detail.display_name }} 상세 결과</h1>
+            <p class="text-gray-600 mt-1">
+                분석 시각: {{ detail.created_at.strftime('%Y-%m-%d %H:%M:%S') }} KST
+            </p>
+        </div>
+
+        <!-- 분석 결과 요약 -->
+        {% if detail.data.analysis_result %}
+        {% set result = detail.data.analysis_result %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">분석 요약</h2>
+            
+            <!-- 실패한 분석의 경우 실패 정보 표시 -->
+            {% if not result.success %}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h3 class="text-lg font-medium text-red-800 mb-2">분석 실패</h3>
+                <div class="space-y-2">
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">실패 유형:</dt>
+                        <dd class="text-sm text-red-900">{{ result.skip_reason or "unknown" }}</dd>
+                    </div>
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">오류 메시지:</dt>
+                        <dd class="text-sm text-red-900">{{ result.error or "분석 실행 실패" }}</dd>
+                    </div>
+                    {% if result.error_count is defined %}
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">실패 횟수:</dt>
+                        <dd class="text-sm text-red-900">{{ result.error_count }}/{{ result.max_errors or 3 }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if result.exception_type %}
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">예외 유형:</dt>
+                        <dd class="text-sm text-red-900">{{ result.exception_type }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if result.duration_seconds is defined %}
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">실행 시간:</dt>
+                        <dd class="text-sm text-red-900">{{ "%.2f"|format(result.duration_seconds) }}초</dd>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 기본 정보 -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-3">기본 정보</h3>
+                    <dl class="space-y-2">
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-20">상태:</dt>
+                            <dd class="text-sm">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                    {% if result.success %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    {% if result.success %}성공{% else %}실패{% endif %}
+                                </span>
+                            </dd>
+                        </div>
+                        
+                        {% if result.confidence is defined %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-20">신뢰도:</dt>
+                            <dd class="text-sm font-medium 
+                                {% if result.confidence >= 80 %}text-green-600
+                                {% elif result.confidence >= 60 %}text-yellow-600
+                                {% else %}text-red-600{% endif %}">
+                                {{ result.confidence }}%
+                            </dd>
+                        </div>
+                        {% endif %}
+
+                        {% if detail.data.analysis_timestamp %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-20">분석 시각:</dt>
+                            <dd class="text-sm text-gray-900">{{ detail.data.analysis_timestamp }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+
+                <!-- 분석별 특화 정보 -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-3">주요 결과</h3>
+                    
+                    {% if detail.task_name == 'ai_sentiment_analysis' %}
+                    <dl class="space-y-2">
+                        {% if result.market_sentiment_score is defined %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">감정 점수:</dt>
+                            <dd class="text-sm font-medium">{{ result.market_sentiment_score }}/100</dd>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.sentiment_state %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">감정 상태:</dt>
+                            <dd class="text-sm font-medium">{{ result.sentiment_state }}</dd>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.investment_recommendation %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">투자 권장:</dt>
+                            <dd class="text-sm font-medium">{{ result.investment_recommendation }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                    
+                    {% elif detail.task_name == 'ai_technical_analysis' %}
+                    <dl class="space-y-2">
+                        {% if result.overall_trend %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">전체 트렌드:</dt>
+                            <dd class="text-sm font-medium">{{ result.overall_trend }}</dd>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.trading_signal %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">거래 신호:</dt>
+                            <dd class="text-sm font-medium">{{ result.trading_signal }}</dd>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.recommendation %}
+                        <div class="flex">
+                            <dt class="text-sm font-medium text-gray-600 w-24">권장사항:</dt>
+                            <dd class="text-sm font-medium">{{ result.recommendation }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 주요 인사이트 -->
+        {% if detail.data.analysis_result and detail.data.analysis_result.key_insights %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">주요 인사이트</h2>
+            <ul class="space-y-2">
+                {% for insight in detail.data.analysis_result.key_insights %}
+                <li class="flex items-start">
+                    <span class="inline-block w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                    <span class="text-gray-700">{{ insight }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- 분석 요약 -->
+        {% if detail.data.analysis_result and detail.data.analysis_result.analysis_summary %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">분석 요약</h2>
+            <p class="text-gray-700 leading-relaxed">{{ detail.data.analysis_result.analysis_summary }}</p>
+        </div>
+        {% endif %}
+
+        <!-- 데이터 품질 정보 -->
+        {% if detail.data.raw_data_used %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">데이터 품질</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for key, value in detail.data.raw_data_used.items() %}
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-sm text-gray-600">{{ key.replace('_', ' ').title() }}:</span>
+                    <span class="text-sm font-medium 
+                        {% if value == True or value == 'fresh' %}text-green-600
+                        {% elif value == False or value == 'stale' %}text-red-600
+                        {% else %}text-gray-800{% endif %}">
+                        {% if value == True %}✓ 사용 가능
+                        {% elif value == False %}✗ 사용 불가
+                        {% else %}{{ value }}{% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 데이터 신선도 -->
+        {% if detail.data.data_freshness %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">데이터 신선도</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {% for key, value in detail.data.data_freshness.items() %}
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <p class="text-sm text-gray-600">{{ key.replace('_', ' ').title() }}</p>
+                    <p class="text-lg font-medium 
+                        {% if value <= 30 %}text-green-600
+                        {% elif value <= 60 %}text-yellow-600
+                        {% else %}text-red-600{% endif %}">
+                        {{ "%.1f"|format(value) }}분 전
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 실행 상세 정보 (실패한 경우) -->
+        {% if detail.data.execution_details or detail.data.exception_details %}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">실행 상세 정보</h2>
+            
+            {% if detail.data.execution_details %}
+            <div class="mb-4">
+                <h3 class="text-lg font-medium text-gray-800 mb-2">실행 타이밍</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {% if detail.data.execution_details.start_time %}
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">시작 시간</p>
+                        <p class="text-sm font-medium">{{ detail.data.execution_details.start_time }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if detail.data.execution_details.end_time %}
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">종료 시간</p>
+                        <p class="text-sm font-medium">{{ detail.data.execution_details.end_time }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if detail.data.execution_details.duration_seconds is defined %}
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">실행 시간</p>
+                        <p class="text-sm font-medium">{{ "%.2f"|format(detail.data.execution_details.duration_seconds) }}초</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if detail.data.exception_details %}
+            <div>
+                <h3 class="text-lg font-medium text-gray-800 mb-2">예외 상세</h3>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    {% if detail.data.exception_details.exception_type %}
+                    <div class="flex mb-2">
+                        <dt class="text-sm font-medium text-red-700 w-24">예외 유형:</dt>
+                        <dd class="text-sm text-red-900">{{ detail.data.exception_details.exception_type }}</dd>
+                    </div>
+                    {% endif %}
+                    
+                    {% if detail.data.exception_details.exception_message %}
+                    <div class="flex mb-2">
+                        <dt class="text-sm font-medium text-red-700 w-24">예외 메시지:</dt>
+                        <dd class="text-sm text-red-900">{{ detail.data.exception_details.exception_message }}</dd>
+                    </div>
+                    {% endif %}
+                    
+                    {% if detail.data.exception_details.start_time %}
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-red-700 w-24">발생 시간:</dt>
+                        <dd class="text-sm text-red-900">{{ detail.data.exception_details.start_time }}</dd>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- 전체 JSON 데이터 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">전체 분석 데이터 (JSON)</h2>
+                <button onclick="copyToClipboard()" class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                    복사
+                </button>
+            </div>
+            <div id="json-container" class="json-container">{{ detail.formatted_data }}</div>
+        </div>
+
+        <!-- 액션 버튼 -->
+        <div class="mt-6 flex space-x-4">
+            <a href="/ai-analysis" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                ← 목록으로 돌아가기
+            </a>
+            <button onclick="window.location.reload()" 
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                새로고침
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard() {
+            const jsonText = document.getElementById('json-container').textContent;
+            navigator.clipboard.writeText(jsonText).then(function() {
+                // 성공 메시지 표시
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '복사됨!';
+                button.classList.add('bg-green-600');
+                button.classList.remove('bg-blue-600');
+                
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.classList.remove('bg-green-600');
+                    button.classList.add('bg-blue-600');
+                }, 2000);
+            }, function(err) {
+                console.error('복사 실패: ', err);
+                alert('복사에 실패했습니다.');
+            });
+        }
+
+        // JSON 하이라이팅
+        function highlightJSON() {
+            const container = document.getElementById('json-container');
+            let html = container.innerHTML;
+            
+            // JSON 키 하이라이팅
+            html = html.replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:');
+            
+            // 문자열 값 하이라이팅
+            html = html.replace(/:\s*"([^"]*)"/g, ': <span class="json-string">"$1"</span>');
+            
+            // 숫자 하이라이팅
+            html = html.replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>');
+            
+            // 불린 값 하이라이팅
+            html = html.replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>');
+            
+            // null 값 하이라이팅
+            html = html.replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+            
+            container.innerHTML = html;
+        }
+
+        // 페이지 로드 시 JSON 하이라이팅 적용
+        document.addEventListener('DOMContentLoaded', highlightJSON);
+    </script>
+</body>
+</html>

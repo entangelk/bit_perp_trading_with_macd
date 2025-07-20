@@ -2,6 +2,38 @@
 
 ## ✅ 최근 완료된 작업 (2025-07-20)
 
+### 🎯 AI 분석 결과 모니터링 시스템 구축 완료 ⭐NEW⭐
+```
+📁 AI 분석 실패 추적 및 저장 시스템 ✅
+├── 실패한 AI 분석도 데이터베이스에 저장 (MongoDB)
+├── 실패 유형별 상세 정보 저장 (실행 실패, 예외 발생, 데이터 부족 등)
+├── 재시도 로직 실패 시 실행 시간, 에러 카운트, 예외 타입 저장
+├── AI API 호출 실패 vs 원시 데이터 부족 구분하여 저장
+└── 실시간 실패 패턴 분석 가능한 구조 구축
+
+📁 AI 분석 결과 웹 페이지 구현 ✅
+├── /ai-analysis: 모든 AI 분석 결과 목록 페이지 (성공/실패 모두)
+├── 분석기별 성공률 통계 및 대시보드 (감정/기술/거시/온체인/기관)
+├── 시간별, 분석기별, 성공/실패별 필터링 기능
+├── 실패 원인 상세 표시 (사용자 친화적 메시지)
+├── 실시간 새로고침 및 JavaScript 필터링
+└── /ai-analysis/detail: 개별 분석 결과 상세 페이지
+
+📁 뉴스 데이터 품질 개선 ✅  
+├── HTML 태그 및 이미지 코드 제거 기능 구현
+├── 문장 단위 분할하여 중간 부분 우선 추출
+├── 유의미한 텍스트만 300자 이내로 정제
+├── HTML 엔티티 디코딩 (&039; → ' 등)
+└── 뉴스 요약 품질 대폭 향상
+
+📁 웹 UI 실시간 AI 상태 확인 ✅
+├── AI API 상태 실시간 테스트 기능 (/api/ai_status)
+├── "새로고침" 버튼으로 즉시 AI 상태 확인
+├── AI 분석기별 에러 카운트 실시간 업데이트
+├── 정상/비활성 상태 즉시 반영
+└── 메인 페이지에서 "AI 분석 결과 보기" 링크 추가
+```
+
 ### 🛡️ AI API 안정성 및 독립성 강화 완료
 ```
 📁 AI API 실패 처리 시스템 ✅
@@ -16,6 +48,12 @@
 ├── API 헤더 자동 생성 및 적용 (x-cg-demo-api-key)
 ├── API 키 적용 상태 로깅 추가
 └── 무료 한도 → 유료 플랜 한도로 확장
+
+📁 초기 데이터 수집 최적화 ✅
+├── 프로그램 시작 시 직렬 실행으로 API 과부화 방지
+├── 데이터 수집 작업 간 10초 대기 시간 추가
+├── 이후 일반 운영 시 병렬 실행으로 성능 유지
+└── data_scheduler.py에 initial_run 파라미터 추가
 ```
 
 ### 🎯 웹 인터페이스 AI 시스템 연동 완료
@@ -166,10 +204,10 @@
    - TTL 인덱스 최적화 및 정리 정책 수립
    - 디스크 용량 모니터링 강화
 
-2. **AI 분석 결과 웹 대시보드 구현**
-   - 실시간 분석 결과 표시 페이지
-   - 각 분석기별 상세 데이터 시각화
-   - AI 결정 근거 및 신뢰도 표시
+2. ~~**AI 분석 결과 웹 대시보드 구현**~~ ✅ **완료**
+   - ✅ 실시간 분석 결과 표시 페이지 (/ai-analysis)
+   - ✅ 각 분석기별 상세 데이터 시각화
+   - ✅ AI 결정 근거 및 신뢰도 표시
 
 3. **운영 안정성 모니터링**
    - AI 결정 성과 추적
@@ -216,19 +254,8 @@
 
 ### 🔧 최적화 필요 영역
 - **데이터 저장소 관리** (긴급) - 용량 증가 모니터링 및 정리 정책
-- **뉴스 분석 중 summary 부분 확인** - api 제공 데이터가 페이지 앞부분을 가져와서 데이터가 완벽하지 않음
-```
-                  {
-                    title: 'Bitcoin 43% social chat dominance suggests &#039;key entry point&#039; ahead',
-                    summary: '<p style="float: right; margin: 0 0 10px 15px; width: 240px;"><img alt="Bitcoin 43% social chat dominance suggests &#039;key 
-  entry point&#039; ahead" src="https://images.cointelegraph.com/images/528_a',
-                    source: 'cointelegraph',
-                    published_time: 'Sun, 20 Jul 2025 04:59:11 +0100',
-                    link: 'https://cointelegraph.com/news/bitcoin-social-dominance-spikes-local-top-btc-price-buying-santiment?utm_source=rss_feed&utm_mediu
-  m=rss&utm_campaign=rss_partner_inbound'
-                  }
-```
-- **AI 분석 결과 시각화** - 웹에서 분석 상세 결과 표시
+- ~~**뉴스 분석 중 summary 부분 확인**~~ ✅ **완료** - HTML 태그 제거 및 중간 부분 추출 구현
+- ~~**AI 분석 결과 시각화**~~ ✅ **완료** - 웹에서 분석 상세 결과 표시 구현
 - 데이터베이스 성능 최적화
 - AI 분석 정확도 향상
 - 사용자 인터페이스 고도화
@@ -238,6 +265,9 @@
 - **시스템 안정성**: 자동 복구 시스템 작동
 - **거래 신뢰성**: 60% 이상 신뢰도 거래만 실행
 - **모니터링**: 실시간 상태 추적 완료
+- **분석 추적**: 성공/실패 모든 AI 분석 결과 데이터베이스 저장 ⭐NEW⭐
+- **웹 시각화**: AI 분석 결과 상세 웹 페이지 구현 ⭐NEW⭐
+- **데이터 품질**: 뉴스 HTML 정리로 분석 정확도 향상 ⭐NEW⭐
 
 ## ⚠️ 주의사항
 
@@ -265,9 +295,13 @@ main_ai_new.py           # AI 메인 트레이딩 시스템
 log_viewer.py            # 웹 인터페이스 (AI 연동)
 templates/index.html     # AI 상태 모니터링 웹페이지
 docs/utility/trade_analyzer.py  # 15분 차트 데이터 호환
-data_scheduler.py        # AI 분석 결과 캐싱
+data_scheduler.py        # AI 분석 결과 캐싱 + 실패 추적
 ai_trading_integration.py # 캐시 우선 조회 시스템
 final_decisionmaker.py   # 전역 싱글톤 + 안전 프로토콜
+routers/ai_analysis.py   # AI 분석 결과 웹 API
+templates/ai_analysis.html # AI 분석 결과 목록 페이지
+templates/ai_analysis_detail.html # AI 분석 상세 페이지
+sentiment_analyzer.py    # 뉴스 HTML 정리 기능 포함
 ```
 
 ### 🟡 지속적 개선 대상

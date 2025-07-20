@@ -142,27 +142,34 @@
                 
                 <!-- AI 분석기 상태 -->
                 <div class="mb-4">
-                    <h3 class="text-sm font-medium text-gray-700 mb-2">AI 분석기 상태</h3>
-                    {% if ai_data_status %}
-                        {% for task_name, status in ai_data_status.items() %}
-                            {% if task_name.startswith('ai_') %}
-                            <div class="flex justify-between items-center py-1">
-                                <span class="text-sm text-gray-600">{{ task_name.replace('ai_', '').replace('_', ' ').title() }}</span>
-                                {% if status.is_disabled %}
-                                <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
-                                    비활성 ({{ status.error_count }}/3)
-                                </span>
-                                {% else %}
-                                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                                    정상 ({{ status.error_count }}/3)
-                                </span>
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-medium text-gray-700">AI 분석기 상태</h3>
+                        <button id="refresh-ai-status" class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
+                            새로고침
+                        </button>
+                    </div>
+                    <div id="ai-analyzers-status">
+                        {% if ai_data_status %}
+                            {% for task_name, status in ai_data_status.items() %}
+                                {% if task_name.startswith('ai_') %}
+                                <div class="flex justify-between items-center py-1">
+                                    <span class="text-sm text-gray-600">{{ task_name.replace('ai_', '').replace('_', ' ').title() }}</span>
+                                    {% if status.is_disabled %}
+                                    <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
+                                        비활성 ({{ status.error_count }}/3)
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                        정상 ({{ status.error_count }}/3)
+                                    </span>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
-                            </div>
-                            {% endif %}
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-sm text-gray-500">AI 상태 정보를 불러올 수 없습니다.</p>
-                    {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-sm text-gray-500">AI 상태 정보를 불러올 수 없습니다.</p>
+                        {% endif %}
+                    </div>
                 </div>
                 
                 <!-- 복구 상태 -->
@@ -171,6 +178,14 @@
                     <p class="text-xs text-yellow-700">복구 대기: {{ ai_recovery_status.disabled_tasks|join(', ') }}</p>
                 </div>
                 {% endif %}
+                
+                <!-- AI 분석 결과 링크 -->
+                <div class="mt-4">
+                    <a href="/ai-analysis"
+                        class="w-full inline-flex justify-center items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                        AI 분석 결과 보기
+                    </a>
+                </div>
             </div>
 
             <div class="bg-white rounded-lg shadow p-6">
@@ -230,6 +245,12 @@
                 logBar.style.width = logPercent + '%';
             }
 
+            // AI 상태 새로고침 버튼 이벤트
+            const refreshButton = document.getElementById('refresh-ai-status');
+            if (refreshButton) {
+                refreshButton.addEventListener('click', refreshAIStatus);
+            }
+
             try {
                 // 안전하게 데이터 가져오기
                 const dataElement = document.getElementById('trade-analysis-data');
@@ -254,6 +275,88 @@
                 document.getElementById('tradingChart').innerHTML = '<div class="p-4 text-red-600">차트 생성 중 오류가 발생했습니다.</div>';
             }
         });
+
+        // AI 상태 새로고침 함수
+        async function refreshAIStatus() {
+            const refreshButton = document.getElementById('refresh-ai-status');
+            const aiAnalyzersStatus = document.getElementById('ai-analyzers-status');
+            
+            if (refreshButton) {
+                refreshButton.textContent = '확인 중...';
+                refreshButton.disabled = true;
+            }
+            
+            try {
+                const response = await fetch('/api/ai_status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // AI API 상태 업데이트
+                    const apiStatusElement = document.querySelector('.bg-green-50, .bg-red-50');
+                    if (apiStatusElement && data.ai_api_status) {
+                        const isWorking = data.ai_api_status.is_working;
+                        
+                        // API 상태 배경색과 텍스트 업데이트
+                        apiStatusElement.className = isWorking 
+                            ? 'mb-4 p-3 rounded-lg bg-green-50 border border-green-200'
+                            : 'mb-4 p-3 rounded-lg bg-red-50 border border-red-200';
+                        
+                        const statusBadge = apiStatusElement.querySelector('.px-2.py-1.rounded-full');
+                        if (statusBadge) {
+                            statusBadge.className = isWorking
+                                ? 'px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800'
+                                : 'px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800';
+                            statusBadge.textContent = isWorking ? '✅ 정상 작동' : '❌ 작동 중지';
+                        }
+                        
+                        const statusText = apiStatusElement.querySelector('.text-xs.mt-1');
+                        if (statusText) {
+                            statusText.textContent = data.ai_api_status.status_text;
+                            statusText.className = isWorking 
+                                ? 'text-xs text-green-600 mt-1'
+                                : 'text-xs text-red-600 mt-1';
+                        }
+                    }
+                    
+                    // AI 분석기 상태 업데이트
+                    if (aiAnalyzersStatus && data.ai_data_status) {
+                        let html = '';
+                        Object.entries(data.ai_data_status).forEach(([taskName, status]) => {
+                            if (taskName.startsWith('ai_')) {
+                                const displayName = taskName.replace('ai_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                const isDisabled = status.is_disabled;
+                                html += `
+                                    <div class="flex justify-between items-center py-1">
+                                        <span class="text-sm text-gray-600">${displayName}</span>
+                                        <span class="px-2 py-1 ${isDisabled ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'} text-xs rounded-full">
+                                            ${isDisabled ? '비활성' : '정상'} (${status.error_count}/3)
+                                        </span>
+                                    </div>
+                                `;
+                            }
+                        });
+                        aiAnalyzersStatus.innerHTML = html;
+                    }
+                    
+                    console.log('AI 상태 업데이트 완료:', data);
+                } else {
+                    console.error('AI 상태 확인 실패:', data.error);
+                    if (aiAnalyzersStatus) {
+                        aiAnalyzersStatus.innerHTML = `<p class="text-sm text-red-500">상태 확인 실패: ${data.error}</p>`;
+                    }
+                }
+            } catch (error) {
+                console.error('AI 상태 요청 오류:', error);
+                if (aiAnalyzersStatus) {
+                    aiAnalyzersStatus.innerHTML = `<p class="text-sm text-red-500">요청 오류: ${error.message}</p>`;
+                }
+            } finally {
+                if (refreshButton) {
+                    refreshButton.textContent = '새로고침';
+                    refreshButton.disabled = false;
+                }
+            }
+        }
 
         // 타임스탬프 정규화 함수
         function normalizeTimestamp(timestamp) {

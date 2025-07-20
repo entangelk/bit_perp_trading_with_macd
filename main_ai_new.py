@@ -222,6 +222,14 @@ async def main():
             raise Exception("레버리지 설정 실패")
         logger.info(f"레버리지 {config['leverage']}배 설정 완료")
         
+        # 초기 데이터 수집 (직렬 실행으로 API 과부화 방지)
+        logger.info("초기 데이터 수집 시작 (직렬 실행)...")
+        try:
+            await run_scheduled_data_collection(initial_run=True)
+            logger.info("초기 데이터 수집 완료")
+        except Exception as e:
+            logger.error(f"초기 데이터 수집 중 오류: {e}")
+        
         # 메인 루프
         cycle_count = 0
         while True:
@@ -250,10 +258,10 @@ async def main():
             # 데이터 정합성을 위한 대기
             time.sleep(1.0)
             
-            # 데이터 수집 (거래와 독립적으로 항상 실행)
+            # 데이터 수집 (거래와 독립적으로 항상 실행, 이후엔 병렬 실행)
             logger.info("데이터 수집 실행 중...")
             try:
-                await run_scheduled_data_collection()
+                await run_scheduled_data_collection(initial_run=False)
                 logger.info("데이터 수집 완료")
             except Exception as e:
                 logger.error(f"데이터 수집 중 오류: {e}")
