@@ -96,14 +96,11 @@ async def root(request: Request):
         
         # AI API 상태 실시간 테스트 (웹 페이지 로드 시 실제 테스트)
         print("[DEBUG] AI API 실시간 테스트 시작...")
-        import asyncio
         try:
-            # 비동기 함수를 동기적으로 실행
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            api_test_result = loop.run_until_complete(test_ai_api_connection())
-            loop.close()
-            print(f"[DEBUG] AI API 테스트 결과: {api_test_result}")
+            # FastAPI는 이미 async 환경이므로 직접 await 사용 불가
+            # 대신 기본 상태만 조회하고 실제 테스트는 API 엔드포인트에서 수행
+            api_test_result = None  # 메인 페이지에서는 테스트 생략
+            print(f"[DEBUG] AI API 테스트 건너뜀 (비동기 환경 충돌 방지)")
         except Exception as test_error:
             print(f"[ERROR] AI API 테스트 중 오류: {test_error}")
             api_test_result = False
@@ -154,10 +151,18 @@ async def get_trade_analysis():
 
 @app.get("/api/ai_status")
 async def get_ai_status():
-    """AI 시스템 상태를 실시간으로 확인하는 API"""
+    """AI 시스템 상태를 실시간으로 확인하는 API (타임아웃 포함)"""
     try:
-        # AI API 실시간 테스트
-        api_test_result = await test_ai_api_connection()
+        # AI API 실시간 테스트 (타임아웃 설정)
+        import asyncio
+        try:
+            api_test_result = await asyncio.wait_for(test_ai_api_connection(), timeout=10.0)
+        except asyncio.TimeoutError:
+            print("[WARNING] AI API 테스트 타임아웃 (10초)")
+            api_test_result = False
+        except Exception as test_error:
+            print(f"[ERROR] AI API 테스트 중 오류: {test_error}")
+            api_test_result = False
         
         # 상태 정보 수집
         ai_data_status = get_data_status()
@@ -170,13 +175,43 @@ async def get_ai_status():
             "ai_data_status": ai_data_status,
             "ai_recovery_status": ai_recovery_status,
             "ai_api_status": ai_api_status,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "test_timeout": api_test_result is False
         }
     except Exception as e:
+        print(f"[ERROR] AI 상태 확인 전체 오류: {e}")
         return {
             "success": False,
             "error": str(e),
             "ai_api_status": {"is_working": False, "status_text": f"API 상태 확인 실패: {str(e)}"},
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/api/ai_status_quick")
+async def get_ai_status_quick():
+    """AI 시스템 상태를 빠르게 확인하는 API (AI API 테스트 제외)"""
+    try:
+        # AI API 테스트 없이 기본 상태만 조회
+        ai_data_status = get_data_status()
+        ai_recovery_status = get_recovery_status()
+        ai_api_status = get_ai_api_status_summary()
+        
+        return {
+            "success": True,
+            "api_test_result": None,  # 빠른 조회에서는 테스트 안함
+            "ai_data_status": ai_data_status,
+            "ai_recovery_status": ai_recovery_status,
+            "ai_api_status": ai_api_status,
+            "timestamp": datetime.now().isoformat(),
+            "note": "빠른 조회 모드 - AI API 테스트 제외"
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] AI 상태 빠른 조회 오류: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "ai_api_status": {"is_working": False, "status_text": f"상태 확인 실패: {str(e)}"},
             "timestamp": datetime.now().isoformat()
         }
 

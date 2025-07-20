@@ -437,6 +437,9 @@ class AITradingIntegration:
                 'success': True
             }
             
+            # 최종 AI 투자 결정 결과를 데이터베이스에 저장
+            await self._save_final_decision_result(cycle_result)
+            
             logger.info(f"AI 트레이딩 사이클 완료: {interpreted_decision['action']}")
             return cycle_result
             
@@ -454,6 +457,71 @@ class AITradingIntegration:
     def get_decision_history(self, limit: int = 10) -> list:
         """최근 결정 히스토리 반환"""
         return self.decision_history[-limit:] if self.decision_history else []
+    
+    async def _save_final_decision_result(self, cycle_result: Dict):
+        """최종 AI 투자 결정 결과를 MongoDB에 저장"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            database = client["bitcoin"]
+            cache_collection = database["data_cache"]
+            
+            # 최종 결정 데이터 구성
+            final_decision_data = {
+                'analysis_result': {
+                    'success': cycle_result.get('success', False),
+                    'final_decision': cycle_result.get('interpreted_decision', {}).get('action', 'unknown'),
+                    'ai_confidence': cycle_result.get('ai_decision', {}).get('result', {}).get('decision_confidence', 0),
+                    'ai_decision_raw': cycle_result.get('ai_decision', {}).get('result', {}).get('final_decision', 'Hold'),
+                    'reasoning': cycle_result.get('interpreted_decision', {}).get('reason', ''),
+                    'should_trade': cycle_result.get('interpreted_decision', {}).get('action') not in ['wait', 'hold'],
+                    'execution_attempted': cycle_result.get('execution_result', {}).get('attempted', False),
+                    'execution_success': cycle_result.get('execution_result', {}).get('success', False),
+                    'position_action': cycle_result.get('interpreted_decision', {}).get('action', 'wait'),
+                    'analysis_quality': cycle_result.get('ai_decision', {}).get('result', {}).get('timing_summary', {}).get('overall_quality', 'unknown'),
+                    'cache_efficiency': cycle_result.get('ai_decision', {}).get('result', {}).get('timing_summary', {}).get('cache_efficiency_percent', 0),
+                    'analyzers_used': list(cycle_result.get('analysis_results', {}).keys()) if cycle_result.get('analysis_results') else [],
+                    'analyzers_success_count': sum(1 for result in cycle_result.get('analysis_results', {}).values() if result.get('success', False)),
+                    'analyzers_total_count': len(cycle_result.get('analysis_results', {}))
+                },
+                'analysis_timestamp': cycle_result.get('timestamp', datetime.now(timezone.utc).isoformat()),
+                'cycle_details': {
+                    'trading_config': self.config,
+                    'analysis_results': cycle_result.get('analysis_results', {}),
+                    'ai_decision_full': cycle_result.get('ai_decision', {}),
+                    'interpreted_decision_full': cycle_result.get('interpreted_decision', {}),
+                    'execution_result_full': cycle_result.get('execution_result', {})
+                },
+                'summary': {
+                    'action_taken': cycle_result.get('interpreted_decision', {}).get('action', 'wait'),
+                    'confidence_level': 'high' if cycle_result.get('ai_decision', {}).get('result', {}).get('decision_confidence', 0) >= 80 
+                                      else 'medium' if cycle_result.get('ai_decision', {}).get('result', {}).get('decision_confidence', 0) >= 60 
+                                      else 'low',
+                    'trade_executed': cycle_result.get('execution_result', {}).get('success', False),
+                    'analysis_completeness': f"{sum(1 for result in cycle_result.get('analysis_results', {}).values() if result.get('success', False))}/{len(cycle_result.get('analysis_results', {}))}" if cycle_result.get('analysis_results') else "0/0"
+                }
+            }
+            
+            # 캐시 데이터 저장 (24시간 TTL)
+            expire_at = datetime.now(timezone.utc) + timedelta(hours=24)
+            
+            cache_collection.replace_one(
+                {"task_name": "ai_final_decision", "created_at": {"$gte": datetime.now(timezone.utc) - timedelta(minutes=1)}},
+                {
+                    "task_name": "ai_final_decision",
+                    "data": final_decision_data,
+                    "created_at": datetime.now(timezone.utc),
+                    "expire_at": expire_at
+                },
+                upsert=True
+            )
+            
+            logger.debug("최종 AI 투자 결정 결과 저장 완료")
+            
+        except Exception as e:
+            logger.error(f"최종 AI 투자 결정 결과 저장 중 오류: {e}")
     
     def get_system_status(self) -> Dict:
         """AI 트레이딩 시스템 상태 반환"""

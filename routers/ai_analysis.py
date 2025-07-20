@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 import json
 import logging
+from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status, get_ai_api_status_summary
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class AIAnalysisViewer:
             "ai_technical_analysis", 
             "ai_macro_analysis",
             "ai_onchain_analysis",
-            "ai_institutional_analysis"
+            "ai_institutional_analysis",
+            "ai_final_decision"
         ]
     
     def get_task_display_name(self, task_name: str) -> str:
@@ -37,7 +39,8 @@ class AIAnalysisViewer:
             "ai_technical_analysis": "기술적 분석",
             "ai_macro_analysis": "거시경제 분석", 
             "ai_onchain_analysis": "온체인 분석",
-            "ai_institutional_analysis": "기관투자 분석"
+            "ai_institutional_analysis": "기관투자 분석",
+            "ai_final_decision": "최종 AI 투자 결정"
         }
         return name_mapping.get(task_name, task_name)
     
@@ -150,6 +153,16 @@ class AIAnalysisViewer:
                     "flow": analysis_result.get("flow_direction", "중립"),
                     "sentiment": analysis_result.get("institutional_sentiment", "중립"),
                     "recommendation": analysis_result.get("market_implication", "관망")
+                })
+                
+            elif task_name == "ai_final_decision":
+                summary.update({
+                    "confidence": analysis_result.get("ai_confidence", 0),
+                    "decision": analysis_result.get("final_decision", "wait"),
+                    "action": analysis_result.get("position_action", "wait"),
+                    "should_trade": analysis_result.get("should_trade", False),
+                    "execution_success": analysis_result.get("execution_success", False),
+                    "recommendation": analysis_result.get("reasoning", "분석 중")
                 })
             
             # 공통 키 포인트 추출
@@ -352,6 +365,34 @@ async def get_ai_analysis_api(
         return {
             "success": False,
             "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+@router.get("/api/ai-status-quick")
+async def get_ai_status_quick():
+    """AI 시스템 상태를 빠르게 확인하는 API (AI API 테스트 제외)"""
+    try:
+        # AI API 테스트 없이 기본 상태만 조회
+        ai_data_status = get_data_status()
+        ai_recovery_status = get_recovery_status()
+        ai_api_status = get_ai_api_status_summary()
+        
+        return {
+            "success": True,
+            "api_test_result": None,  # 빠른 조회에서는 테스트 안함
+            "ai_data_status": ai_data_status,
+            "ai_recovery_status": ai_recovery_status,
+            "ai_api_status": ai_api_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "note": "빠른 조회 모드 - AI API 테스트 제외"
+        }
+        
+    except Exception as e:
+        logger.error(f"AI 상태 빠른 조회 오류: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "ai_api_status": {"is_working": False, "status_text": f"상태 확인 실패: {str(e)}"},
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
