@@ -16,13 +16,10 @@ from docs.investment_ai.final_decisionmaker import make_final_investment_decisio
 # 기존 시스템 모듈들 import
 from docs.get_current import fetch_investment_status
 from docs.current_price import get_current_price
-from docs.making_order import execute_order, close_position, get_position_amount
+from docs.making_order import close_position, get_position_amount
 
 # 데이터 스케줄러 import
-from docs.investment_ai.data_scheduler import (
-    get_data_scheduler, run_scheduled_data_collection, get_data_status,
-    get_chart_data, get_fear_greed_data, get_news_data, get_macro_data,
-    get_onchain_data, get_institutional_data, get_position_data,
+from docs.investment_ai.data_scheduler import (run_scheduled_data_collection,
     get_ai_sentiment_analysis, get_ai_technical_analysis, get_ai_macro_analysis,
     get_ai_onchain_analysis, get_ai_institutional_analysis
 )
