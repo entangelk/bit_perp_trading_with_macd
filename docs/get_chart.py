@@ -147,7 +147,7 @@ def chart_update(update,symbol):
 
     elif update == '15m':
         # 15분봉 (최근 3500틱 데이터 저장 및 업데이트)
-        fetch_and_store_ohlcv(chart_collection_15m, '15m', symbol, limit=3500, minutes_per_unit=15, time_description="15분봉")
+        fetch_and_store_ohlcv(chart_collection_15m, '15m', symbol, limit=1000, minutes_per_unit=15, time_description="15분봉")
         return chart_collection_15m.find_one(sort=[("timestamp", -1)]), server_time
 
     else:
