@@ -14,6 +14,15 @@ from pymongo import MongoClient
 
 logger = logging.getLogger("data_scheduler")
 
+# AI API 상태 전역 변수
+_ai_api_status = {
+    'is_working': True,
+    'last_success_time': None,
+    'last_failure_time': None,
+    'consecutive_failures': 0,
+    'last_check_time': None
+}
+
 @dataclass
 class DataTask:
     """데이터 수집 작업 정의"""
@@ -1048,6 +1057,78 @@ def reset_errors(task_name: str = None):
         return scheduler.reset_task_errors(task_name)
     else:
         return scheduler.reset_all_errors()
+
+# AI API 상태 관리 함수들
+def check_ai_api_status() -> Dict:
+    """AI API 상태 확인"""
+    global _ai_api_status
+    return _ai_api_status.copy()
+
+def mark_ai_api_success():
+    """AI API 성공 시 호출"""
+    global _ai_api_status
+    _ai_api_status.update({
+        'is_working': True,
+        'last_success_time': datetime.now(timezone.utc),
+        'consecutive_failures': 0,
+        'last_check_time': datetime.now(timezone.utc)
+    })
+    logger.info("AI API 작동 상태: 정상")
+
+def mark_ai_api_failure():
+    """AI API 실패 시 호출"""
+    global _ai_api_status
+    _ai_api_status.update({
+        'last_failure_time': datetime.now(timezone.utc),
+        'consecutive_failures': _ai_api_status['consecutive_failures'] + 1,
+        'last_check_time': datetime.now(timezone.utc)
+    })
+    
+    # 3회 연속 실패 시 비작동 상태로 변경
+    if _ai_api_status['consecutive_failures'] >= 3:
+        _ai_api_status['is_working'] = False
+        logger.error(f"AI API 비작동 상태: {_ai_api_status['consecutive_failures']}회 연속 실패")
+    else:
+        logger.warning(f"AI API 실패: {_ai_api_status['consecutive_failures']}/3회")
+
+async def test_ai_api_connection() -> bool:
+    """AI API 연결 테스트"""
+    try:
+        # 간단한 AI API 테스트 호출
+        from docs.investment_ai.analyzers.sentiment_analyzer import SentimentAnalyzer
+        analyzer = SentimentAnalyzer()
+        
+        # 테스트용 간단한 데이터로 AI 호출 시도
+        if analyzer.client is None:
+            return False
+            
+        # 매우 간단한 테스트 프롬프트로 AI 연결 확인
+        test_prompt = "Hello, respond with just 'OK'"
+        response = analyzer.client.generate_content(test_prompt)
+        
+        if response and response.text:
+            mark_ai_api_success()
+            return True
+        else:
+            mark_ai_api_failure()
+            return False
+            
+    except Exception as e:
+        logger.error(f"AI API 연결 테스트 실패: {e}")
+        mark_ai_api_failure()
+        return False
+
+def get_ai_api_status_summary() -> Dict:
+    """AI API 상태 요약 정보"""
+    status = check_ai_api_status()
+    
+    return {
+        'is_working': status['is_working'],
+        'consecutive_failures': status['consecutive_failures'],
+        'last_success': status['last_success_time'].isoformat() if status['last_success_time'] else None,
+        'last_failure': status['last_failure_time'].isoformat() if status['last_failure_time'] else None,
+        'status_text': 'AI API 정상 작동' if status['is_working'] else f'AI API 비작동 ({status["consecutive_failures"]}회 실패)'
+    }
 
 # 테스트용 코드
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ def check_process_status(script_name):
     return {'running': False}
 
 from docs.utility.trade_analyzer import TradeAnalyzer
-from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status
+from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status, get_ai_api_status_summary
 
 # 15분 차트 데이터를 사용하도록 초기화
 analyzer = TradeAnalyzer(collection_name="chart_15m")
@@ -91,9 +91,11 @@ async def root(request: Request):
     try:
         ai_data_status = get_data_status()
         ai_recovery_status = get_recovery_status()
+        ai_api_status = get_ai_api_status_summary()
     except Exception as e:
         ai_data_status = {}
         ai_recovery_status = {'disabled_tasks': [], 'recovery_timestamps': {}}
+        ai_api_status = {'is_working': False, 'status_text': 'AI API 상태 확인 불가'}
     
     # 트레이딩 분석 데이터 가져오기
     trade_analysis = analyzer.get_visualization_data(hours=24)
@@ -118,6 +120,7 @@ async def root(request: Request):
             "main_status": main_status,
             "ai_data_status": ai_data_status,
             "ai_recovery_status": ai_recovery_status,
+            "ai_api_status": ai_api_status,
             "now": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "trade_analysis_json": json.dumps(trade_analysis),
             "win_rate": win_rate

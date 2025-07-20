@@ -28,7 +28,10 @@ from docs.utility.trade_logger import TradeLogger
 
 # AI 시스템 함수들
 from docs.investment_ai.ai_trading_integration import execute_ai_trading_cycle
-from docs.investment_ai.data_scheduler import run_scheduled_data_collection, get_data_status, get_recovery_status
+from docs.investment_ai.data_scheduler import (
+    run_scheduled_data_collection, get_data_status, get_recovery_status,
+    check_ai_api_status, test_ai_api_connection, get_ai_api_status_summary
+)
 
 # 설정값 (15분 간격으로 변경)
 TRADING_CONFIG = {
@@ -237,7 +240,7 @@ async def main():
                         time.sleep(1)
                         pbar.update(1)
             
-            # 차트 데이터 업데이트
+            # 차트 데이터 업데이트 (항상 실행)
             logger.info("차트 데이터 업데이트 중...")
             result, update_server_time, execution_time = try_update_with_check(config)
             if result is None:
@@ -246,6 +249,27 @@ async def main():
             
             # 데이터 정합성을 위한 대기
             time.sleep(1.0)
+            
+            # 데이터 수집 (거래와 독립적으로 항상 실행)
+            logger.info("데이터 수집 실행 중...")
+            try:
+                await run_scheduled_data_collection()
+                logger.info("데이터 수집 완료")
+            except Exception as e:
+                logger.error(f"데이터 수집 중 오류: {e}")
+                # 데이터 수집 실패해도 계속 진행
+            
+            # AI API 상태 확인 및 복구 시도
+            ai_api_status = check_ai_api_status()
+            if not ai_api_status['is_working']:
+                logger.warning("AI API 비작동 상태 - 복구 시도")
+                recovery_success = await test_ai_api_connection()
+                if recovery_success:
+                    logger.info("AI API 복구 성공!")
+                else:
+                    logger.error("AI API 복구 실패 - 거래 중단")
+                    # AI API 작동하지 않으면 거래 완전 중지
+                    continue
             
             # AI 시스템 상태 확인
             data_status = get_data_status()
@@ -259,12 +283,13 @@ async def main():
             if recovery_status['disabled_tasks']:
                 logger.info(f"복구 대기 중인 작업: {recovery_status['disabled_tasks']}")
             
-            # AI 트레이딩 사이클 실행
+            # AI 트레이딩 사이클 실행 (AI API가 작동 중일 때만)
             logger.info("AI 분석 및 거래 결정 중...")
             ai_result = await execute_ai_trading_cycle(config)
             
             if not ai_result.get('success', False):
                 logger.error(f"AI 트레이딩 사이클 실패: {ai_result.get('error', 'Unknown')}")
+                # AI 실패 시 거래 중단하고 다음 사이클로
                 continue
             
             ai_decision = ai_result.get('ai_decision', {})

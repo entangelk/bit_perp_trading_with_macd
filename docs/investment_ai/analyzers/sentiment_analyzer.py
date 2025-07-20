@@ -338,12 +338,15 @@ class SentimentAnalyzer:
 
     async def analyze_with_ai(self, sentiment_data: Dict) -> Dict:
         """AI 모델을 사용하여 시장 심리 종합 분석"""
+        from ..data_scheduler import mark_ai_api_success, mark_ai_api_failure
+        
         # 필요할 때만 모델 초기화
         if self.client is None:
             self.client, self.model_name = self.get_model()
         
         if self.client is None:
             logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
+            mark_ai_api_failure()
             return self.rule_based_analysis(sentiment_data)
         
         try:
@@ -362,6 +365,9 @@ class SentimentAnalyzer:
                     thinking_config=types.ThinkingConfig(thinking_budget=-1)
                 )
             )
+            
+            # AI API 성공 기록
+            mark_ai_api_success()
             
             # JSON 파싱
             result_text = response.text
@@ -384,6 +390,7 @@ class SentimentAnalyzer:
                 
         except Exception as e:
             logger.error(f"AI 시장 심리 분석 중 오류: {e}")
+            mark_ai_api_failure()
             return self.rule_based_analysis(sentiment_data)
     
     def rule_based_analysis(self, sentiment_data: Dict) -> Dict:
