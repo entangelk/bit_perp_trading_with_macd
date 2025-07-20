@@ -24,6 +24,15 @@ class InstitutionAnalyzer:
         self.client = None
         self.model_name = None
         
+        # 실패 카운트 추가
+        self.error_counts = {
+            'corporate_holdings': 0,
+            'volume_patterns': 0,
+            'market_structure': 0,
+            'derivatives_flow': 0
+        }
+        self.max_errors = 3
+        
         # 캐싱 TTL 설정 (초 단위) - 15분봉 기준 최적화
         self.cache_ttl = {
             'etf_flows': 14400,           # 4시간 (1일 2-3회 확인)
@@ -133,7 +142,8 @@ class InstitutionAnalyzer:
                 
         except Exception as e:
             logger.error(f"기업 BTC 보유량 데이터 수집 실패: {e}")
-            return self._get_dummy_corporate_holdings()
+            self.error_counts['corporate_holdings'] += 1
+            return self._get_cached_corporate_holdings()
     
     def get_institutional_volume_patterns(self) -> Dict:
         """기관 거래량 패턴 분석 (캐싱 권장: 2시간)"""
@@ -190,7 +200,8 @@ class InstitutionAnalyzer:
                 
         except Exception as e:
             logger.error(f"기관 거래량 패턴 분석 실패: {e}")
-            return self._get_dummy_volume_patterns()
+            self.error_counts['volume_patterns'] += 1
+            return self._get_cached_volume_patterns()
     
     def get_market_structure_indicators(self) -> Dict:
         """시장 구조 지표 (캐싱 권장: 1시간)"""
@@ -241,7 +252,8 @@ class InstitutionAnalyzer:
                 
         except Exception as e:
             logger.error(f"시장 구조 지표 수집 실패: {e}")
-            return self._get_dummy_market_structure()
+            self.error_counts['market_structure'] += 1
+            return self._get_cached_market_structure()
     
     def get_derivatives_flow_estimation(self) -> Dict:
         """파생상품 플로우 추정 (캐싱 권장: 2시간)"""
@@ -308,7 +320,8 @@ class InstitutionAnalyzer:
             
         except Exception as e:
             logger.error(f"파생상품 플로우 추정 실패: {e}")
-            return self._get_dummy_derivatives_flow()
+            self.error_counts['derivatives_flow'] += 1
+            return self._get_cached_derivatives_flow()
     
     def get_exchange_institutional_indicators(self) -> Dict:
         """거래소 기관 지표 (캐싱 권장: 2시간)"""
@@ -367,7 +380,7 @@ class InstitutionAnalyzer:
                 
         except Exception as e:
             logger.error(f"거래소 기관 지표 수집 실패: {e}")
-            return self._get_dummy_exchange_indicators()
+            return self._get_cached_exchange_indicators()
     
     def _calculate_correlation(self, x: List[float], y: List[float]) -> float:
         """간단한 상관관계 계산"""
@@ -389,93 +402,75 @@ class InstitutionAnalyzer:
         except:
             return 0
     
-    def _get_dummy_corporate_holdings(self) -> Dict:
-        """더미 기업 보유량 데이터"""
-        return {
-            'total_corporate_btc': 1850000,
-            'total_companies': 45,
-            'large_holders_count': 8,
-            'medium_holders_count': 15,
-            'small_holders_count': 22,
-            'top_10_holdings': 1200000,
-            'concentration_ratio': 64.9,
-            'average_holding': 41111,
-            'institutional_adoption_level': 78.5,
-            'top_holders': [
-                {'name': 'MicroStrategy', 'holdings': 193000},
-                {'name': 'Tesla', 'holdings': 42902},
-                {'name': 'Block Inc', 'holdings': 8027}
-            ],
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_corporate_holdings(self) -> Optional[Dict]:
+        """MongoDB에서 과거 기업 보유량 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 12시간 이내 데이터 찾기
+            twelve_hours_ago = datetime.now(timezone.utc) - timedelta(hours=12)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "institutional_data",
+                "created_at": {"$gte": twelve_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('corporate_holdings'):
+                holdings_data = cached_data['data']['corporate_holdings']
+                return {
+                    'total_corporate_btc': holdings_data.get('total_corporate_btc'),
+                    'total_companies': holdings_data.get('total_companies'),
+                    'large_holders_count': holdings_data.get('large_holders_count'),
+                    'medium_holders_count': holdings_data.get('medium_holders_count'),
+                    'small_holders_count': holdings_data.get('small_holders_count'),
+                    'top_10_holdings': holdings_data.get('top_10_holdings'),
+                    'concentration_ratio': holdings_data.get('concentration_ratio'),
+                    'average_holding': holdings_data.get('average_holding'),
+                    'institutional_adoption_level': holdings_data.get('institutional_adoption_level'),
+                    'top_holders': holdings_data.get('top_holders', []),
+                    'timestamp': cached_data['created_at'].isoformat(),
+                    'source': 'cached_data',
+                    'cache_ttl': self.cache_ttl['corporate_holdings']
+                }
+            
+            logger.warning("기업 보유량: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 기업 보유량 데이터 조회 실패: {e}")
+            return None
     
-    def _get_dummy_volume_patterns(self) -> Dict:
-        """더미 거래량 패턴"""
-        return {
-            'recent_7d_avg_volume': 28000000000,
-            'volume_trend': 'Stable',
-            'high_volume_days_30d': 8,
-            'volume_volatility': 0.42,
-            'price_volume_correlation': -0.15,
-            'institutional_activity_score': 72.3,
-            'large_block_trading': 'Medium',
-            'institutional_flow_direction': 'Neutral',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_volume_patterns(self) -> Optional[Dict]:
+        """MongoDB에서 과거 거래량 패턴 데이터 가져오기"""
+        logger.warning("거래량 패턴: 캐시된 데이터 없음")
+        return None
     
-    def _get_dummy_market_structure(self) -> Dict:
-        """더미 시장 구조"""
-        return {
-            'btc_dominance': 62.5,
-            'eth_dominance': 12.8,
-            'alt_dominance': 24.7,
-            'total_market_cap': 3200000000000,
-            'defi_ratio': 8.5,
-            'institutional_preference_score': 75.2,
-            'market_maturity': 'Medium',
-            'institutional_vs_retail': 'Balanced',
-            'market_concentration': 'Concentrated',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_market_structure(self) -> Optional[Dict]:
+        """MongoDB에서 과거 시장 구조 데이터 가져오기"""
+        logger.warning("시장 구조: 캐시된 데이터 없음")
+        return None
     
-    def _get_dummy_derivatives_flow(self) -> Dict:
-        """더미 파생상품 플로우"""
-        return {
-            'spot_volume_24h': 18000000000,
-            'futures_volume_24h': 25000000000,
-            'futures_to_spot_ratio': 0.58,
-            'total_derivatives_volume': 25000000000,
-            'institutional_derivatives_score': 68.5,
-            'derivatives_market_type': 'Balanced',
-            'implied_volatility_estimate': 12.5,
-            'options_activity_estimate': 'Medium',
-            'institutional_hedging': 'Active',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_derivatives_flow(self) -> Optional[Dict]:
+        """MongoDB에서 과거 파생상품 플로우 데이터 가져오기"""
+        logger.warning("파생상품 플로우: 캐시된 데이터 없음")
+        return None
     
-    def _get_dummy_exchange_indicators(self) -> Dict:
-        """더미 거래소 지표"""
-        return {
-            'institutional_exchange_volume': 45000,
-            'retail_exchange_volume': 85000,
-            'total_exchange_volume': 130000,
-            'institutional_volume_ratio': 0.35,
-            'institutional_exchange_score': 65.8,
-            'exchange_flow_type': 'Mixed',
-            'top_institutional_exchanges': ['coinbase-pro', 'kraken', 'bitstamp'],
-            'market_access_pattern': 'Professional',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_exchange_indicators(self) -> Optional[Dict]:
+        """MongoDB에서 과거 거래소 지표 데이터 가져오기"""
+        logger.warning("거래소 지표: 캐시된 데이터 없음")
+        return None
+    
+    def check_data_availability(self) -> bool:
+        """데이터 사용 가능 여부 확인"""
+        failed_sources = sum(1 for count in self.error_counts.values() if count >= self.max_errors)
+        if failed_sources >= 3:  # 4개 소스 중 3개 이상 실패시 불가
+            return False
+        return True
     
     def collect_institutional_data(self) -> Dict:
         """기관 투자 데이터 종합 수집"""
@@ -495,7 +490,7 @@ class InstitutionAnalyzer:
                 logger.info(f"✅ 기업보유량: {corporate_holdings.get('total_companies', 'N/A')}개사, {corporate_holdings.get('total_corporate_btc', 'N/A'):,.0f} BTC")
             except Exception as e:
                 logger.error(f"❌ 기업보유량 수집 실패: {e}")
-                institutional_data['corporate_holdings'] = self._get_dummy_corporate_holdings()
+                institutional_data['corporate_holdings'] = self._get_cached_corporate_holdings()
             
             # 2. 기관 거래량 패턴
             try:
@@ -506,7 +501,7 @@ class InstitutionAnalyzer:
                 logger.info(f"✅ 거래량패턴: {volume_patterns.get('institutional_activity_score', 'N/A')}점, {volume_patterns.get('volume_trend', 'N/A')}")
             except Exception as e:
                 logger.error(f"❌ 거래량패턴 수집 실패: {e}")
-                institutional_data['volume_patterns'] = self._get_dummy_volume_patterns()
+                institutional_data['volume_patterns'] = self._get_cached_volume_patterns()
             
             # 3. 시장 구조
             try:
@@ -517,7 +512,7 @@ class InstitutionAnalyzer:
                 logger.info(f"✅ 시장구조: BTC {market_structure.get('btc_dominance', 'N/A')}%, 기관선호도 {market_structure.get('institutional_preference_score', 'N/A')}")
             except Exception as e:
                 logger.error(f"❌ 시장구조 수집 실패: {e}")
-                institutional_data['market_structure'] = self._get_dummy_market_structure()
+                institutional_data['market_structure'] = self._get_cached_market_structure()
             
             # 4. 파생상품 플로우
             try:
@@ -528,7 +523,7 @@ class InstitutionAnalyzer:
                 logger.info(f"✅ 파생상품: 선물비율 {derivatives_flow.get('futures_to_spot_ratio', 'N/A'):.2f}, 기관점수 {derivatives_flow.get('institutional_derivatives_score', 'N/A')}")
             except Exception as e:
                 logger.error(f"❌ 파생상품 수집 실패: {e}")
-                institutional_data['derivatives_flow'] = self._get_dummy_derivatives_flow()
+                institutional_data['derivatives_flow'] = self._get_cached_derivatives_flow()
             
             # 5. 거래소 기관 지표
             try:
@@ -539,7 +534,7 @@ class InstitutionAnalyzer:
                 logger.info(f"✅ 거래소지표: 기관비율 {exchange_indicators.get('institutional_volume_ratio', 'N/A'):.2f}, {exchange_indicators.get('exchange_flow_type', 'N/A')}")
             except Exception as e:
                 logger.error(f"❌ 거래소지표 수집 실패: {e}")
-                institutional_data['exchange_indicators'] = self._get_dummy_exchange_indicators()
+                institutional_data['exchange_indicators'] = self._get_cached_exchange_indicators()
             
             # 수집 통계
             success_rate = (success_count / total_categories) * 100
@@ -563,22 +558,22 @@ class InstitutionAnalyzer:
             
         except Exception as e:
             logger.error(f"기관 투자 데이터 수집 중 전체 오류: {e}")
-            return self._get_dummy_complete_institutional_data()
+            return self._get_cached_complete_institutional_data()
     
-    def _get_dummy_complete_institutional_data(self) -> Dict:
-        """전체 실패시 더미 데이터"""
+    def _get_cached_complete_institutional_data(self) -> Dict:
+        """전체 실패시 캐시된 데이터 사용"""
         return {
-            'corporate_holdings': self._get_dummy_corporate_holdings(),
-            'volume_patterns': self._get_dummy_volume_patterns(),
-            'market_structure': self._get_dummy_market_structure(),
-            'derivatives_flow': self._get_dummy_derivatives_flow(),
-            'exchange_indicators': self._get_dummy_exchange_indicators(),
+            'corporate_holdings': self._get_cached_corporate_holdings(),
+            'volume_patterns': self._get_cached_volume_patterns(),
+            'market_structure': self._get_cached_market_structure(),
+            'derivatives_flow': self._get_cached_derivatives_flow(),
+            'exchange_indicators': self._get_cached_exchange_indicators(),
             'collection_stats': {
                 'timestamp': datetime.now().isoformat(),
                 'total_categories': 5,
                 'successful_categories': 0,
                 'success_rate': 0.0,
-                'error': '모든 기관 투자 데이터 수집 실패'
+                'note': '모든 API 실패 - 캐시된 데이터 사용'
             }
         }
     
@@ -940,8 +935,28 @@ class InstitutionAnalyzer:
         try:
             logger.info("기관 투자 흐름 분석 시작")
             
+            # 데이터 사용 가능 여부 확인
+            if not self.check_data_availability():
+                logger.warning("기관 분석: 대부분의 데이터 소스 실패 - 분석 건너뛰기")
+                return {
+                    "success": False,
+                    "error": "대부분의 데이터 소스에서 연속 실패 - 분석 불가",
+                    "analysis_type": "institutional_flow",
+                    "skip_reason": "insufficient_data"
+                }
+            
             # 1. 기관 투자 데이터 수집
             institutional_raw_data = self.collect_institutional_data()
+            
+            # 데이터 유효성 검사
+            if institutional_raw_data is None:
+                logger.warning("기관 분석: 사용 가능한 데이터 없음")
+                return {
+                    "success": False,
+                    "error": "유효한 데이터 없음 - 분석 불가",
+                    "analysis_type": "institutional_flow",
+                    "skip_reason": "no_valid_data"
+                }
             
             # 2. 기관 투자 신호 분석
             signal_analysis = self.analyze_institutional_signals(institutional_raw_data)
@@ -950,7 +965,10 @@ class InstitutionAnalyzer:
             comprehensive_data = {
                 'raw_data': institutional_raw_data,
                 'signal_analysis': signal_analysis,
-                'analysis_timestamp': datetime.now(timezone.utc).isoformat()
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'data_quality': {
+                    'error_counts': self.error_counts.copy()
+                }
             }
             
             # 4. AI 종합 분석

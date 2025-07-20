@@ -24,6 +24,12 @@ class PositionAnalyzer:
         # AI 모델 초기화 제거 - 실제 호출 시에만 초기화
         self.client = None
         self.model_name = None
+        
+        # 실패 카운트 추가
+        self.error_counts = {
+            'position_data_fetch': 0
+        }
+        self.max_errors = 3
     
     def get_model(self):
         """AI 모델을 필요할 때만 초기화"""
@@ -373,15 +379,32 @@ class PositionAnalyzer:
                 "analysis_summary": f"분석 중 오류 발생: {str(e)}"
             }
     
+    def check_data_availability(self) -> bool:
+        """데이터 사용 가능 여부 확인"""
+        if self.error_counts['position_data_fetch'] >= self.max_errors:
+            return False
+        return True
+    
     async def analyze_position_status(self) -> Dict:
         """포지션 상태 분석 메인 함수"""
         try:
             logger.info("포지션 상태 분석 시작")
             
+            # 데이터 사용 가능 여부 확인
+            if not self.check_data_availability():
+                logger.warning("포지션 분석: 데이터 수집 연속 실패 - 분석 건너뛰기")
+                return {
+                    "success": False,
+                    "error": "데이터 수집에서 연속 실패 - 분석 불가",
+                    "analysis_type": "position_analysis",
+                    "skip_reason": "insufficient_data"
+                }
+            
             # 1. 포지션 데이터 수집
             balance, positions_json, ledger = fetch_investment_status()
             
             if balance == 'error':
+                self.error_counts['position_data_fetch'] += 1
                 return {
                     "success": False,
                     "error": "포지션 데이터 수집 실패",

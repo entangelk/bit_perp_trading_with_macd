@@ -10,6 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, Callable, Any
 from dataclasses import dataclass
 import json
+from pymongo import MongoClient
 
 logger = logging.getLogger("data_scheduler")
 
@@ -20,7 +21,6 @@ class DataTask:
     func: Callable
     interval_minutes: int
     last_run: Optional[datetime] = None
-    data_cache: Any = None
     cache_duration_minutes: int = 0  # 0이면 캐시 사용 안함
     is_running: bool = False
     error_count: int = 0
@@ -34,8 +34,32 @@ class DataScheduler:
         self.tasks: Dict[str, DataTask] = {}
         self.running = False
         
+        # MongoDB 연결 설정
+        self._setup_mongodb()
+        
         # 기본 데이터 수집 작업들 등록
         self._register_default_tasks()
+    
+    def _setup_mongodb(self):
+        """MongoDB 연결 및 캐시 컬렉션 설정"""
+        try:
+            self.mongo_client = MongoClient("mongodb://mongodb:27017")
+            self.database = self.mongo_client["bitcoin"]
+            self.cache_collection = self.database["data_cache"]
+            
+            # 만료 시간을 위한 TTL 인덱스 생성 (expire_at 필드에 대해)
+            try:
+                self.cache_collection.create_index("expire_at", expireAfterSeconds=0)
+                logger.info("데이터 캐시 컬렉션 TTL 인덱스 생성 완료")
+            except Exception as e:
+                logger.debug(f"TTL 인덱스 생성 오류 (이미 존재할 수 있음): {e}")
+                
+            logger.info("MongoDB 데이터 캐시 연결 완료")
+        except Exception as e:
+            logger.error(f"MongoDB 연결 실패: {e}")
+            self.mongo_client = None
+            self.database = None
+            self.cache_collection = None
     
     def _register_default_tasks(self):
         """기본 데이터 수집 작업들 등록"""
@@ -125,25 +149,31 @@ class DataScheduler:
         return time_since_last.total_seconds() >= task.interval_minutes * 60
     
     def get_cached_data(self, task_name: str) -> Optional[Any]:
-        """캐시된 데이터 반환"""
+        """MongoDB에서 캐시된 데이터 반환"""
         if task_name not in self.tasks:
             return None
         
         task = self.tasks[task_name]
         
-        # 캐시가 없거나 만료된 경우
-        if (task.cache_duration_minutes == 0 or 
-            task.data_cache is None or 
-            task.last_run is None):
+        # 캐시 사용 안하는 경우
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
             return None
         
-        # 캐시 만료 확인
-        cache_age = datetime.now(timezone.utc) - task.last_run
-        if cache_age.total_seconds() > task.cache_duration_minutes * 60:
+        try:
+            # MongoDB에서 캐시 데이터 조회
+            cache_doc = self.cache_collection.find_one({
+                "task_name": task_name,
+                "expire_at": {"$gt": datetime.now(timezone.utc)}
+            })
+            
+            if cache_doc:
+                logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")
+                return cache_doc.get("data")
+            
             return None
-        
-        logger.debug(f"캐시된 데이터 사용: {task_name}")
-        return task.data_cache
+        except Exception as e:
+            logger.error(f"캐시 데이터 조회 오류: {e}")
+            return None
     
     async def run_task(self, task: DataTask) -> Optional[Any]:
         """개별 작업 실행"""
@@ -159,7 +189,7 @@ class DataScheduler:
             
             # 성공 시 캐시 업데이트
             if result is not None:
-                task.data_cache = result
+                self._update_cache(task, result)
                 task.last_run = datetime.now(timezone.utc)
                 task.error_count = 0  # 에러 카운트 리셋
                 logger.debug(f"데이터 수집 완료: {task.name} ({duration:.2f}초)")
@@ -187,7 +217,7 @@ class DataScheduler:
         # 에러가 너무 많으면 스킵
         if task.error_count >= task.max_errors:
             logger.warning(f"데이터 작업 스킵 (최대 오류 횟수 초과): {task_name}")
-            return task.data_cache  # 마지막 성공 데이터라도 반환
+            return self.get_cached_data(task_name)  # 마지막 성공 데이터라도 반환
         
         # 캐시된 데이터 확인
         cached_data = self.get_cached_data(task_name)
@@ -199,7 +229,7 @@ class DataScheduler:
             return await self.run_task(task)
         else:
             # 수집 주기가 아니면 마지막 데이터 반환
-            return task.data_cache
+            return self.get_cached_data(task_name)
     
     async def run_scheduled_collections(self):
         """예정된 수집 작업들 실행"""
@@ -219,23 +249,56 @@ class DataScheduler:
         # 병렬 실행
         await asyncio.gather(*[self.run_task(task) for _, task in tasks_to_run])
     
+    def _update_cache(self, task: DataTask, data: Any):
+        """MongoDB에 캐시 데이터 저장"""
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+            return
+        
+        try:
+            expire_at = datetime.now(timezone.utc) + timedelta(minutes=task.cache_duration_minutes)
+            
+            # upsert를 사용하여 기존 데이터 업데이트 또는 새로 삽입
+            self.cache_collection.replace_one(
+                {"task_name": task.name},
+                {
+                    "task_name": task.name,
+                    "data": data,
+                    "created_at": datetime.now(timezone.utc),
+                    "expire_at": expire_at
+                },
+                upsert=True
+            )
+            logger.debug(f"MongoDB 캐시 업데이트: {task.name}")
+        except Exception as e:
+            logger.error(f"캐시 업데이트 오류: {e}")
+    
     def get_task_status(self) -> Dict:
         """모든 작업의 상태 반환"""
         status = {}
         for task_name, task in self.tasks.items():
+            has_cache = False
+            cache_age_minutes = 0
+            
+            # MongoDB에서 캐시 상태 확인
+            if self.cache_collection is not None:
+                try:
+                    cache_doc = self.cache_collection.find_one({"task_name": task_name})
+                    if cache_doc:
+                        has_cache = True
+                        if cache_doc.get("created_at"):
+                            cache_age = datetime.now(timezone.utc) - cache_doc["created_at"]
+                            cache_age_minutes = cache_age.total_seconds() / 60
+                except Exception as e:
+                    logger.error(f"캐시 상태 확인 오류: {e}")
+            
             status[task_name] = {
                 'interval_minutes': task.interval_minutes,
                 'last_run': task.last_run.isoformat() if task.last_run else None,
-                'has_cache': task.data_cache is not None,
+                'has_cache': has_cache,
                 'is_running': task.is_running,
                 'error_count': task.error_count,
-                'cache_age_minutes': 0
+                'cache_age_minutes': cache_age_minutes
             }
-            
-            # 캐시 나이 계산
-            if task.last_run:
-                cache_age = datetime.now(timezone.utc) - task.last_run
-                status[task_name]['cache_age_minutes'] = cache_age.total_seconds() / 60
         
         return status
     

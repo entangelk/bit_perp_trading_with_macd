@@ -26,6 +26,13 @@ class SentimentAnalyzer:
         self.client = None
         self.model_name = None
         
+        # 실패 카운트 추가
+        self.error_counts = {
+            'fear_greed': 0,
+            'news': 0
+        }
+        self.max_errors = 3  # 최대 허용 오류 수
+        
         # 뉴스 소스 설정
         self.news_sources = {
             'cointelegraph': 'https://cointelegraph.com/rss',
@@ -85,10 +92,12 @@ class SentimentAnalyzer:
             
         except requests.RequestException as e:
             logger.error(f"공포/탐욕 지수 API 호출 실패: {e}")
-            return self._get_dummy_fear_greed()
+            self.error_counts['fear_greed'] += 1
+            return self._get_cached_fear_greed()
         except Exception as e:
             logger.error(f"공포/탐욕 지수 처리 중 오류: {e}")
-            return self._get_dummy_fear_greed()
+            self.error_counts['fear_greed'] += 1
+            return self._get_cached_fear_greed()
     
     def _classify_market_sentiment(self, value: int) -> str:
         """공포/탐욕 지수 값을 시장 심리로 분류"""
@@ -103,18 +112,48 @@ class SentimentAnalyzer:
         else:
             return "extreme_fear"
     
-    def _get_dummy_fear_greed(self) -> Dict:
-        """공포/탐욕 지수 더미 데이터 (API 실패시)"""
-        return {
-            'current_value': 50,
-            'current_classification': 'Neutral',
-            'week_average': 50.0,
-            'trend_change': 0,
-            'trend_direction': 'stable',
-            'historical_data': [],
-            'market_sentiment': 'neutral',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_fear_greed(self) -> Optional[Dict]:
+        """MongoDB에서 과거 공포/탐욕 지수 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 7일 이내 데이터 찾기
+            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "fear_greed_index",
+                "created_at": {"$gte": seven_days_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data'):
+                fg_data = cached_data['data']['data'][0]  # 최신 데이터
+                return {
+                    'current_value': int(fg_data['value']),
+                    'current_classification': fg_data['value_classification'],
+                    'week_average': int(fg_data['value']),  # 단일 데이터이므로 동일
+                    'trend_change': 0,
+                    'trend_direction': 'stable',
+                    'historical_data': [{
+                        'value': int(fg_data['value']),
+                        'classification': fg_data['value_classification'],
+                        'timestamp': fg_data['timestamp'],
+                        'date': datetime.fromtimestamp(int(fg_data['timestamp'])).strftime('%Y-%m-%d')
+                    }],
+                    'market_sentiment': self._classify_market_sentiment(int(fg_data['value'])),
+                    'cached_data_age': str(datetime.now(timezone.utc) - cached_data['created_at'])
+                }
+            
+            logger.warning("공포/탐욕 지수: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 공포/탐욕 데이터 조회 실패: {e}")
+            return None
     
     def get_crypto_news(self, limit: int = 20) -> List[Dict]:
         """암호화폐 뉴스 수집"""
@@ -168,19 +207,36 @@ class SentimentAnalyzer:
             
         except Exception as e:
             logger.error(f"뉴스 수집 중 오류: {e}")
-            return self._get_dummy_news()
+            self.error_counts['news'] += 1
+            return self._get_cached_news()
     
-    def _get_dummy_news(self) -> List[Dict]:
-        """더미 뉴스 데이터 (뉴스 수집 실패시)"""
-        return [
-            {
-                'title': 'Bitcoin Market Update',
-                'summary': 'Bitcoin continues to show mixed signals in the current market environment.',
-                'source': 'dummy',
-                'published_time': datetime.now().isoformat(),
-                'link': ''
-            }
-        ]
+    def _get_cached_news(self) -> Optional[List[Dict]]:
+        """MongoDB에서 과거 뉴스 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 24시간 이내 뉴스 데이터 찾기
+            one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "crypto_news",
+                "created_at": {"$gte": one_day_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('news'):
+                return cached_data['data']['news']
+            
+            logger.warning("뉴스 데이터: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 뉴스 데이터 조회 실패: {e}")
+            return None
     
     def analyze_news_sentiment(self, news_list: List[Dict]) -> Dict:
         """뉴스 감정 분석 (간단한 키워드 기반)"""
@@ -476,10 +532,27 @@ class SentimentAnalyzer:
             logger.error(f"캐시된 공포/탐욕 데이터 처리 오류: {e}")
             return self._get_dummy_fear_greed()
     
+    def check_data_availability(self) -> bool:
+        """데이터 사용 가능 여부 확인"""
+        if (self.error_counts['fear_greed'] >= self.max_errors and 
+            self.error_counts['news'] >= self.max_errors):
+            return False
+        return True
+    
     async def analyze_market_sentiment(self) -> Dict:
         """시장 심리 분석 메인 함수 (스케줄러 사용)"""
         try:
             logger.info("시장 심리 분석 시작 (스케줄러 사용)")
+            
+            # 데이터 사용 가능 여부 확인
+            if not self.check_data_availability():
+                logger.warning("심리 분석: 모든 데이터 소스 실패 - 분석 건너뛰기")
+                return {
+                    "success": False,
+                    "error": "모든 데이터 소스에서 연속 실패 - 분석 불가",
+                    "analysis_type": "market_sentiment",
+                    "skip_reason": "insufficient_data"
+                }
             
             # 스케줄러에서 캐시된 데이터 사용
             try:
@@ -505,15 +578,30 @@ class SentimentAnalyzer:
                 fear_greed_data = self.get_fear_greed_index()
                 recent_news = self.get_crypto_news()
             
+            # 데이터 유효성 검사
+            if fear_greed_data is None and recent_news is None:
+                logger.warning("심리 분석: 사용 가능한 데이터 없음")
+                return {
+                    "success": False,
+                    "error": "유효한 데이터 없음 - 분석 불가",
+                    "analysis_type": "market_sentiment",
+                    "skip_reason": "no_valid_data"
+                }
+            
             # 3. 뉴스 감정 분석
-            news_sentiment = self.analyze_news_sentiment(recent_news)
+            news_sentiment = self.analyze_news_sentiment(recent_news or [])
             
             # 4. 데이터 통합
             sentiment_data = {
                 'fear_greed_index': fear_greed_data,
                 'news_sentiment': news_sentiment,
-                'recent_news': recent_news,
-                'data_collection_time': datetime.now(timezone.utc).isoformat()
+                'recent_news': recent_news or [],
+                'data_collection_time': datetime.now(timezone.utc).isoformat(),
+                'data_quality': {
+                    'fear_greed_available': fear_greed_data is not None,
+                    'news_available': recent_news is not None and len(recent_news) > 0,
+                    'error_counts': self.error_counts.copy()
+                }
             }
             
             # 5. AI 종합 분석

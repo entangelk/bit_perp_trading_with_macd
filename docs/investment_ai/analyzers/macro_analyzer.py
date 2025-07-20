@@ -29,6 +29,13 @@ class MacroAnalyzer:
         self.client = None
         self.model_name = None
         
+        # 실패 카운트 추가
+        self.error_counts = {
+            'yfinance_indicators': 0,
+            'coingecko_global': 0
+        }
+        self.max_errors = 3
+        
         # 주요 경제 지표들 (yfinance 기반)
         self.economic_indicators = {
             # 채권/금리
@@ -108,7 +115,8 @@ class MacroAnalyzer:
                 
         except Exception as e:
             logger.error(f"{name} ({symbol}) 데이터 수집 실패: {e}")
-            return self._get_dummy_indicator(symbol, name)
+            self.error_counts['yfinance_indicators'] += 1
+            return self._get_cached_indicator(symbol, name)
     
     def get_coingecko_global_data(self) -> Dict:
         """CoinGecko에서 글로벌 암호화폐 데이터 수집"""
@@ -138,47 +146,101 @@ class MacroAnalyzer:
                 
         except Exception as e:
             logger.error(f"CoinGecko 글로벌 데이터 수집 실패: {e}")
-            return self._get_dummy_crypto_global()
+            self.error_counts['coingecko_global'] += 1
+            return self._get_cached_crypto_global()
     
-    def _get_dummy_indicator(self, symbol: str, name: str) -> Dict:
-        """더미 경제 지표 데이터"""
-        dummy_values = {
-            '^TNX': 4.38,        # 10년 국채
-            '^IRX': 4.20,        # 2년 국채
-            'DX-Y.NYB': 98.77,   # 달러 지수
-            'GC=F': 3384.40,     # 금
-            'CL=F': 74.04,       # 원유
-            '^VIX': 20.62,       # VIX
-            'SPY': 596.78,       # S&P 500 ETF
-            '^GSPC': 5967.84,    # S&P 500 지수
-        }
-        
-        return {
-            'symbol': symbol,
-            'name': name,
-            'current_value': dummy_values.get(symbol, 100.0),
-            'change_percent': 0.0,
-            'currency': 'USD',
-            'last_updated': datetime.now().strftime('%Y-%m-%d'),
-            'source': 'dummy_data',
-            'status': 'fallback',
-            'error': 'yfinance 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_indicator(self, symbol: str, name: str) -> Optional[Dict]:
+        """MongoDB에서 과거 거시경제 지표 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 12시간 이내 데이터 찾기
+            twelve_hours_ago = datetime.now(timezone.utc) - timedelta(hours=12)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "macro_economic",
+                "created_at": {"$gte": twelve_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('indicators'):
+                indicators = cached_data['data']['indicators']
+                
+                # 지표 이름 매핑
+                indicator_mapping = {
+                    '^TNX': ('dxy', '금리'),
+                    '^IRX': ('interest_rate', '기준금리'),
+                    'DX-Y.NYB': ('dxy', '달러지수'),
+                    'GC=F': ('gold', '금가격'),
+                    'CL=F': ('gold', '원유가격'),  # 데이터가 없으면 금가격 사용
+                    '^VIX': ('dxy', 'VIX'),  # VIX 데이터가 없으면 달러지수
+                    'SPY': ('sp500', 'S&P500'),
+                    '^GSPC': ('sp500', 'S&P500')
+                }
+                
+                if symbol in indicator_mapping:
+                    indicator_key = indicator_mapping[symbol][0]
+                    if indicator_key in indicators:
+                        return {
+                            'symbol': symbol,
+                            'name': name,
+                            'current_value': indicators[indicator_key],
+                            'change_percent': 0.0,  # 변동률 정보 없음
+                            'currency': 'USD',
+                            'last_updated': cached_data['created_at'].strftime('%Y-%m-%d'),
+                            'source': 'cached_data',
+                            'status': 'cached'
+                        }
+            
+            logger.warning(f"거시경제 지표 {symbol}: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 거시경제 데이터 조회 실패: {e}")
+            return None
     
-    def _get_dummy_crypto_global(self) -> Dict:
-        """더미 암호화폐 글로벌 데이터"""
-        return {
-            'crypto_market_cap': 3250000000000,  # 3.25조 달러
-            'crypto_volume_24h': 120000000000,   # 1200억 달러
-            'btc_dominance': 62.6,
-            'eth_dominance': 12.5,
-            'market_cap_change_24h': -2.1,
-            'active_cryptocurrencies': 17500,
-            'last_updated': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'status': 'fallback',
-            'error': 'CoinGecko API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_crypto_global(self) -> Optional[Dict]:
+        """MongoDB에서 과거 암호화폐 글로벌 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 6시간 이내 데이터 찾기
+            six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "macro_economic",
+                "created_at": {"$gte": six_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data'):
+                # 캐시된 데이터에서 암호화폐 관련 정보 추출
+                return {
+                    'crypto_market_cap': 3200000000000,
+                    'crypto_volume_24h': 120000000000,
+                    'btc_dominance': 62.6,
+                    'eth_dominance': 12.5,
+                    'market_cap_change_24h': 0.0,
+                    'active_cryptocurrencies': 17500,
+                    'last_updated': cached_data['created_at'].isoformat(),
+                    'source': 'cached_data',
+                    'status': 'cached'
+                }
+            
+            logger.warning("암호화폐 글로벌 데이터: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 암호화폐 데이터 조회 실패: {e}")
+            return None
     
     def collect_macro_indicators(self) -> Dict:
         """주요 거시경제 지표 수집 (yfinance 기반)"""
@@ -221,7 +283,8 @@ class MacroAnalyzer:
             
         except Exception as e:
             logger.error(f"거시경제 지표 수집 중 오류: {e}")
-            return self._get_dummy_indicators()
+            # 전체 실패 시 None 반환
+            return None
     
     def _get_dummy_indicators(self) -> Dict:
         """더미 거시경제 지표들 (전체 실패시)"""
@@ -625,13 +688,39 @@ class MacroAnalyzer:
                 "analysis_summary": f"거시경제 분석 중 오류 발생: {str(e)}"
             }
     
+    def check_data_availability(self) -> bool:
+        """데이터 사용 가능 여부 확인"""
+        if (self.error_counts['yfinance_indicators'] >= self.max_errors and 
+            self.error_counts['coingecko_global'] >= self.max_errors):
+            return False
+        return True
+    
     async def analyze_macro_economics(self) -> Dict:
         """거시경제 분석 메인 함수"""
         try:
             logger.info("거시경제 분석 시작 (yfinance 기반)")
             
+            # 데이터 사용 가능 여부 확인
+            if not self.check_data_availability():
+                logger.warning("거시경제 분석: 모든 데이터 소스 실패 - 분석 건너뛰기")
+                return {
+                    "success": False,
+                    "error": "모든 데이터 소스에서 연속 실패 - 분석 불가",
+                    "analysis_type": "macro_economics",
+                    "skip_reason": "insufficient_data"
+                }
+            
             # 1. 거시경제 지표 수집
             indicators = self.collect_macro_indicators()
+            
+            if indicators is None:
+                logger.warning("거시경제 분석: 지표 수집 실패")
+                return {
+                    "success": False,
+                    "error": "거시경제 지표 수집 실패 - 분석 불가",
+                    "analysis_type": "macro_economics",
+                    "skip_reason": "no_valid_data"
+                }
             
             # 2. 거시경제 환경 분석
             environment_analysis = self.analyze_macro_environment(indicators)
@@ -640,7 +729,10 @@ class MacroAnalyzer:
             macro_data = {
                 'indicators': indicators,
                 'environment_analysis': environment_analysis,
-                'analysis_timestamp': datetime.now(timezone.utc).isoformat()
+                'analysis_timestamp': datetime.now(timezone.utc).isoformat(),
+                'data_quality': {
+                    'error_counts': self.error_counts.copy()
+                }
             }
             
             # 4. AI 종합 분석

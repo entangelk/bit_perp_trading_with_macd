@@ -904,12 +904,58 @@ class FinalDecisionMaker:
             "human_review_reason": "시스템 오류로 인한 긴급 상황"
         }
     
+    def check_analysis_data_availability(self, all_analysis_results: Dict) -> Tuple[bool, Dict]:
+        """분석 데이터 사용 가능성 확인"""
+        analysis_status = {}
+        failed_due_to_data = 0
+        total_analyses = 0
+        
+        core_analyses = ['sentiment_analysis', 'macro_analysis', 'onchain_analysis', 'institutional_analysis']
+        
+        for analysis_type in core_analyses:
+            total_analyses += 1
+            result = all_analysis_results.get(analysis_type, {})
+            
+            if not result.get('success', False):
+                # 데이터 부족으로 인한 실패인지 확인
+                skip_reason = result.get('skip_reason', '')
+                if skip_reason in ['insufficient_data', 'no_valid_data']:
+                    failed_due_to_data += 1
+                    analysis_status[analysis_type] = 'failed_data_insufficient'
+                else:
+                    analysis_status[analysis_type] = 'failed_other'
+            else:
+                analysis_status[analysis_type] = 'success'
+        
+        # 데이터 부족으로 3개 이상 실패시 불가
+        data_sufficient = failed_due_to_data < 3
+        
+        return data_sufficient, {
+            'analysis_status': analysis_status,
+            'failed_due_to_data': failed_due_to_data,
+            'total_core_analyses': total_analyses,
+            'data_availability_rate': ((total_analyses - failed_due_to_data) / total_analyses * 100) if total_analyses > 0 else 0
+        }
+    
     async def make_final_decision(self, all_analysis_results: Dict) -> Dict:
         """최종 투자 결정 메인 함수"""
         try:
             logger.info("최종 투자 결정 분석 시작")
             
-            # 1. 모든 분석 결과 통합
+            # 데이터 사용 가능성 확인
+            data_sufficient, availability_info = self.check_analysis_data_availability(all_analysis_results)
+            
+            if not data_sufficient:
+                logger.warning(f"최종 결정: 데이터 부족으로 인해 {availability_info['failed_due_to_data']}개 분석 실패 - 결정 건너뛰기")
+                return {
+                    "success": False,
+                    "error": f"필수 데이터 부족: {availability_info['failed_due_to_data']}개 분석에서 데이터 미확보 - 안전상 투자 결정 보류",
+                    "analysis_type": "final_decision",
+                    "skip_reason": "insufficient_analysis_data",
+                    "data_availability": availability_info
+                }
+            
+            # 1. 모든 분석 결과 통합 (데이터가 충분한 경우에만)
             integrated_data = {
                 'position_analysis': all_analysis_results.get('position_analysis', {}),
                 'technical_analysis': all_analysis_results.get('technical_analysis', {}),
@@ -918,7 +964,8 @@ class FinalDecisionMaker:
                 'onchain_analysis': all_analysis_results.get('onchain_analysis', {}),
                 'institutional_analysis': all_analysis_results.get('institutional_analysis', {}),
                 'current_position': all_analysis_results.get('current_position', {}),
-                'integration_timestamp': datetime.now(timezone.utc).isoformat()
+                'integration_timestamp': datetime.now(timezone.utc).isoformat(),
+                'data_availability': availability_info
             }
             
             # 2. AI 또는 규칙 기반 최종 분석
@@ -931,10 +978,11 @@ class FinalDecisionMaker:
                 "result": final_result,
                 "analysis_type": "final_decision",
                 "integration_summary": {
-                    "total_analyses": len([k for k in integrated_data.keys() if k != 'integration_timestamp']),
+                    "total_analyses": len([k for k in integrated_data.keys() if k not in ['integration_timestamp', 'data_availability']]),
                     "successful_analyses": len([k for k, v in integrated_data.items() if v.get('success', False)]),
                     "integration_method": "weighted_composite_scoring",
-                    "decision_framework": "multi_factor_analysis"
+                    "decision_framework": "multi_factor_analysis",
+                    "data_availability_rate": availability_info['data_availability_rate']
                 }
             }
             

@@ -24,6 +24,16 @@ class OnchainAnalyzer:
         self.client = None
         self.model_name = None
         
+        # 실패 카운트 추가
+        self.error_counts = {
+            'blockchain_stats': 0,
+            'address_metrics': 0,
+            'holder_behavior': 0,
+            'mining_metrics': 0,
+            'mempool_data': 0
+        }
+        self.max_errors = 3
+        
         # 캐싱 TTL 설정 (초 단위)
         self.cache_ttl = {
             'whale_movements': 1800,      # 30분 (고래 거래)
@@ -125,7 +135,8 @@ class OnchainAnalyzer:
             
         except Exception as e:
             logger.error(f"Blockchain.info 통계 수집 실패: {e}")
-            return self._get_dummy_blockchain_stats()
+            self.error_counts['blockchain_stats'] += 1
+            return self._get_cached_blockchain_stats()
     
     def get_mempool_data(self) -> Dict:
         """메모리풀 데이터 수집 (캐싱 권장: 30분)"""
@@ -145,13 +156,8 @@ class OnchainAnalyzer:
             
         except Exception as e:
             logger.error(f"메모리풀 데이터 수집 실패: {e}")
-            return {
-                'unconfirmed_transactions': 25000,
-                'congestion_level': 'Medium',
-                'timestamp': datetime.now().isoformat(),
-                'source': 'dummy_data',
-                'error': str(e)
-            }
+            self.error_counts['mempool_data'] += 1
+            return None
     
     def get_address_metrics(self) -> Dict:
         """주소 활성도 지표 수집 (캐싱 권장: 1시간)"""
@@ -197,7 +203,8 @@ class OnchainAnalyzer:
             
         except Exception as e:
             logger.error(f"주소 지표 수집 실패: {e}")
-            return self._get_dummy_address_metrics()
+            self.error_counts['address_metrics'] += 1
+            return self._get_cached_address_metrics()
     
     def get_holder_behavior_metrics(self) -> Dict:
         """보유자 행동 분석 (캐싱 권장: 1시간)"""
@@ -247,7 +254,8 @@ class OnchainAnalyzer:
                 
         except Exception as e:
             logger.error(f"보유자 행동 분석 실패: {e}")
-            return self._get_dummy_holder_behavior()
+            self.error_counts['holder_behavior'] += 1
+            return self._get_cached_holder_behavior()
     
     def get_mining_metrics(self) -> Dict:
         """채굴 관련 지표 수집 (캐싱 권장: 2시간)"""
@@ -281,68 +289,171 @@ class OnchainAnalyzer:
             
         except Exception as e:
             logger.error(f"채굴 지표 수집 실패: {e}")
-            return self._get_dummy_mining_metrics()
+            self.error_counts['mining_metrics'] += 1
+            return self._get_cached_mining_metrics()
     
-    def _get_dummy_blockchain_stats(self) -> Dict:
-        """더미 블록체인 통계"""
-        return {
-            'total_btc_supply': 19700000,
-            'market_cap_usd': 2000000000000,
-            'hash_rate': 500000000000000000000,
-            'difficulty': 75000000000000,
-            'mempool_size': 25000,
-            'total_transactions': 850000000,
-            'blocks_count': 820000,
-            'avg_block_size': 1200000,
-            'minutes_between_blocks': 10.2,
-            'trade_volume_btc': 50000,
-            'trade_volume_usd': 25000000000,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_blockchain_stats(self) -> Optional[Dict]:
+        """MongoDB에서 과거 블록체인 통계 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 4시간 이내 데이터 찾기
+            four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=4)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "onchain_data",
+                "created_at": {"$gte": four_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data'):
+                onchain_data = cached_data['data']
+                if 'metrics' in onchain_data:
+                    metrics = onchain_data['metrics']
+                    return {
+                        'total_btc_supply': metrics.get('total_btc_supply'),
+                        'market_cap_usd': metrics.get('market_cap_usd'),
+                        'hash_rate': metrics.get('hash_rate'),
+                        'difficulty': metrics.get('difficulty'),
+                        'mempool_size': metrics.get('mempool_size'),
+                        'total_transactions': metrics.get('transaction_count'),
+                        'blocks_count': metrics.get('blocks_count'),
+                        'avg_block_size': metrics.get('avg_block_size'),
+                        'minutes_between_blocks': metrics.get('minutes_between_blocks'),
+                        'trade_volume_btc': metrics.get('trade_volume_btc'),
+                        'trade_volume_usd': metrics.get('trade_volume_usd'),
+                        'timestamp': cached_data['created_at'].isoformat(),
+                        'source': 'cached_data',
+                        'cache_ttl': self.cache_ttl['network_metrics']
+                    }
+            
+            logger.warning("블록체인 통계: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 블록체인 데이터 조회 실패: {e}")
+            return None
     
-    def _get_dummy_address_metrics(self) -> Dict:
-        """더미 주소 지표"""
-        return {
-            'estimated_active_addresses': 800000,
-            'new_addresses_trend': 'Stable',
-            'address_activity_score': 65,
-            'whale_addresses_estimate': 800,
-            'retail_addresses_estimate': 760000,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_address_metrics(self) -> Optional[Dict]:
+        """MongoDB에서 과거 주소 지표 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 2시간 이내 데이터 찾기
+            two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "onchain_data",
+                "created_at": {"$gte": two_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('address_metrics'):
+                address_data = cached_data['data']['address_metrics']
+                return {
+                    'estimated_active_addresses': address_data.get('estimated_active_addresses'),
+                    'new_addresses_trend': address_data.get('new_addresses_trend'),
+                    'address_activity_score': address_data.get('address_activity_score'),
+                    'whale_addresses_estimate': address_data.get('whale_addresses_estimate'),
+                    'retail_addresses_estimate': address_data.get('retail_addresses_estimate'),
+                    'timestamp': cached_data['created_at'].isoformat(),
+                    'source': 'cached_data',
+                    'cache_ttl': self.cache_ttl['addresses_metrics']
+                }
+            
+            logger.warning("주소 지표: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 주소 데이터 조회 실패: {e}")
+            return None
     
-    def _get_dummy_holder_behavior(self) -> Dict:
-        """더미 보유자 행동"""
-        return {
-            'hodl_strength_score': 65.5,
-            'volume_trend': 'Stable',
-            'price_volatility_7d': 8.5,
-            'holder_behavior': 'Mixed',
-            'selling_pressure': 'Medium',
-            'accumulation_phase': True,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_holder_behavior(self) -> Optional[Dict]:
+        """MongoDB에서 과거 보유자 행동 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 2시간 이내 데이터 찾기
+            two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "onchain_data",
+                "created_at": {"$gte": two_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('holder_behavior'):
+                holder_data = cached_data['data']['holder_behavior']
+                return {
+                    'hodl_strength_score': holder_data.get('hodl_strength_score'),
+                    'volume_trend': holder_data.get('volume_trend'),
+                    'price_volatility_7d': holder_data.get('price_volatility_7d'),
+                    'holder_behavior': holder_data.get('holder_behavior'),
+                    'selling_pressure': holder_data.get('selling_pressure'),
+                    'accumulation_phase': holder_data.get('accumulation_phase'),
+                    'timestamp': cached_data['created_at'].isoformat(),
+                    'source': 'cached_data',
+                    'cache_ttl': self.cache_ttl['holder_behavior']
+                }
+            
+            logger.warning("보유자 행동 데이터: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 보유자 데이터 조회 실패: {e}")
+            return None
     
-    def _get_dummy_mining_metrics(self) -> Dict:
-        """더미 채굴 지표 - 현실적인 값으로 수정"""
-        return {
-            'hash_rate_eh': 350.5,
-            'hash_rate_raw': 350500000000000000000,  # 원본 해시레이트
-            'difficulty': 72000000000000,
-            'mining_difficulty_trend': 'Stable',
-            'network_security_score': 70.1,  # 현실적인 값
-            'hash_rate_trend': 'Moderate',
-            'miner_capitulation_risk': 'Low',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'dummy_data',
-            'error': 'API 호출 실패로 더미 데이터 사용'
-        }
+    def _get_cached_mining_metrics(self) -> Optional[Dict]:
+        """MongoDB에서 과거 채굴 지표 데이터 가져오기"""
+        try:
+            from pymongo import MongoClient
+            from datetime import datetime, timezone, timedelta
+            
+            client = MongoClient("mongodb://mongodb:27017")
+            db = client["bitcoin"]
+            cache_collection = db["data_cache"]
+            
+            # 최근 4시간 이내 데이터 찾기
+            four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=4)
+            
+            cached_data = cache_collection.find_one({
+                "task_name": "onchain_data",
+                "created_at": {"$gte": four_hours_ago}
+            }, sort=[("created_at", -1)])
+            
+            if cached_data and cached_data.get('data', {}).get('mining'):
+                mining_data = cached_data['data']['mining']
+                return {
+                    'hash_rate_eh': mining_data.get('hash_rate_eh'),
+                    'hash_rate_raw': mining_data.get('hash_rate_raw'),
+                    'difficulty': mining_data.get('difficulty'),
+                    'mining_difficulty_trend': mining_data.get('mining_difficulty_trend'),
+                    'network_security_score': mining_data.get('network_security_score'),
+                    'hash_rate_trend': mining_data.get('hash_rate_trend'),
+                    'miner_capitulation_risk': mining_data.get('miner_capitulation_risk'),
+                    'timestamp': cached_data['created_at'].isoformat(),
+                    'source': 'cached_data',
+                    'cache_ttl': self.cache_ttl['mining_metrics']
+                }
+            
+            logger.warning("채굴 지표: 캐시된 데이터 없음")
+            return None
+            
+        except Exception as e:
+            logger.error(f"캐시된 채굴 데이터 조회 실패: {e}")
+            return None
     
     def collect_onchain_data(self) -> Dict:
         """온체인 데이터 종합 수집"""
@@ -363,7 +474,7 @@ class OnchainAnalyzer:
                 logger.info("✅ 네트워크 통계 수집 완료")
             except Exception as e:
                 logger.error(f"❌ 네트워크 통계 수집 실패: {e}")
-                onchain_data['network_stats'] = self._get_dummy_blockchain_stats()
+                onchain_data['network_stats'] = self._get_cached_blockchain_stats()
             
             # 2. 메모리풀 데이터
             try:
@@ -374,7 +485,7 @@ class OnchainAnalyzer:
                 logger.info("✅ 메모리풀 데이터 수집 완료")
             except Exception as e:
                 logger.error(f"❌ 메모리풀 데이터 수집 실패: {e}")
-                onchain_data['mempool'] = {'error': str(e)}
+                onchain_data['mempool'] = None
             
             # 3. 주소 활성도
             try:
@@ -385,7 +496,7 @@ class OnchainAnalyzer:
                 logger.info("✅ 주소 지표 수집 완료")
             except Exception as e:
                 logger.error(f"❌ 주소 지표 수집 실패: {e}")
-                onchain_data['addresses'] = self._get_dummy_address_metrics()
+                onchain_data['addresses'] = self._get_cached_address_metrics()
             
             # 4. 보유자 행동
             try:
@@ -396,7 +507,7 @@ class OnchainAnalyzer:
                 logger.info("✅ 보유자 행동 분석 완료")
             except Exception as e:
                 logger.error(f"❌ 보유자 행동 분석 실패: {e}")
-                onchain_data['holder_behavior'] = self._get_dummy_holder_behavior()
+                onchain_data['holder_behavior'] = self._get_cached_holder_behavior()
             
             # 5. 채굴 지표
             try:
@@ -407,7 +518,7 @@ class OnchainAnalyzer:
                 logger.info("✅ 채굴 지표 수집 완료")
             except Exception as e:
                 logger.error(f"❌ 채굴 지표 수집 실패: {e}")
-                onchain_data['mining'] = self._get_dummy_mining_metrics()
+                onchain_data['mining'] = self._get_cached_mining_metrics()
             
             # 수집 통계
             success_rate = (success_count / total_categories) * 100
@@ -431,24 +542,39 @@ class OnchainAnalyzer:
             
         except Exception as e:
             logger.error(f"온체인 데이터 수집 중 전체 오류: {e}")
-            return self._get_dummy_complete_data()
+            return self._get_cached_complete_data()
     
-    def _get_dummy_complete_data(self) -> Dict:
-        """전체 실패시 더미 데이터"""
-        return {
-            'network_stats': self._get_dummy_blockchain_stats(),
-            'mempool': {'error': '메모리풀 데이터 수집 실패'},
-            'addresses': self._get_dummy_address_metrics(),
-            'holder_behavior': self._get_dummy_holder_behavior(),
-            'mining': self._get_dummy_mining_metrics(),
-            'collection_stats': {
-                'timestamp': datetime.now().isoformat(),
-                'total_categories': 5,
-                'successful_categories': 0,
-                'success_rate': 0.0,
-                'error': '모든 온체인 데이터 수집 실패'
+    def check_data_availability(self) -> bool:
+        """데이터 사용 가능 여부 확인"""
+        failed_sources = sum(1 for count in self.error_counts.values() if count >= self.max_errors)
+        if failed_sources >= 3:  # 5개 소스 중 3개 이상 실패시 불가
+            return False
+        return True
+    
+    def _get_cached_complete_data(self) -> Optional[Dict]:
+        """전체 실패시 캐시된 데이터 사용"""
+        network_stats = self._get_cached_blockchain_stats()
+        addresses = self._get_cached_address_metrics()
+        holder_behavior = self._get_cached_holder_behavior()
+        mining = self._get_cached_mining_metrics()
+        
+        # 캐시된 데이터가 있는지 확인
+        if any([network_stats, addresses, holder_behavior, mining]):
+            return {
+                'network_stats': network_stats,
+                'mempool': None,
+                'addresses': addresses,
+                'holder_behavior': holder_behavior,
+                'mining': mining,
+                'collection_stats': {
+                    'timestamp': datetime.now().isoformat(),
+                    'total_categories': 5,
+                    'successful_categories': 0,
+                    'success_rate': 0.0,
+                    'note': '대부분 API 실패 - 캐시된 데이터 사용'
+                }
             }
-        }
+        return None
     
     def analyze_onchain_signals(self, onchain_data: Dict) -> Dict:
         """온체인 데이터 신호 분석 (규칙 기반)"""
@@ -846,7 +972,8 @@ class OnchainAnalyzer:
                     "total_categories": onchain_raw_data.get('collection_stats', {}).get('total_categories', 0),
                     "successful_categories": onchain_raw_data.get('collection_stats', {}).get('successful_categories', 0),
                     "data_sources": ['blockchain_info', 'coingecko', 'estimated_calculations'],
-                    "cache_recommendations": onchain_raw_data.get('collection_stats', {}).get('cache_recommendations', {})
+                    "cache_recommendations": onchain_raw_data.get('collection_stats', {}).get('cache_recommendations', {}),
+                    "error_counts": self.error_counts.copy()
                 }
             }
             
@@ -855,11 +982,7 @@ class OnchainAnalyzer:
             return {
                 "success": False,
                 "error": f"분석 중 오류 발생: {str(e)}",
-                "analysis_type": "onchain_data",
-                "data_quality": {
-                    "success_rate": 0,
-                    "error": str(e)
-                }
+                "analysis_type": "onchain_data"
             }
 
 # 외부에서 사용할 함수
