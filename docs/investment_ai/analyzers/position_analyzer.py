@@ -438,7 +438,7 @@ class PositionAnalyzer:
             }
 
 # 외부에서 사용할 함수
-async def analyze_position_status() -> Dict:
+async def analyze_position_status(position_data: Optional[Dict] = None) -> Dict:
     """포지션 상태를 분석하는 함수"""
     analyzer = PositionAnalyzer()
     return await analyzer.analyze_position_status()
