@@ -212,10 +212,7 @@ class PositionAnalyzer:
             # AI 모델에 질의
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_budget=-1)
-                )
+                contents=prompt
             )
             
             # JSON 파싱
