@@ -239,7 +239,37 @@ class DataScheduler:
         # 주기 확인
         time_since_last = datetime.now(timezone.utc) - task.last_run
         return time_since_last.total_seconds() >= task.interval_minutes * 60
-    
+
+    def _update_cache(self, task: DataTask, result: Any):
+        """MongoDB에 캐시 데이터 저장"""
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+            return
+        
+        try:
+            # 만료 시간 계산
+            expire_at = datetime.now(timezone.utc) + timedelta(minutes=task.cache_duration_minutes)
+            
+            # 캐시 문서 생성
+            cache_doc = {
+                "task_name": task.name,
+                "data": result,
+                "created_at": datetime.now(timezone.utc),
+                "expire_at": expire_at,
+                "cache_duration_minutes": task.cache_duration_minutes
+            }
+            
+            # 기존 캐시 교체 (upsert)
+            self.cache_collection.replace_one(
+                {"task_name": task.name},
+                cache_doc,
+                upsert=True
+            )
+            
+            logger.debug(f"캐시 저장 완료: {task.name} (만료: {task.cache_duration_minutes}분 후)")
+            
+        except Exception as e:
+            logger.error(f"캐시 저장 오류: {task.name} - {e}")
+
     def get_cached_data(self, task_name: str) -> Optional[Any]:
         """MongoDB에서 캐시된 데이터 반환"""
         if task_name not in self.tasks:
