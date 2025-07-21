@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI 기반 자동 트레이딩 메인 실행 파일 - 직렬 스케줄러 버전
+AI 기반 자동 트레이딩 메인 실행 파일 - 직렬 스케줄러 버전 (순환 import 해결)
 - 15분마다 직렬 사이클 실행
 - AI 분석 결과만 기반으로 거래 결정
 - 단순한 카운팅 기반 스케줄링
@@ -26,10 +26,13 @@ from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
 from docs.utility.trade_logger import TradeLogger
 
-# 🔧 수정: 직렬 스케줄러 사용
-from docs.investment_ai.serial_scheduler import (
-    run_serial_cycle, get_serial_status, get_final_decision
+# 🔧 수정: 포워딩된 data_scheduler 사용 (순환 import 방지)
+from docs.investment_ai.data_scheduler import (
+    run_scheduled_data_collection, get_data_status
 )
+
+# 🔧 추가: 최종 결정 직접 import (순환 import 방지)
+from docs.investment_ai.final_decisionmaker import make_final_investment_decision
 
 # 설정값 (15분 간격)
 TRADING_CONFIG = {
@@ -199,8 +202,115 @@ def get_action_from_decision(final_decision, current_position):
     except Exception:
         return 'wait'
 
+async def get_all_analysis_for_decision():
+    """최종 결정용 분석 데이터 수집"""
+    try:
+        # 🔧 포워딩된 data_scheduler 사용
+        from docs.investment_ai.data_scheduler import (
+            get_ai_technical_analysis,
+            get_ai_sentiment_analysis, 
+            get_ai_macro_analysis,
+            get_ai_onchain_analysis,
+            get_ai_institutional_analysis,
+            get_position_data
+        )
+        
+        # 🔧 포지션 분석 직접 호출
+        from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
+        
+        # 각 분석 결과 수집
+        results = {}
+        
+        # AI 분석들
+        results['technical_analysis'] = await get_ai_technical_analysis()
+        results['sentiment_analysis'] = await get_ai_sentiment_analysis()
+        results['macro_analysis'] = await get_ai_macro_analysis()
+        results['onchain_analysis'] = await get_ai_onchain_analysis()
+        results['institutional_analysis'] = await get_ai_institutional_analysis()
+        
+        # 포지션 분석 (실시간)
+        try:
+            position_analysis = analyze_position_status()
+            results['position_analysis'] = position_analysis if position_analysis else {
+                'success': False, 'error': '포지션 분석 실패'
+            }
+        except Exception as e:
+            results['position_analysis'] = {
+                'success': False, 'error': str(e)
+            }
+        
+        # 현재 포지션 정보
+        position_data = await get_position_data()
+        if position_data:
+            results['current_position'] = extract_position_info(position_data)
+        else:
+            results['current_position'] = {
+                'has_position': False,
+                'side': 'none',
+                'size': 0,
+                'entry_price': 0
+            }
+        
+        return results
+    except Exception as e:
+        logger.error(f"분석 데이터 수집 오류: {e}")
+        return {}
+
+def extract_position_info(position_data):
+    """포지션 데이터에서 현재 포지션 정보 추출"""
+    try:
+        # 기본값
+        position_info = {
+            'has_position': False,
+            'side': 'none',
+            'size': 0,
+            'entry_price': 0,
+            'unrealized_pnl': 0,
+            'total_equity': 0,
+            'available_balance': 0
+        }
+        
+        # 잔고 정보
+        balance = position_data.get('balance', {})
+        if isinstance(balance, dict) and 'USDT' in balance:
+            usdt_balance = balance['USDT']
+            position_info.update({
+                'total_equity': float(usdt_balance.get('total', 0)),
+                'available_balance': float(usdt_balance.get('free', 0))
+            })
+        
+        # positions에서 BTC 포지션 찾기
+        positions = position_data.get('positions', [])
+        if isinstance(positions, str):
+            import json
+            positions = json.loads(positions)
+        
+        for pos in positions:
+            if 'BTC' in pos.get('symbol', ''):
+                size = float(pos.get('size', pos.get('contracts', 0)))
+                if abs(size) > 0:
+                    position_info.update({
+                        'has_position': True,
+                        'side': 'long' if size > 0 else 'short',
+                        'size': abs(size),
+                        'entry_price': float(pos.get('avgPrice', pos.get('entryPrice', 0))),
+                        'unrealized_pnl': float(pos.get('unrealizedPnl', 0))
+                    })
+                break
+        
+        return position_info
+    except Exception as e:
+        logger.error(f"포지션 정보 추출 오류: {e}")
+        return {
+            'has_position': False,
+            'side': 'none',
+            'size': 0,
+            'entry_price': 0,
+            'error': str(e)
+        }
+
 async def main():
-    """AI 기반 메인 트레이딩 루프 - 직렬 스케줄러 버전"""
+    """AI 기반 메인 트레이딩 루프 - 직렬 스케줄러 버전 (순환 import 해결)"""
     config = TRADING_CONFIG
     
     try:
@@ -229,25 +339,26 @@ async def main():
                         time.sleep(1)
                         pbar.update(1)
             
-            # 🔧 핵심 변경: 직렬 사이클 실행 (모든 데이터 수집 + AI 분석 + 최종 결정 포함)
+            # 🔧 핵심: 직렬 사이클 실행 (포워딩된 함수 사용)
             logger.info("직렬 AI 분석 사이클 실행 중...")
             cycle_start_time = time.time()
             
             try:
-                cycle_result = await run_serial_cycle()
-                
-                if not cycle_result.get('success', False):
-                    logger.error("직렬 사이클 실패")
-                    continue
+                # 데이터 수집 및 AI 분석 실행
+                await run_scheduled_data_collection()
                 
                 cycle_duration = time.time() - cycle_start_time
-                tasks_run = cycle_result.get('tasks_run', 0)
-                tasks_success = cycle_result.get('tasks_success', 0)
+                logger.info(f"직렬 사이클 완료 ({cycle_duration:.1f}초)")
                 
-                logger.info(f"직렬 사이클 완료: {tasks_success}/{tasks_run} 성공 ({cycle_duration:.1f}초)")
+                # 🔧 최종 결정 실행
+                logger.info("최종 투자 결정 실행 중...")
+                all_analysis_results = await get_all_analysis_for_decision()
                 
-                # 🔧 직렬 스케줄러에서 최종 결정 결과 가져오기
-                final_decision_result = get_final_decision()
+                if not all_analysis_results:
+                    logger.warning("분석 결과가 없어 최종 결정 스킵")
+                    continue
+                
+                final_decision_result = await make_final_investment_decision(all_analysis_results)
                 
                 if not final_decision_result.get('success', False):
                     logger.warning(f"최종 결정 실패: {final_decision_result.get('error', 'Unknown')}")
@@ -345,7 +456,7 @@ async def main():
                             logger.warning(f"거래 로그 기록 실패: {e}")
                 
                 # 스케줄러 상태 로깅 (디버깅용)
-                status = get_serial_status()
+                status = get_data_status()
                 total_tasks = len(status.get('tasks', {}))
                 healthy_tasks = len([t for t in status.get('tasks', {}).values() if not t.get('is_disabled', False)])
                 logger.debug(f"스케줄러 상태: {healthy_tasks}/{total_tasks} 작업 정상")
