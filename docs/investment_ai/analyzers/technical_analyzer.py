@@ -27,16 +27,16 @@ class TechnicalAnalyzer:
         self.client = None
         self.model_name = None
     
+    # 수정 후 코드
+
     def get_chart_data(self, symbol='BTCUSDT', timeframe='15m', limit=300):
-        """차트 데이터 수집 (15분봉 300개)"""
+        """차트 데이터 수집 (15분봉 300개, 미완성 캔들 제외)"""
         try:
-            # MongoDB에서 차트 데이터 가져오기
             from pymongo import MongoClient
             
             mongoClient = MongoClient("mongodb://mongodb:27017")
             database = mongoClient["bitcoin"]
             
-            # 15분봉 컬렉션 매핑
             chart_collections = {
                 '1m': 'chart_1m',
                 '3m': 'chart_3m', 
@@ -51,14 +51,13 @@ class TechnicalAnalyzer:
             
             chart_collection = database[chart_collections[timeframe]]
             
-            # 최신 데이터부터 limit개 가져오기
-            data_cursor = chart_collection.find().sort("timestamp", -1).limit(limit)
+            # 분석에 필요한 완성된 캔들 수만큼 가져오기 위해 1개를 더 요청
+            data_cursor = chart_collection.find().sort("timestamp", -1).limit(limit + 1)
             data_list = list(data_cursor)
             
             if not data_list:
                 raise ValueError("차트 데이터가 없습니다")
             
-            # DataFrame으로 변환
             df = pd.DataFrame(data_list)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             
@@ -68,7 +67,12 @@ class TechnicalAnalyzer:
             df.set_index('timestamp', inplace=True)
             df.sort_index(inplace=True)  # 시간순 정렬
             
-            logger.info(f"차트 데이터 수집 완료: {len(df)}개 캔들 ({timeframe})")
+            # --- 핵심 수정 사항 ---
+            # 가장 최신 데이터는 미완성 캔들일 가능성이 높으므로 제거합니다.
+            # iloc[:-1]은 마지막 행을 제외한 모든 행을 선택합니다.
+            df = df.iloc[:-1]
+            
+            logger.info(f"완성된 차트 데이터 수집 완료: {len(df)}개 캔들 ({timeframe})")
             return df
             
         except Exception as e:
