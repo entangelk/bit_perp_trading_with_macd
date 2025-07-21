@@ -25,7 +25,8 @@ def get_data_scheduler():
 async def run_scheduled_data_collection(initial_run=False):
     """기존 호환성을 위한 포워딩 - 직렬 사이클 실행"""
     logger.info("스케줄링된 데이터 수집 실행 (직렬 스케줄러로 포워딩)")
-    return await run_serial_cycle()
+    # 🔧 수정: initial_run이면 모든 분석 강제 실행
+    return await run_serial_cycle(force_all_analysis=initial_run)
 
 def get_data_status():
     """기존 호환성을 위한 포워딩 - 직렬 스케줄러 상태"""

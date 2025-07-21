@@ -152,7 +152,100 @@ class SerialDataScheduler:
             return False
         finally:
             task.is_running = False
-    
+
+    async def run_cycle(self, force_all_analysis=False) -> Dict:
+        """한 사이클 직렬 실행 - 강제 모든 분석 옵션 추가"""
+        self.global_cycle_count += 1
+        cycle_start = datetime.now()
+        
+        logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 시작 ===")
+        if force_all_analysis:
+            logger.info("🔥 강제 모든 분석 모드 활성화")
+        
+        total_tasks_run = 0
+        total_tasks_success = 0
+        stage_results = {}
+        
+        # 각 단계별로 순차 실행
+        for stage_idx, stage in enumerate(self.execution_stages, 1):
+            stage_start = datetime.now()
+            
+            # 해당 단계의 실행할 작업들 선별
+            stage_tasks = []
+            skipped_tasks = []
+            
+            for task_name, task in self.tasks.items():
+                if task.stage == stage:
+                    # 🔧 수정: force_all_analysis가 True면 모든 분석 실행
+                    if force_all_analysis and task_name.startswith('ai_'):
+                        should_run = True
+                        reason = "forced_execution"
+                    else:
+                        should_run, reason = self.should_run_task(task)
+                    
+                    if should_run:
+                        stage_tasks.append((task_name, task))
+                    else:
+                        skipped_tasks.append((task_name, reason))
+            
+            if not stage_tasks and not skipped_tasks:
+                continue  # 해당 단계에 작업이 없음
+            
+            logger.info(f"{stage_idx}단계: {stage} ({len(stage_tasks)}개 실행, {len(skipped_tasks)}개 스킵)")
+            
+            # 스킵된 작업들 로깅 (force_all_analysis 모드에서는 더 자세히)
+            if force_all_analysis and skipped_tasks:
+                for task_name, reason in skipped_tasks:
+                    if task_name.startswith('ai_'):
+                        logger.warning(f"  AI 분석 스킵됨: {task_name} ({reason}) - 강제 모드에서도 스킵")
+                    else:
+                        logger.debug(f"  스킵: {task_name} ({reason})")
+            else:
+                for task_name, reason in skipped_tasks:
+                    logger.debug(f"  스킵: {task_name} ({reason})")
+            
+            # 단계 내 작업들 순차 실행
+            stage_success = 0
+            for i, (task_name, task) in enumerate(stage_tasks, 1):
+                success = await self.run_task(task, stage, i, len(stage_tasks))
+                total_tasks_run += 1
+                if success:
+                    stage_success += 1
+                    total_tasks_success += 1
+                
+                # 작업 간 짧은 대기 (AI 분석의 경우)
+                if task_name.startswith('ai_') and i < len(stage_tasks):
+                    await asyncio.sleep(0.5)
+            
+            stage_duration = (datetime.now() - stage_start).total_seconds()
+            stage_results[stage] = {
+                'tasks_run': len(stage_tasks),
+                'tasks_success': stage_success,
+                'duration_seconds': stage_duration
+            }
+            
+            if stage_tasks:
+                logger.info(f"  {stage} 완료: {stage_success}/{len(stage_tasks)} 성공 ({stage_duration:.1f}초)")
+            
+            # 단계 간 대기 (데이터 안정화)
+            if stage_idx < len(self.execution_stages):
+                await asyncio.sleep(0.5)
+        
+        cycle_duration = (datetime.now() - cycle_start).total_seconds()
+        
+        logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 완료 ({cycle_duration:.1f}초) ===")
+        logger.info(f"전체 성공률: {total_tasks_success}/{total_tasks_run}")
+        
+        return {
+            'success': True,
+            'cycle_count': self.global_cycle_count,
+            'tasks_run': total_tasks_run,
+            'tasks_success': total_tasks_success,
+            'duration_seconds': cycle_duration,
+            'stage_results': stage_results,
+            'forced_all_analysis': force_all_analysis
+        }
+
     def _get_result_summary(self, task_name: str, result) -> str:
         """결과 요약 생성"""
         try:
@@ -558,10 +651,10 @@ def get_serial_scheduler() -> SerialDataScheduler:
     return _serial_scheduler
 
 # 편의 함수들
-async def run_serial_cycle():
-    """직렬 사이클 실행"""
+async def run_serial_cycle(force_all_analysis=False):
+    """직렬 사이클 실행 - 강제 모든 분석 옵션 추가"""
     scheduler = get_serial_scheduler()
-    return await scheduler.run_cycle()
+    return await scheduler.run_cycle(force_all_analysis=force_all_analysis)
 
 def get_serial_data(task_name: str):
     """직렬 스케줄러에서 데이터 요청"""

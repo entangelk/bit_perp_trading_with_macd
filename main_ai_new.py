@@ -203,54 +203,48 @@ def get_action_from_decision(final_decision, current_position):
         return 'wait'
 
 async def get_all_analysis_for_decision():
-    """최종 결정용 분석 데이터 수집 - 안전한 버전"""
+    """최종 결정용 분석 데이터 수집 - 안전한 버전 (coroutine 에러 수정)"""
     try:
-        # 🔧 포워딩된 data_scheduler 사용
-        from docs.investment_ai.data_scheduler import (
-            get_ai_technical_analysis,
-            get_ai_sentiment_analysis, 
-            get_ai_macro_analysis,
-            get_ai_onchain_analysis,
-            get_ai_institutional_analysis,
-            get_position_data
-        )
+        # 🔧 직렬 스케줄러에서 직접 데이터 조회 (async 함수 문제 해결)
+        from docs.investment_ai.data_scheduler import get_data_scheduler
+        scheduler = get_data_scheduler()
         
         # 🔧 포지션 분석 직접 호출
         from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
         
-        # 각 분석 결과 수집 - 안전하게
+        # 🔧 핵심 수정: 스케줄러에서 직접 데이터 가져오기 (async 문제 해결)
         results = {}
         
-        # AI 분석들 - None 체크 추가
-        try:
-            results['technical_analysis'] = await get_ai_technical_analysis()
-        except Exception as e:
-            logger.error(f"기술적 분석 조회 오류: {e}")
-            results['technical_analysis'] = None
-            
-        try:
-            results['sentiment_analysis'] = await get_ai_sentiment_analysis()
-        except Exception as e:
-            logger.error(f"감정 분석 조회 오류: {e}")
-            results['sentiment_analysis'] = None
-            
-        try:
-            results['macro_analysis'] = await get_ai_macro_analysis()
-        except Exception as e:
-            logger.error(f"거시경제 분석 조회 오류: {e}")
-            results['macro_analysis'] = None
-            
-        try:
-            results['onchain_analysis'] = await get_ai_onchain_analysis()
-        except Exception as e:
-            logger.error(f"온체인 분석 조회 오류: {e}")
-            results['onchain_analysis'] = None
-            
-        try:
-            results['institutional_analysis'] = await get_ai_institutional_analysis()
-        except Exception as e:
-            logger.error(f"기관투자 분석 조회 오류: {e}")
-            results['institutional_analysis'] = None
+        # AI 분석들 - 직접 스케줄러에서 가져오기
+        analysis_mapping = {
+            'technical_analysis': 'ai_technical_analysis',
+            'sentiment_analysis': 'ai_sentiment_analysis', 
+            'macro_analysis': 'ai_macro_analysis',
+            'onchain_analysis': 'ai_onchain_analysis',
+            'institutional_analysis': 'ai_institutional_analysis'
+        }
+        
+        for result_key, scheduler_key in analysis_mapping.items():
+            try:
+                # 🔧 수정: scheduler.get_data()는 sync 함수임
+                cached_result = scheduler.get_data(scheduler_key)
+                if cached_result is not None:
+                    results[result_key] = cached_result
+                    logger.debug(f"✅ {result_key} 스케줄러에서 조회 성공")
+                else:
+                    logger.warning(f"❌ {result_key} 스케줄러에서 None 반환")
+                    results[result_key] = {
+                        'success': False,
+                        'error': f'{scheduler_key} 결과 없음',
+                        'skip_reason': 'not_executed_yet'
+                    }
+            except Exception as e:
+                logger.error(f"{result_key} 조회 오류: {e}")
+                results[result_key] = {
+                    'success': False,
+                    'error': str(e),
+                    'skip_reason': 'query_error'
+                }
         
         # 포지션 분석 (실시간) - 안전하게
         try:
@@ -258,6 +252,7 @@ async def get_all_analysis_for_decision():
             results['position_analysis'] = position_analysis if position_analysis else {
                 'success': False, 'error': '포지션 분석 실패'
             }
+            logger.debug("✅ 포지션 분석 완료")
         except Exception as e:
             logger.error(f"포지션 분석 오류: {e}")
             results['position_analysis'] = {
@@ -266,9 +261,11 @@ async def get_all_analysis_for_decision():
         
         # 현재 포지션 정보 - 안전하게
         try:
-            position_data = await get_position_data()
+            # 🔧 수정: 포지션 데이터도 스케줄러에서 직접 가져오기
+            position_data = scheduler.get_data('position_data')
             if position_data:
                 results['current_position'] = extract_position_info(position_data)
+                logger.debug("✅ 포지션 데이터 추출 완료")
             else:
                 logger.warning("포지션 데이터가 None - 기본값 사용")
                 results['current_position'] = {
@@ -287,26 +284,29 @@ async def get_all_analysis_for_decision():
                 'error': str(e)
             }
         
-        # 결과 검증
-        valid_results = {}
+        # 결과 검증 및 요약
+        success_count = 0
         for key, value in results.items():
-            if value is not None:
-                valid_results[key] = value
-            else:
-                logger.warning(f"{key} 결과가 None - 기본 실패 결과 생성")
-                valid_results[key] = {
-                    'success': False,
-                    'error': f'{key} 결과 없음',
-                    'skip_reason': 'null_result'
-                }
+            if key == 'current_position':
+                success_count += 1  # 포지션 정보는 항상 성공으로 카운트
+            elif isinstance(value, dict) and value.get('success', False):
+                success_count += 1
         
-        success_count = sum(1 for v in valid_results.values() 
-                          if isinstance(v, dict) and v.get('success', False))
-        total_count = len(valid_results)
+        total_count = len(results)
         
         logger.info(f"분석 데이터 수집 완료: {success_count}/{total_count} 성공")
         
-        return valid_results
+        # 🔧 추가: 실패한 분석들의 이유 로깅
+        failed_analyses = []
+        for key, value in results.items():
+            if key != 'current_position' and isinstance(value, dict) and not value.get('success', False):
+                reason = value.get('skip_reason', value.get('error', 'unknown'))
+                failed_analyses.append(f"{key}({reason})")
+        
+        if failed_analyses:
+            logger.info(f"실패/스킵된 분석들: {', '.join(failed_analyses)}")
+        
+        return results
         
     except Exception as e:
         logger.error(f"분석 데이터 수집 중 전체 오류: {e}")
