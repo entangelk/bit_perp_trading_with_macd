@@ -203,7 +203,7 @@ def get_action_from_decision(final_decision, current_position):
         return 'wait'
 
 async def get_all_analysis_for_decision():
-    """최종 결정용 분석 데이터 수집"""
+    """최종 결정용 분석 데이터 수집 - 안전한 버전"""
     try:
         # 🔧 포워딩된 data_scheduler 사용
         from docs.investment_ai.data_scheduler import (
@@ -218,46 +218,102 @@ async def get_all_analysis_for_decision():
         # 🔧 포지션 분석 직접 호출
         from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
         
-        # 각 분석 결과 수집
+        # 각 분석 결과 수집 - 안전하게
         results = {}
         
-        # AI 분석들
-        results['technical_analysis'] = await get_ai_technical_analysis()
-        results['sentiment_analysis'] = await get_ai_sentiment_analysis()
-        results['macro_analysis'] = await get_ai_macro_analysis()
-        results['onchain_analysis'] = await get_ai_onchain_analysis()
-        results['institutional_analysis'] = await get_ai_institutional_analysis()
+        # AI 분석들 - None 체크 추가
+        try:
+            results['technical_analysis'] = await get_ai_technical_analysis()
+        except Exception as e:
+            logger.error(f"기술적 분석 조회 오류: {e}")
+            results['technical_analysis'] = None
+            
+        try:
+            results['sentiment_analysis'] = await get_ai_sentiment_analysis()
+        except Exception as e:
+            logger.error(f"감정 분석 조회 오류: {e}")
+            results['sentiment_analysis'] = None
+            
+        try:
+            results['macro_analysis'] = await get_ai_macro_analysis()
+        except Exception as e:
+            logger.error(f"거시경제 분석 조회 오류: {e}")
+            results['macro_analysis'] = None
+            
+        try:
+            results['onchain_analysis'] = await get_ai_onchain_analysis()
+        except Exception as e:
+            logger.error(f"온체인 분석 조회 오류: {e}")
+            results['onchain_analysis'] = None
+            
+        try:
+            results['institutional_analysis'] = await get_ai_institutional_analysis()
+        except Exception as e:
+            logger.error(f"기관투자 분석 조회 오류: {e}")
+            results['institutional_analysis'] = None
         
-        # 포지션 분석 (실시간)
+        # 포지션 분석 (실시간) - 안전하게
         try:
             position_analysis = analyze_position_status()
             results['position_analysis'] = position_analysis if position_analysis else {
                 'success': False, 'error': '포지션 분석 실패'
             }
         except Exception as e:
+            logger.error(f"포지션 분석 오류: {e}")
             results['position_analysis'] = {
                 'success': False, 'error': str(e)
             }
         
-        # 현재 포지션 정보
-        position_data = await get_position_data()
-        if position_data:
-            results['current_position'] = extract_position_info(position_data)
-        else:
+        # 현재 포지션 정보 - 안전하게
+        try:
+            position_data = await get_position_data()
+            if position_data:
+                results['current_position'] = extract_position_info(position_data)
+            else:
+                logger.warning("포지션 데이터가 None - 기본값 사용")
+                results['current_position'] = {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0
+                }
+        except Exception as e:
+            logger.error(f"포지션 데이터 조회 오류: {e}")
             results['current_position'] = {
                 'has_position': False,
                 'side': 'none',
                 'size': 0,
-                'entry_price': 0
+                'entry_price': 0,
+                'error': str(e)
             }
         
-        return results
+        # 결과 검증
+        valid_results = {}
+        for key, value in results.items():
+            if value is not None:
+                valid_results[key] = value
+            else:
+                logger.warning(f"{key} 결과가 None - 기본 실패 결과 생성")
+                valid_results[key] = {
+                    'success': False,
+                    'error': f'{key} 결과 없음',
+                    'skip_reason': 'null_result'
+                }
+        
+        success_count = sum(1 for v in valid_results.values() 
+                          if isinstance(v, dict) and v.get('success', False))
+        total_count = len(valid_results)
+        
+        logger.info(f"분석 데이터 수집 완료: {success_count}/{total_count} 성공")
+        
+        return valid_results
+        
     except Exception as e:
-        logger.error(f"분석 데이터 수집 오류: {e}")
+        logger.error(f"분석 데이터 수집 중 전체 오류: {e}")
         return {}
 
 def extract_position_info(position_data):
-    """포지션 데이터에서 현재 포지션 정보 추출"""
+    """포지션 데이터에서 현재 포지션 정보 추출 - 안전한 버전"""
     try:
         # 기본값
         position_info = {
@@ -270,37 +326,73 @@ def extract_position_info(position_data):
             'available_balance': 0
         }
         
-        # 잔고 정보
+        # position_data가 None이거나 비어있으면 기본값 반환
+        if not position_data or not isinstance(position_data, dict):
+            logger.warning("포지션 데이터가 없음 - 기본값 사용")
+            return position_info
+        
+        # 잔고 정보 안전하게 추출
         balance = position_data.get('balance', {})
         if isinstance(balance, dict) and 'USDT' in balance:
             usdt_balance = balance['USDT']
-            position_info.update({
-                'total_equity': float(usdt_balance.get('total', 0)),
-                'available_balance': float(usdt_balance.get('free', 0))
-            })
+            if isinstance(usdt_balance, dict):
+                total = usdt_balance.get('total')
+                free = usdt_balance.get('free')
+                
+                position_info.update({
+                    'total_equity': float(total) if total is not None else 0,
+                    'available_balance': float(free) if free is not None else 0
+                })
         
-        # positions에서 BTC 포지션 찾기
+        # positions에서 BTC 포지션 찾기 - 안전하게
         positions = position_data.get('positions', [])
         if isinstance(positions, str):
-            import json
-            positions = json.loads(positions)
+            try:
+                import json
+                positions = json.loads(positions)
+            except json.JSONDecodeError:
+                logger.warning("포지션 JSON 파싱 실패")
+                positions = []
+        
+        if not isinstance(positions, list):
+            positions = []
         
         for pos in positions:
-            if 'BTC' in pos.get('symbol', ''):
-                size = float(pos.get('size', pos.get('contracts', 0)))
-                if abs(size) > 0:
-                    position_info.update({
-                        'has_position': True,
-                        'side': 'long' if size > 0 else 'short',
-                        'size': abs(size),
-                        'entry_price': float(pos.get('avgPrice', pos.get('entryPrice', 0))),
-                        'unrealized_pnl': float(pos.get('unrealizedPnl', 0))
-                    })
-                break
+            if not isinstance(pos, dict):
+                continue
+                
+            symbol = pos.get('symbol', '')
+            if symbol and 'BTC' in symbol:
+                # size 안전하게 추출
+                size_raw = pos.get('size') or pos.get('contracts')
+                if size_raw is not None:
+                    try:
+                        size = float(size_raw)
+                        if abs(size) > 0:
+                            # entry_price 안전하게 추출
+                            entry_price_raw = pos.get('avgPrice') or pos.get('entryPrice')
+                            entry_price = float(entry_price_raw) if entry_price_raw is not None else 0
+                            
+                            # unrealized_pnl 안전하게 추출
+                            unrealized_pnl_raw = pos.get('unrealizedPnl')
+                            unrealized_pnl = float(unrealized_pnl_raw) if unrealized_pnl_raw is not None else 0
+                            
+                            position_info.update({
+                                'has_position': True,
+                                'side': 'long' if size > 0 else 'short',
+                                'size': abs(size),
+                                'entry_price': entry_price,
+                                'unrealized_pnl': unrealized_pnl
+                            })
+                            break
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"포지션 수치 변환 오류: {e}")
+                        continue
         
         return position_info
+        
     except Exception as e:
-        logger.error(f"포지션 정보 추출 오류: {e}")
+        logger.error(f"포지션 정보 추출 중 예외: {e}")
         return {
             'has_position': False,
             'side': 'none',

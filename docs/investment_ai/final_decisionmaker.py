@@ -473,9 +473,14 @@ class FinalDecisionMaker:
             return None, None
     
     def validate_analysis_results(self, analysis_results: Dict) -> Dict:
-        """분석 결과 검증 및 정제"""
+        """분석 결과 검증 및 정제 - 안전한 버전"""
         try:
             validated = {}
+            
+            # analysis_results가 None이거나 비어있으면 안전하게 처리
+            if not analysis_results or not isinstance(analysis_results, dict):
+                logger.warning("분석 결과가 None이거나 비어있음")
+                analysis_results = {}
             
             # 각 분석 결과 검증
             required_analyses = [
@@ -484,69 +489,121 @@ class FinalDecisionMaker:
             ]
             
             for analysis_type in required_analyses:
-                if analysis_type in analysis_results:
-                    result = analysis_results[analysis_type]
-                    
-                    # 성공 여부 확인
-                    if result.get('success', False):
-                        validated[analysis_type] = {
-                            'result': result.get('result', {}),
-                            'confidence': self._extract_confidence(result.get('result', {})),
-                            'signal': self._extract_signal(result.get('result', {})),
-                            'timestamp': result.get('result', {}).get('analysis_metadata', {}).get('data_timestamp', datetime.now().isoformat()),
-                            'data_quality': result.get('data_quality', {}).get('success_rate', 0),
-                            'timing_metadata': self._extract_timing_metadata(result, analysis_type)
-                        }
+                try:
+                    if analysis_type in analysis_results:
+                        result = analysis_results[analysis_type]
+                        
+                        # result가 None인 경우 안전하게 처리
+                        if result is None:
+                            logger.warning(f"{analysis_type} 결과가 None임")
+                            validated[analysis_type] = {
+                                'result': {},
+                                'confidence': 0,
+                                'signal': 'Hold',
+                                'timestamp': datetime.now().isoformat(),
+                                'data_quality': 0,
+                                'error': 'None 결과',
+                                'timing_metadata': {'status': 'null_result', 'analysis_type': analysis_type}
+                            }
+                            continue
+                        
+                        # result가 dict가 아닌 경우 안전하게 처리
+                        if not isinstance(result, dict):
+                            logger.warning(f"{analysis_type} 결과가 딕셔너리가 아님: {type(result)}")
+                            validated[analysis_type] = {
+                                'result': {},
+                                'confidence': 0,
+                                'signal': 'Hold',
+                                'timestamp': datetime.now().isoformat(),
+                                'data_quality': 0,
+                                'error': f'잘못된 결과 타입: {type(result)}',
+                                'timing_metadata': {'status': 'invalid_type', 'analysis_type': analysis_type}
+                            }
+                            continue
+                        
+                        # 성공 여부 확인 - 안전하게
+                        success = result.get('success', False)
+                        if success:
+                            validated[analysis_type] = {
+                                'result': result.get('result', {}),
+                                'confidence': self._extract_confidence(result.get('result', {})),
+                                'signal': self._extract_signal(result.get('result', {})),
+                                'timestamp': result.get('result', {}).get('analysis_metadata', {}).get('data_timestamp', datetime.now().isoformat()),
+                                'data_quality': result.get('data_quality', {}).get('success_rate', 0) if result.get('data_quality') else 0,
+                                'timing_metadata': self._extract_timing_metadata(result, analysis_type)
+                            }
+                        else:
+                            # 실패한 분석은 중립으로 처리
+                            validated[analysis_type] = {
+                                'result': {},
+                                'confidence': 0,
+                                'signal': 'Hold',
+                                'timestamp': datetime.now().isoformat(),
+                                'data_quality': 0,
+                                'error': result.get('error', '분석 실패'),
+                                'timing_metadata': self._extract_timing_metadata(result, analysis_type)
+                            }
                     else:
-                        # 실패한 분석은 중립으로 처리
+                        # 누락된 분석도 중립으로 처리
+                        logger.warning(f"{analysis_type} 분석 결과 누락")
                         validated[analysis_type] = {
                             'result': {},
                             'confidence': 0,
                             'signal': 'Hold',
                             'timestamp': datetime.now().isoformat(),
                             'data_quality': 0,
-                            'error': result.get('error', '분석 실패'),
-                            'timing_metadata': self._extract_timing_metadata(result, analysis_type)
+                            'error': '분석 누락',
+                            'timing_metadata': {'status': 'missing', 'analysis_type': analysis_type}
                         }
-                else:
-                    # 누락된 분석도 중립으로 처리
+                        
+                except Exception as e:
+                    logger.error(f"{analysis_type} 검증 중 오류: {e}")
                     validated[analysis_type] = {
                         'result': {},
                         'confidence': 0,
                         'signal': 'Hold',
                         'timestamp': datetime.now().isoformat(),
                         'data_quality': 0,
-                        'error': '분석 누락',
-                        'timing_metadata': {'status': 'missing', 'analysis_type': analysis_type}
+                        'error': f'검증 오류: {str(e)}',
+                        'timing_metadata': {'status': 'validation_error', 'analysis_type': analysis_type}
                     }
             
             return validated
             
         except Exception as e:
-            logger.error(f"분석 결과 검증 중 오류: {e}")
+            logger.error(f"분석 결과 검증 중 전체 오류: {e}")
             return {}
     
     def _extract_confidence(self, result: Dict) -> float:
-        """분석 결과에서 신뢰도 추출"""
+        """분석 결과에서 신뢰도 추출 - 안전한 버전"""
         try:
+            # result가 None이거나 dict가 아니면 기본값
+            if not result or not isinstance(result, dict):
+                return 50.0
+                
             # 다양한 신뢰도 키 시도
             confidence_keys = ['confidence', 'analysis_confidence', 'reliability_score']
             
             for key in confidence_keys:
                 if key in result:
                     confidence = result[key]
-                    if isinstance(confidence, (int, float)):
+                    if confidence is not None and isinstance(confidence, (int, float)):
                         return min(100, max(0, float(confidence)))
             
             # 신뢰도가 없으면 기본값
             return 50.0
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"신뢰도 추출 오류: {e}")
             return 50.0
     
     def _extract_signal(self, result: Dict) -> str:
-        """분석 결과에서 투자 신호 추출"""
+        """분석 결과에서 투자 신호 추출 - 안전한 버전"""
         try:
+            # result가 None이거나 dict가 아니면 기본값
+            if not result or not isinstance(result, dict):
+                return 'Hold'
+                
             # 다양한 신호 키 시도
             signal_keys = [
                 'investment_signal', 'final_decision', 'btc_signal', 
@@ -554,7 +611,7 @@ class FinalDecisionMaker:
             ]
             
             for key in signal_keys:
-                if key in result:
+                if key in result and result[key] is not None:
                     signal = str(result[key]).strip()
                     # 신호 정규화
                     return self._normalize_signal(signal)
@@ -562,8 +619,10 @@ class FinalDecisionMaker:
             # 신호가 없으면 Hold
             return 'Hold'
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"신호 추출 오류: {e}")
             return 'Hold'
+
     
     def _normalize_signal(self, signal: str) -> str:
         """투자 신호 정규화"""
