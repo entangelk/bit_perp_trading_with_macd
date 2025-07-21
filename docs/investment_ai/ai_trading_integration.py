@@ -93,12 +93,14 @@ class AITradingIntegration:
             }
     
     async def run_all_analyses(self) -> Dict:
-        """모든 AI 분석 결과 조회 (캐시 우선, 필요시 실행) - 수정된 버전"""
+        """모든 AI 분석 결과 조회 - 수정된 버전 (직렬 처리 대응)"""
         try:
-            logger.info("AI 분석 결과 조회 시작 (캐시 우선)")
+            logger.info("AI 분석 결과 조회 시작 (직렬 처리 대응)")
             
-            # 예정된 데이터 수집 및 AI 분석 실행 (스케줄링된 작업)
+            # 🔧 수정: 데이터 수집과 AI 분석 실행 (await로 완료 대기)
+            logger.info("데이터 수집 및 AI 분석 실행 중...")
             await run_scheduled_data_collection()
+            logger.info("데이터 수집 및 AI 분석 완료")
             
             # 현재 포지션 정보 수집 (실시간, 항상 최신)
             current_position = await self.get_current_position_data()
@@ -106,7 +108,7 @@ class AITradingIntegration:
             # 포지션 분석은 실시간 데이터를 사용하므로 즉시 실행
             position_analysis = await analyze_position_status(current_position)
             
-            # 🔧 수정: 직접 data_scheduler의 get_data 함수 사용
+            # 🔧 수정: data_scheduler의 get_data 함수 직접 사용 (캐시 우선)
             from docs.investment_ai.data_scheduler import get_data_scheduler
             scheduler = get_data_scheduler()
             
@@ -120,10 +122,10 @@ class AITradingIntegration:
                 'ai_institutional_analysis'
             ]
             
-            # 🔧 수정: 각 분석 결과를 개별적으로 조회하고 즉시 처리
+            # 🔧 수정: 각 분석 결과를 순차적으로 조회 (직렬 처리 완료 후)
             for analysis_name in cached_analysis_names:
                 try:
-                    # data_scheduler의 get_data 함수 직접 사용
+                    logger.debug(f"캐시 조회 중: {analysis_name}")
                     cached_result = await scheduler.get_data(analysis_name)
                     
                     if cached_result is not None:
@@ -132,6 +134,9 @@ class AITradingIntegration:
                     else:
                         logger.warning(f"{analysis_name} 캐시된 결과 없음")
                         cached_analysis_results[analysis_name] = None
+                        
+                    # 캐시 조회 간 잠시 대기
+                    await asyncio.sleep(0.5)
                         
                 except Exception as e:
                     logger.error(f"{analysis_name} 캐시 조회 중 오류: {e}")
@@ -143,7 +148,7 @@ class AITradingIntegration:
                 'position_analysis': position_analysis
             }
             
-            # 🔧 수정: 캐시된 분석 결과 처리 로직 개선
+            # 🔧 수정: 캐시된 분석 결과 처리 로직
             analysis_name_mapping = {
                 'ai_sentiment_analysis': 'sentiment_analysis',
                 'ai_technical_analysis': 'technical_analysis', 
@@ -153,12 +158,13 @@ class AITradingIntegration:
             }
             
             fresh_analysis_needed = []
+            successful_analyses = 0
             
             for cache_name, result_name in analysis_name_mapping.items():
                 cached_result = cached_analysis_results.get(cache_name)
                 
                 if cached_result is None:
-                    logger.warning(f"{result_name} 캐시된 결과 없음, 실시간 분석 필요")
+                    logger.warning(f"{result_name} 캐시된 결과 없음")
                     fresh_analysis_needed.append(result_name)
                     all_analysis_results[result_name] = {
                         'success': False,
@@ -166,32 +172,26 @@ class AITradingIntegration:
                         'fallback_needed': True
                     }
                 else:
-                    # 🔧 수정: 캐시 결과 구조 확인 및 처리
+                    # 캐시 결과 구조 확인 및 처리
                     if isinstance(cached_result, dict):
-                        # data_scheduler에서 온 결과는 analysis_result 키 안에 실제 결과가 있음
                         if 'analysis_result' in cached_result:
                             actual_result = cached_result['analysis_result']
                             
                             # 분석 성공 여부 확인
                             if actual_result.get('success', False):
                                 all_analysis_results[result_name] = actual_result
-                                logger.debug(f"{result_name} 캐시된 성공 결과 사용")
+                                successful_analyses += 1
+                                logger.info(f"✅ {result_name} 캐시된 성공 결과 사용")
                             else:
                                 # 실패한 캐시 결과 처리
                                 skip_reason = actual_result.get('skip_reason', 'unknown')
-                                if skip_reason in ['insufficient_raw_data', 'analyzer_disabled']:
-                                    # 데이터 부족이나 분석기 비활성화면 fallback 시도 안함
-                                    all_analysis_results[result_name] = actual_result
-                                    logger.info(f"{result_name} 캐시된 실패 결과 사용 (스킵 이유: {skip_reason})")
-                                else:
-                                    # 기타 실패는 fallback 시도
-                                    fresh_analysis_needed.append(result_name)
-                                    all_analysis_results[result_name] = actual_result
-                                    logger.warning(f"{result_name} 캐시된 실패 결과, fallback 시도")
+                                all_analysis_results[result_name] = actual_result
+                                logger.warning(f"❌ {result_name} 캐시된 실패 결과 (이유: {skip_reason})")
                         else:
-                            # analysis_result 키가 없는 경우 직접 사용
+                            # analysis_result 키가 없는 경우
                             all_analysis_results[result_name] = cached_result
-                            logger.debug(f"{result_name} 캐시된 결과 직접 사용")
+                            successful_analyses += 1
+                            logger.debug(f"✅ {result_name} 캐시된 결과 직접 사용")
                     else:
                         # 캐시 결과가 딕셔너리가 아닌 경우
                         fresh_analysis_needed.append(result_name)
@@ -201,53 +201,16 @@ class AITradingIntegration:
                             'fallback_needed': True
                         }
             
-            # 캐시 미스된 분석들을 실시간으로 실행 (fallback)
+            # 🔧 수정: fallback 실행하지 않음 (직렬 처리에서 이미 완료됨)
             if fresh_analysis_needed:
-                logger.info(f"실시간 분석 실행 필요: {fresh_analysis_needed}")
-                
-                fallback_tasks = []
-                fallback_task_names = []
-                
-                for missing_analysis in fresh_analysis_needed:
-                    if missing_analysis == 'sentiment_analysis':
-                        fallback_tasks.append(analyze_market_sentiment())
-                        fallback_task_names.append('sentiment_analysis')
-                    elif missing_analysis == 'technical_analysis':
-                        fallback_tasks.append(analyze_technical_indicators(self.symbol, self.timeframe, 300))
-                        fallback_task_names.append('technical_analysis')
-                    elif missing_analysis == 'macro_analysis':
-                        fallback_tasks.append(analyze_macro_economics())
-                        fallback_task_names.append('macro_analysis')
-                    elif missing_analysis == 'onchain_analysis':
-                        fallback_tasks.append(analyze_onchain_data())
-                        fallback_task_names.append('onchain_analysis')
-                    elif missing_analysis == 'institutional_analysis':
-                        fallback_tasks.append(analyze_institutional_flow())
-                        fallback_task_names.append('institutional_analysis')
-                
-                # 실시간 분석 실행
-                if fallback_tasks:
-                    fallback_results = await asyncio.gather(*fallback_tasks, return_exceptions=True)
-                    
-                    for task_name, result in zip(fallback_task_names, fallback_results):
-                        if isinstance(result, Exception):
-                            logger.error(f"{task_name} 실시간 분석 실패: {result}")
-                            all_analysis_results[task_name] = {
-                                'success': False,
-                                'error': f'실시간 분석 실패: {str(result)}',
-                                'used_fallback': True
-                            }
-                        else:
-                            all_analysis_results[task_name] = result
-                            logger.info(f"{task_name} 실시간 분석 완료 (fallback)")
+                logger.warning(f"캐시 미스된 분석들 (fallback 생략): {fresh_analysis_needed}")
+                logger.info("직렬 처리에서 이미 실행되었으므로 fallback 생략")
             
             # 최종 통계
             total_analyses = len(analysis_name_mapping)
-            successful_analyses = sum(1 for name in analysis_name_mapping.values() 
-                                    if all_analysis_results.get(name, {}).get('success', False))
             cached_count = total_analyses - len(fresh_analysis_needed)
             
-            logger.info(f"AI 분석 결과 조회 완료 - 성공: {successful_analyses}/{total_analyses}, 캐시 사용: {cached_count}개, 실시간 실행: {len(fresh_analysis_needed)}개")
+            logger.info(f"AI 분석 결과 조회 완료 - 성공: {successful_analyses}/{total_analyses}, 캐시 사용: {cached_count}개")
             
             return all_analysis_results
             
