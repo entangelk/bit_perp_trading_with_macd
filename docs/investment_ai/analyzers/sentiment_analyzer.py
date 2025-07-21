@@ -591,9 +591,9 @@ class SentimentAnalyzer:
         return True
     
     async def analyze_market_sentiment(self) -> Dict:
-        """시장 심리 분석 메인 함수 (스케줄러 사용)"""
+        """시장 심리 분석 메인 함수 - 수정된 버전 (순환 import 해결)"""
         try:
-            logger.info("시장 심리 분석 시작 (스케줄러 사용)")
+            logger.info("시장 심리 분석 시작")
             
             # 데이터 사용 가능 여부 확인
             if not self.check_data_availability():
@@ -605,32 +605,22 @@ class SentimentAnalyzer:
                     "skip_reason": "insufficient_data"
                 }
             
-            # 스케줄러에서 캐시된 데이터 사용
-            try:
-                from docs.investment_ai.data_scheduler import get_fear_greed_data, get_news_data
-                
-                # 1. 공포/탐욕 지수 (캐시된 데이터 또는 새로 수집)
-                fg_cached = await get_fear_greed_data()
-                if fg_cached and fg_cached.get('data'):
-                    fear_greed_data = self._process_cached_fear_greed(fg_cached['data'])
-                else:
-                    fear_greed_data = self.get_fear_greed_index()
-                
-                # 2. 뉴스 (캐시된 데이터 또는 새로 수집)
-                news_cached = await get_news_data()
-                if news_cached and news_cached.get('news'):
-                    recent_news = news_cached['news']
-                else:
-                    recent_news = self.get_crypto_news()
-                
-            except Exception as e:
-                logger.warning(f"스케줄러 데이터 사용 실패, 직접 수집: {e}")
-                # 백업: 직접 수집
+            # 🔧 수정: 스케줄러 사용 대신 직접 MongoDB에서 캐시 조회 + 직접 수집
+            
+            # 1. 공포/탐욕 지수 - 캐시된 데이터 우선 사용
+            fear_greed_data = self._get_cached_fear_greed()
+            if fear_greed_data is None:
+                # 캐시에 없으면 직접 수집
                 fear_greed_data = self.get_fear_greed_index()
+            
+            # 2. 뉴스 데이터 - 캐시된 데이터 우선 사용  
+            recent_news = self._get_cached_news()
+            if recent_news is None:
+                # 캐시에 없으면 직접 수집
                 recent_news = self.get_crypto_news()
             
             # 데이터 유효성 검사
-            if fear_greed_data is None and recent_news is None:
+            if fear_greed_data is None and (recent_news is None or len(recent_news) == 0):
                 logger.warning("심리 분석: 사용 가능한 데이터 없음")
                 return {
                     "success": False,

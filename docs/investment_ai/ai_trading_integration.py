@@ -12,17 +12,12 @@ from docs.investment_ai.analyzers.macro_analyzer import analyze_macro_economics
 from docs.investment_ai.analyzers.onchain_analyzer import analyze_onchain_data
 from docs.investment_ai.analyzers.institution_analyzer import analyze_institutional_flow
 from docs.investment_ai.final_decisionmaker import make_final_investment_decision
-
+# 🔧 누락: 이 import가 없음
+from docs.investment_ai.data_scheduler import run_scheduled_data_collection
 # 기존 시스템 모듈들 import
 from docs.get_current import fetch_investment_status
 from docs.current_price import get_current_price
 from docs.making_order import close_position, get_position_amount
-
-# 데이터 스케줄러 import
-from docs.investment_ai.data_scheduler import (run_scheduled_data_collection,
-    get_ai_sentiment_analysis, get_ai_technical_analysis, get_ai_macro_analysis,
-    get_ai_onchain_analysis, get_ai_institutional_analysis
-)
 
 logger = logging.getLogger("ai_trading_integration")
 
@@ -98,7 +93,7 @@ class AITradingIntegration:
             }
     
     async def run_all_analyses(self) -> Dict:
-        """모든 AI 분석 결과 조회 (캐시 우선, 필요시 실행)"""
+        """모든 AI 분석 결과 조회 (캐시 우선, 필요시 실행) - 수정된 버전"""
         try:
             logger.info("AI 분석 결과 조회 시작 (캐시 우선)")
             
@@ -111,25 +106,36 @@ class AITradingIntegration:
             # 포지션 분석은 실시간 데이터를 사용하므로 즉시 실행
             position_analysis = await analyze_position_status(current_position)
             
-            # 캐시된 AI 분석 결과들을 병렬로 조회
-            cached_analysis_tasks = [
-                get_ai_sentiment_analysis(),
-                get_ai_technical_analysis(), 
-                get_ai_macro_analysis(),
-                get_ai_onchain_analysis(),
-                get_ai_institutional_analysis()
-            ]
+            # 🔧 수정: 직접 data_scheduler의 get_data 함수 사용
+            from docs.investment_ai.data_scheduler import get_data_scheduler
+            scheduler = get_data_scheduler()
             
+            # 캐시된 AI 분석 결과들을 개별적으로 조회
+            cached_analysis_results = {}
             cached_analysis_names = [
-                'sentiment_analysis',
-                'technical_analysis', 
-                'macro_analysis',
-                'onchain_analysis',
-                'institutional_analysis'
+                'ai_sentiment_analysis',
+                'ai_technical_analysis', 
+                'ai_macro_analysis',
+                'ai_onchain_analysis',
+                'ai_institutional_analysis'
             ]
             
-            # 병렬로 캐시된 결과 조회
-            cached_results = await asyncio.gather(*cached_analysis_tasks, return_exceptions=True)
+            # 🔧 수정: 각 분석 결과를 개별적으로 조회하고 즉시 처리
+            for analysis_name in cached_analysis_names:
+                try:
+                    # data_scheduler의 get_data 함수 직접 사용
+                    cached_result = await scheduler.get_data(analysis_name)
+                    
+                    if cached_result is not None:
+                        logger.debug(f"{analysis_name} 캐시된 결과 사용")
+                        cached_analysis_results[analysis_name] = cached_result
+                    else:
+                        logger.warning(f"{analysis_name} 캐시된 결과 없음")
+                        cached_analysis_results[analysis_name] = None
+                        
+                except Exception as e:
+                    logger.error(f"{analysis_name} 캐시 조회 중 오류: {e}")
+                    cached_analysis_results[analysis_name] = None
             
             # 결과 정리
             all_analysis_results = {
@@ -137,33 +143,63 @@ class AITradingIntegration:
                 'position_analysis': position_analysis
             }
             
-            # 캐시된 분석 결과 처리
+            # 🔧 수정: 캐시된 분석 결과 처리 로직 개선
+            analysis_name_mapping = {
+                'ai_sentiment_analysis': 'sentiment_analysis',
+                'ai_technical_analysis': 'technical_analysis', 
+                'ai_macro_analysis': 'macro_analysis',
+                'ai_onchain_analysis': 'onchain_analysis',
+                'ai_institutional_analysis': 'institutional_analysis'
+            }
+            
             fresh_analysis_needed = []
-            for name, cached_result in zip(cached_analysis_names, cached_results):
-                if isinstance(cached_result, Exception):
-                    logger.error(f"{name} 캐시 조회 중 오류: {cached_result}")
-                    fresh_analysis_needed.append(name)
-                    all_analysis_results[name] = {
-                        'success': False,
-                        'error': f'캐시 조회 실패: {str(cached_result)}',
-                        'fallback_needed': True
-                    }
-                elif cached_result is None:
-                    logger.warning(f"{name} 캐시된 결과 없음, 실시간 분석 필요")
-                    fresh_analysis_needed.append(name)
-                    all_analysis_results[name] = {
+            
+            for cache_name, result_name in analysis_name_mapping.items():
+                cached_result = cached_analysis_results.get(cache_name)
+                
+                if cached_result is None:
+                    logger.warning(f"{result_name} 캐시된 결과 없음, 실시간 분석 필요")
+                    fresh_analysis_needed.append(result_name)
+                    all_analysis_results[result_name] = {
                         'success': False,
                         'error': '캐시된 분석 결과 없음',
                         'fallback_needed': True
                     }
                 else:
-                    # 캐시된 분석 결과에서 실제 analysis_result 추출
-                    if isinstance(cached_result, dict) and 'analysis_result' in cached_result:
-                        all_analysis_results[name] = cached_result['analysis_result']
-                        logger.debug(f"{name} 캐시된 결과 사용 (생성시간: {cached_result.get('analysis_timestamp', 'unknown')})")
+                    # 🔧 수정: 캐시 결과 구조 확인 및 처리
+                    if isinstance(cached_result, dict):
+                        # data_scheduler에서 온 결과는 analysis_result 키 안에 실제 결과가 있음
+                        if 'analysis_result' in cached_result:
+                            actual_result = cached_result['analysis_result']
+                            
+                            # 분석 성공 여부 확인
+                            if actual_result.get('success', False):
+                                all_analysis_results[result_name] = actual_result
+                                logger.debug(f"{result_name} 캐시된 성공 결과 사용")
+                            else:
+                                # 실패한 캐시 결과 처리
+                                skip_reason = actual_result.get('skip_reason', 'unknown')
+                                if skip_reason in ['insufficient_raw_data', 'analyzer_disabled']:
+                                    # 데이터 부족이나 분석기 비활성화면 fallback 시도 안함
+                                    all_analysis_results[result_name] = actual_result
+                                    logger.info(f"{result_name} 캐시된 실패 결과 사용 (스킵 이유: {skip_reason})")
+                                else:
+                                    # 기타 실패는 fallback 시도
+                                    fresh_analysis_needed.append(result_name)
+                                    all_analysis_results[result_name] = actual_result
+                                    logger.warning(f"{result_name} 캐시된 실패 결과, fallback 시도")
+                        else:
+                            # analysis_result 키가 없는 경우 직접 사용
+                            all_analysis_results[result_name] = cached_result
+                            logger.debug(f"{result_name} 캐시된 결과 직접 사용")
                     else:
-                        all_analysis_results[name] = cached_result
-                        logger.debug(f"{name} 캐시된 결과 사용")
+                        # 캐시 결과가 딕셔너리가 아닌 경우
+                        fresh_analysis_needed.append(result_name)
+                        all_analysis_results[result_name] = {
+                            'success': False,
+                            'error': '잘못된 캐시 결과 형식',
+                            'fallback_needed': True
+                        }
             
             # 캐시 미스된 분석들을 실시간으로 실행 (fallback)
             if fresh_analysis_needed:
@@ -206,8 +242,12 @@ class AITradingIntegration:
                             logger.info(f"{task_name} 실시간 분석 완료 (fallback)")
             
             # 최종 통계
-            cached_count = len(cached_analysis_names) - len(fresh_analysis_needed)
-            logger.info(f"AI 분석 결과 조회 완료 - 캐시 사용: {cached_count}개, 실시간 실행: {len(fresh_analysis_needed)}개")
+            total_analyses = len(analysis_name_mapping)
+            successful_analyses = sum(1 for name in analysis_name_mapping.values() 
+                                    if all_analysis_results.get(name, {}).get('success', False))
+            cached_count = total_analyses - len(fresh_analysis_needed)
+            
+            logger.info(f"AI 분석 결과 조회 완료 - 성공: {successful_analyses}/{total_analyses}, 캐시 사용: {cached_count}개, 실시간 실행: {len(fresh_analysis_needed)}개")
             
             return all_analysis_results
             
@@ -217,6 +257,8 @@ class AITradingIntegration:
                 'error': str(e),
                 'current_position': await self.get_current_position_data()
             }
+    
+
     
     async def get_ai_decision(self) -> Dict:
         """AI 기반 투자 결정 도출"""
@@ -542,6 +584,40 @@ async def execute_ai_trading_cycle(trading_config: Dict) -> Dict:
     """완전한 AI 트레이딩 사이클 실행"""
     integration = AITradingIntegration(trading_config)
     return await integration.run_ai_trading_cycle()
+
+# 🔧 추가: 개별 분석 조회 함수들도 data_scheduler 사용하도록 수정
+async def get_ai_sentiment_analysis():
+    """AI 시장 감정 분석 결과 요청 - 수정된 버전"""
+    from docs.investment_ai.data_scheduler import get_data_scheduler
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_sentiment_analysis")
+
+async def get_ai_technical_analysis():
+    """AI 기술적 분석 결과 요청 - 수정된 버전"""
+    from docs.investment_ai.data_scheduler import get_data_scheduler
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_technical_analysis")
+
+async def get_ai_macro_analysis():
+    """AI 거시경제 분석 결과 요청 - 수정된 버전"""
+    from docs.investment_ai.data_scheduler import get_data_scheduler
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_macro_analysis")
+
+async def get_ai_onchain_analysis():
+    """AI 온체인 분석 결과 요청 - 수정된 버전"""
+    from docs.investment_ai.data_scheduler import get_data_scheduler
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_onchain_analysis")
+
+async def get_ai_institutional_analysis():
+    """AI 기관투자 분석 결과 요청 - 수정된 버전"""
+    from docs.investment_ai.data_scheduler import get_data_scheduler
+    scheduler = get_data_scheduler()
+    return await scheduler.get_data("ai_institutional_analysis")
+
+
+
 
 # 테스트용 코드
 if __name__ == "__main__":
