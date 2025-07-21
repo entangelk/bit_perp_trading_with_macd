@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-AI 기반 자동 트레이딩 메인 실행 파일
-- 15분마다 데이터 수집 및 AI 분석 실행
+AI 기반 자동 트레이딩 메인 실행 파일 - 직렬 스케줄러 버전
+- 15분마다 직렬 사이클 실행
 - AI 분석 결과만 기반으로 거래 결정
-- 규칙 기반 분석 사용하지 않음
+- 단순한 카운팅 기반 스케줄링
 """
 
 from tqdm import tqdm
@@ -26,19 +26,17 @@ from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
 from docs.utility.trade_logger import TradeLogger
 
-# AI 시스템 함수들
-from docs.investment_ai.ai_trading_integration import execute_ai_trading_cycle
-from docs.investment_ai.data_scheduler import (
-    run_scheduled_data_collection, get_data_status, get_recovery_status,
-    check_ai_api_status, test_ai_api_connection, get_ai_api_status_summary
+# 🔧 수정: 직렬 스케줄러 사용
+from docs.investment_ai.serial_scheduler import (
+    run_serial_cycle, get_serial_status, get_final_decision
 )
 
-# 설정값 (15분 간격으로 변경)
+# 설정값 (15분 간격)
 TRADING_CONFIG = {
     'symbol': 'BTCUSDT',
     'leverage': 5,
     'usdt_amount': 0.3,
-    'set_timevalue': '15m',  # 15분으로 변경 (AI 최적화된 주기)
+    'set_timevalue': '15m',
     'take_profit': 800,
     'stop_loss': 800
 }
@@ -69,14 +67,14 @@ def get_next_run_time(current_time, interval_minutes):
     next_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minute_block)
     return next_time
 
-async def execute_ai_order(symbol, ai_decision, config):
-    """AI 결정에 따른 주문 실행"""
+async def execute_ai_order(symbol, final_decision_result, config):
+    """AI 최종 결정에 따른 주문 실행"""
     try:
-        if not ai_decision.get('success', False):
-            logger.warning(f"AI 분석 실패로 주문 실행 안함: {ai_decision.get('error', 'Unknown')}")
+        if not final_decision_result.get('success', False):
+            logger.warning(f"AI 분석 실패로 주문 실행 안함: {final_decision_result.get('error', 'Unknown')}")
             return False
         
-        result = ai_decision.get('result', {})
+        result = final_decision_result.get('result', {})
         final_decision = result.get('final_decision', 'Hold')
         confidence = result.get('decision_confidence', 0)
         recommended_action = result.get('recommended_action', {})
@@ -115,26 +113,24 @@ async def execute_ai_order(symbol, ai_decision, config):
             return False
         
         # AI 권장 설정 또는 기본 설정 사용
-        usdt_amount = config['usdt_amount']  # 기본 설정 사용
-        leverage = config['leverage']  # 레버리지는 변경하지 않음
+        usdt_amount = config['usdt_amount']
+        leverage = config['leverage']
         stop_loss = recommended_action.get('mandatory_stop_loss') or config['stop_loss']
         take_profit = recommended_action.get('mandatory_take_profit') or config['take_profit']
         
         # 가격 기반 TP/SL을 pips로 변환 (필요시)
         if isinstance(stop_loss, float) and stop_loss > 100:
-            # 절대 가격인 경우 pips로 변환
             stop_loss_pips = abs(current_price - stop_loss) / current_price * 10000
-            stop_loss = min(800, max(200, int(stop_loss_pips)))  # 200-800 pips 범위
+            stop_loss = min(800, max(200, int(stop_loss_pips)))
         
         if isinstance(take_profit, float) and take_profit > 100:
-            # 절대 가격인 경우 pips로 변환
             take_profit_pips = abs(take_profit - current_price) / current_price * 10000
-            take_profit = min(800, max(200, int(take_profit_pips)))  # 200-800 pips 범위
+            take_profit = min(800, max(200, int(take_profit_pips)))
         
         logger.info(f"AI 주문 실행: {final_decision} -> {position} (신뢰도: {confidence}%)")
         logger.info(f"주문 상세: 가격={current_price}, SL={stop_loss}, TP={take_profit}")
         
-        # 주문 실행 (기존 execute_order 로직과 동일)
+        # 주문 실행
         order_response = create_order_with_tp_sl(
             symbol=symbol,
             side=side,
@@ -173,62 +169,47 @@ async def execute_ai_order(symbol, ai_decision, config):
         logger.error(f"AI 주문 실행 중 오류: {e}", exc_info=True)
         return False
 
-def try_update_with_check(config, max_retries=3):
-    """차트 업데이트 및 데이터 정합성 확인"""
-    for attempt in range(max_retries):
-        result, server_time, execution_time = chart_update_one(config['set_timevalue'], config['symbol'])
-        if result is None:
-            logger.error(f"차트 업데이트 실패 (시도 {attempt + 1}/{max_retries})")
-            continue
-            
-        df_rare_chart = load_data(
-            set_timevalue=config['set_timevalue'], 
-            period=300,
-            server_time=server_time
-        )
+def get_action_from_decision(final_decision, current_position):
+    """AI 최종 결정을 거래 액션으로 변환"""
+    try:
+        has_position = current_position.get('has_position', False)
+        position_side = current_position.get('side', 'none')
         
-        if df_rare_chart is not None:
-            return result, server_time, execution_time
-            
-        logger.warning(f"데이터 시간 불일치, 재시도... (시도 {attempt + 1}/{max_retries})")
-        time.sleep(5)
-        
-    return None, server_time, execution_time
+        if final_decision in ['Strong Buy', 'Buy']:
+            if not has_position:
+                return 'open_long'
+            elif position_side == 'short':
+                return 'reverse_to_long'
+            else:
+                return 'add_long'
+                
+        elif final_decision in ['Strong Sell', 'Sell']:
+            if not has_position:
+                return 'open_short'
+            elif position_side == 'long':
+                return 'reverse_to_short'
+            else:
+                return 'add_short'
+                
+        else:  # Hold
+            if has_position:
+                return 'hold_position'
+            else:
+                return 'wait'
+    except Exception:
+        return 'wait'
 
 async def main():
-    """AI 기반 메인 트레이딩 루프"""
+    """AI 기반 메인 트레이딩 루프 - 직렬 스케줄러 버전"""
     config = TRADING_CONFIG
     
     try:
-        logger.info("=== AI 자동 트레이딩 시스템 시작 ===")
-        
-        # 초기 차트 동기화
-        logger.info("차트 동기화 시작...")
-        last_time, server_time = chart_update(config['set_timevalue'], config['symbol'])
-        last_time = last_time['timestamp']
-        server_time = datetime.fromtimestamp(server_time, timezone.utc)
-        
-        while get_time_block(server_time, TIME_VALUES[config['set_timevalue']]) != get_time_block(last_time, TIME_VALUES[config['set_timevalue']]):
-            print(f"{config['set_timevalue']} 차트 업데이트 중...")
-            last_time, server_time = chart_update(config['set_timevalue'], config['symbol'])
-            last_time = last_time['timestamp'].astimezone(timezone.utc)
-            server_time = datetime.fromtimestamp(server_time, timezone.utc)
-            time.sleep(60)
-            
-        logger.info(f"{config['set_timevalue']} 차트 동기화 완료")
+        logger.info("=== AI 자동 트레이딩 시스템 시작 (직렬 스케줄러) ===")
         
         # 레버리지 설정 (한 번만 설정)
         if not set_leverage(config['symbol'], config['leverage']):
             raise Exception("레버리지 설정 실패")
         logger.info(f"레버리지 {config['leverage']}배 설정 완료")
-        
-        # 초기 데이터 수집 (직렬 실행으로 API 과부화 방지)
-        logger.info("초기 데이터 수집 시작 (직렬 실행)...")
-        try:
-            await run_scheduled_data_collection(initial_run=True)
-            logger.info("초기 데이터 수집 완료")
-        except Exception as e:
-            logger.error(f"초기 데이터 수집 중 오류: {e}")
         
         # 메인 루프
         cycle_count = 0
@@ -248,169 +229,132 @@ async def main():
                         time.sleep(1)
                         pbar.update(1)
             
-            # 차트 데이터 업데이트 (항상 실행)
-            logger.info("차트 데이터 업데이트 중...")
-            result, update_server_time, execution_time = try_update_with_check(config)
-            if result is None:
-                logger.error("차트 업데이트 최대 재시도 초과")
-                continue
+            # 🔧 핵심 변경: 직렬 사이클 실행 (모든 데이터 수집 + AI 분석 + 최종 결정 포함)
+            logger.info("직렬 AI 분석 사이클 실행 중...")
+            cycle_start_time = time.time()
             
-            # 데이터 정합성을 위한 대기
-            time.sleep(1.0)
-            
-            # 데이터 수집 (거래와 독립적으로 항상 실행, 이후엔 병렬 실행)
-            logger.info("데이터 수집 실행 중...")
             try:
-                await run_scheduled_data_collection(initial_run=False)
-                logger.info("데이터 수집 완료")
-            except Exception as e:
-                logger.error(f"데이터 수집 중 오류: {e}")
-                # 데이터 수집 실패해도 계속 진행
-            
-            # AI API 상태 확인 및 복구 시도
-            ai_api_status = check_ai_api_status()
-            if not ai_api_status['is_working']:
-                logger.warning("AI API 비작동 상태 - 복구 시도")
-                recovery_success = await test_ai_api_connection()
-                if recovery_success:
-                    logger.info("AI API 복구 성공!")
-                else:
-                    logger.error("AI API 복구 실패 - 거래 중단")
-                    # AI API 작동하지 않으면 거래 완전 중지
+                cycle_result = await run_serial_cycle()
+                
+                if not cycle_result.get('success', False):
+                    logger.error("직렬 사이클 실패")
                     continue
-            
-            # AI 시스템 상태 확인
-            data_status = get_data_status()
-            recovery_status = get_recovery_status()
-            
-            disabled_ai_tasks = [task for task, status in data_status.items() 
-                               if task.startswith('ai_') and status.get('is_disabled', False)]
-            if disabled_ai_tasks:
-                logger.warning(f"비활성화된 AI 분석기: {disabled_ai_tasks}")
-            
-            if recovery_status['disabled_tasks']:
-                logger.info(f"복구 대기 중인 작업: {recovery_status['disabled_tasks']}")
-            
-            # AI 트레이딩 사이클 실행 (AI API가 작동 중일 때만)
-            logger.info("AI 분석 및 거래 결정 중...")
-            ai_result = await execute_ai_trading_cycle(config)
-            
-            if not ai_result.get('success', False):
-                logger.error(f"AI 트레이딩 사이클 실패: {ai_result.get('error', 'Unknown')}")
-                # AI 실패 시 거래 중단하고 다음 사이클로
-                continue
-            
-            ai_decision = ai_result.get('ai_decision', {})
-            interpreted_decision = ai_result.get('interpreted_decision', {})
-            execution_result = ai_result.get('execution_result', {})
-            
-            # AI 결정 로깅
-            if ai_decision.get('success', False):
-                result_info = ai_decision.get('result', {})
-                logger.info(f"AI 분석 완료: {result_info.get('final_decision', 'Unknown')} "
-                          f"(신뢰도: {result_info.get('decision_confidence', 0)}%)")
                 
-                # 타이밍 정보 로깅
-                timing_summary = result_info.get('timing_summary', {})
-                if timing_summary:
-                    logger.info(f"분석 품질: {timing_summary.get('overall_quality', 'unknown')}, "
-                              f"캐시 효율성: {timing_summary.get('cache_efficiency_percent', 0)}%")
-            
-            # 실제 거래 실행 여부 확인
-            action = interpreted_decision.get('action', 'wait')
-            if action in ['wait', 'hold']:
-                logger.info(f"거래 대기: {interpreted_decision.get('reason', 'No action needed')}")
-                continue
-            
-            # 현재 포지션 상태 확인
-            balance, positions_json, ledger = fetch_investment_status()
-            
-            error_time = 0
-            if balance == 'error':
-                logger.warning("API 호출 오류, 재시도 중...")
-                for i in range(24):  # 최대 2분 재시도
-                    time.sleep(5)
-                    error_time += 5
-                    balance, positions_json, ledger = fetch_investment_status()
-                    if balance != 'error':
-                        logger.info("API 호출 재시도 성공")
-                        break
-                else:
-                    logger.error("API 호출 오류 지속, 이번 사이클 스킵")
+                cycle_duration = time.time() - cycle_start_time
+                tasks_run = cycle_result.get('tasks_run', 0)
+                tasks_success = cycle_result.get('tasks_success', 0)
+                
+                logger.info(f"직렬 사이클 완료: {tasks_success}/{tasks_run} 성공 ({cycle_duration:.1f}초)")
+                
+                # 🔧 직렬 스케줄러에서 최종 결정 결과 가져오기
+                final_decision_result = get_final_decision()
+                
+                if not final_decision_result.get('success', False):
+                    logger.warning(f"최종 결정 실패: {final_decision_result.get('error', 'Unknown')}")
                     continue
-            
-            positions_flag = positions_json != '[]' and positions_json is not None
-            
-            # 포지션 관리
-            if positions_flag:  # 기존 포지션이 있는 경우
-                positions_data = json.loads(positions_json)
-                current_amount, current_side, current_avgPrice, pnl = get_position_amount(config['symbol'])
-                current_side_str = 'Long' if current_side == 'Buy' else 'Short'
                 
-                logger.info(f"기존 포지션: {current_side_str}, 수량: {current_amount}, PNL: {pnl}")
+                result = final_decision_result.get('result', {})
+                final_decision = result.get('final_decision', 'Hold')
+                confidence = result.get('decision_confidence', 0)
                 
-                # AI가 포지션 종료를 권장하는 경우
-                if action == 'close_position':
-                    logger.info("AI 권장에 따른 포지션 종료")
+                logger.info(f"AI 최종 결정: {final_decision} (신뢰도: {confidence}%)")
+                
+                # 현재 포지션 상태 확인
+                balance, positions_json, ledger = fetch_investment_status()
+                
+                if balance == 'error':
+                    logger.warning("API 호출 오류, 재시도 중...")
+                    for i in range(12):  # 최대 1분 재시도
+                        time.sleep(5)
+                        balance, positions_json, ledger = fetch_investment_status()
+                        if balance != 'error':
+                            logger.info("API 호출 재시도 성공")
+                            break
+                    else:
+                        logger.error("API 호출 오류 지속, 이번 사이클 스킵")
+                        continue
+                
+                # 현재 포지션 정보 추출
+                current_position = {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0
+                }
+                
+                positions_flag = positions_json != '[]' and positions_json is not None
+                if positions_flag:
+                    try:
+                        positions_data = json.loads(positions_json)
+                        if positions_data:
+                            position = positions_data[0]
+                            size = float(position.get('size', position.get('contracts', 0)))
+                            if abs(size) > 0:
+                                current_position.update({
+                                    'has_position': True,
+                                    'side': 'long' if size > 0 else 'short',
+                                    'size': abs(size),
+                                    'entry_price': float(position.get('avgPrice', position.get('entryPrice', 0)))
+                                })
+                    except Exception as e:
+                        logger.error(f"포지션 정보 파싱 오류: {e}")
+                
+                logger.info(f"현재 포지션: {current_position['side']} {current_position['size']}")
+                
+                # AI 결정을 거래 액션으로 변환
+                action = get_action_from_decision(final_decision, current_position)
+                logger.info(f"거래 액션: {action}")
+                
+                # 거래 실행
+                if action == 'wait' or action == 'hold_position':
+                    logger.info("거래 대기 또는 포지션 유지")
+                    
+                elif action == 'close_position':
+                    logger.info("포지션 종료")
                     close_position(symbol=config['symbol'])
                     
-                # AI가 포지션 반전을 권장하는 경우
                 elif action in ['reverse_to_long', 'reverse_to_short']:
-                    logger.info(f"AI 권장에 따른 포지션 반전: {action}")
+                    logger.info(f"포지션 반전: {action}")
                     close_position(symbol=config['symbol'])
                     time.sleep(1)  # 종료 후 잠시 대기
                     
                     # 새 포지션 진입
-                    await execute_ai_order(config['symbol'], ai_decision, config)
-                    
-                # AI가 포지션 추가를 권장하는 경우
-                elif ((current_side_str == 'Long' and action == 'add_long') or 
-                      (current_side_str == 'Short' and action == 'add_short')):
-                    logger.info(f"AI 권장에 따른 포지션 추가: {action}")
-                    await execute_ai_order(config['symbol'], ai_decision, config)
-                
-                # 기존 포지션과 반대 신호인 경우 (일반적인 반전)
-                elif ((current_side_str == 'Long' and action in ['open_short']) or 
-                      (current_side_str == 'Short' and action in ['open_long'])):
-                    logger.info("AI 신호 반전으로 포지션 전환")
-                    close_position(symbol=config['symbol'])
-                    time.sleep(1)
-                    
-                    # 새 포지션 진입
-                    await execute_ai_order(config['symbol'], ai_decision, config)
-                
-                else:
-                    logger.info(f"기존 포지션 유지: {current_side_str}")
-            
-            else:  # 포지션이 없는 경우
-                if action in ['open_long', 'open_short', 'add_long', 'add_short']:
-                    # add_long, add_short도 포지션이 없으면 새 포지션 오픈으로 처리
-                    if action in ['add_long', 'add_short']:
-                        logger.info(f"포지션 없음 - {action}을 새 포지션 오픈으로 처리")
-                    else:
-                        logger.info("새 포지션 진입")
-                    order_success = await execute_ai_order(config['symbol'], ai_decision, config)
-                    
+                    order_success = await execute_ai_order(config['symbol'], final_decision_result, config)
                     if order_success:
-                        # 거래 로그 기록
                         try:
-                            final_decision = ai_decision.get('result', {}).get('final_decision', 'Unknown')
                             trade_logger.log_snapshot(
-                                server_time=server_time,
-                                tag='ai',
+                                server_time=datetime.now(timezone.utc),
+                                tag='ai_reverse',
                                 position='Long' if 'long' in action else 'Short'
                             )
                         except Exception as e:
                             logger.warning(f"거래 로그 기록 실패: {e}")
+                    
+                elif action in ['open_long', 'open_short', 'add_long', 'add_short']:
+                    logger.info(f"포지션 진입/추가: {action}")
+                    order_success = await execute_ai_order(config['symbol'], final_decision_result, config)
+                    
+                    if order_success:
+                        try:
+                            trade_logger.log_snapshot(
+                                server_time=datetime.now(timezone.utc),
+                                tag='ai_entry',
+                                position='Long' if 'long' in action else 'Short'
+                            )
+                        except Exception as e:
+                            logger.warning(f"거래 로그 기록 실패: {e}")
+                
+                # 스케줄러 상태 로깅 (디버깅용)
+                status = get_serial_status()
+                total_tasks = len(status.get('tasks', {}))
+                healthy_tasks = len([t for t in status.get('tasks', {}).values() if not t.get('is_disabled', False)])
+                logger.debug(f"스케줄러 상태: {healthy_tasks}/{total_tasks} 작업 정상")
+                
+            except Exception as e:
+                logger.error(f"사이클 실행 중 오류: {e}")
+                continue
             
-            # 남은 시간 대기 (15분 - 실행 시간)
-            remaining_time = max(0, 900 - (execution_time + error_time))  # 15분 = 900초
-            if remaining_time > 0:
-                logger.info(f"다음 사이클까지 대기: {remaining_time:.0f}초")
-                with tqdm(total=int(remaining_time), desc="대기 중", ncols=100) as pbar:
-                    for _ in range(int(remaining_time)):
-                        time.sleep(1)
-                        pbar.update(1)
+            logger.info(f"AI 트레이딩 사이클 #{cycle_count} 완료")
                         
     except Exception as e:
         logger.error(f"메인 루프 오류: {e}", exc_info=True)
