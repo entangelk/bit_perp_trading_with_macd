@@ -321,6 +321,42 @@ async def main():
             raise Exception("레버리지 설정 실패")
         logger.info(f"레버리지 {config['leverage']}배 설정 완료")
         
+        # 🔧 추가: 초기 데이터 수집 및 AI 분석 (시스템 워밍업)
+        logger.info("시스템 초기화: 초기 데이터 수집 및 AI 분석 시작...")
+        try:
+            # 초기 직렬 사이클 실행 (모든 데이터 수집 + AI 분석)
+            initial_start_time = time.time()
+            await run_scheduled_data_collection()
+            initial_duration = time.time() - initial_start_time
+            
+            logger.info(f"초기 데이터 수집 및 AI 분석 완료 ({initial_duration:.1f}초)")
+            
+            # 초기 최종 결정도 실행해서 시스템 전체 테스트
+            logger.info("초기 최종 결정 테스트 실행...")
+            initial_analysis_results = await get_all_analysis_for_decision()
+            
+            if initial_analysis_results:
+                initial_decision = await make_final_investment_decision(initial_analysis_results)
+                if initial_decision.get('success', False):
+                    result = initial_decision.get('result', {})
+                    decision = result.get('final_decision', 'Hold')
+                    confidence = result.get('decision_confidence', 0)
+                    logger.info(f"초기 AI 결정: {decision} (신뢰도: {confidence}%)")
+                else:
+                    logger.warning(f"초기 최종 결정 실패: {initial_decision.get('error', 'Unknown')}")
+            else:
+                logger.warning("초기 분석 결과가 없어 최종 결정 스킵")
+            
+            # 초기화 상태 확인
+            status = get_data_status()
+            total_tasks = len(status.get('tasks', {}))
+            healthy_tasks = len([t for t in status.get('tasks', {}).values() if not t.get('is_disabled', False)])
+            logger.info(f"시스템 초기화 완료: {healthy_tasks}/{total_tasks} 작업 정상")
+            
+        except Exception as e:
+            logger.error(f"초기 데이터 수집 중 오류 (계속 진행): {e}")
+            # 초기 수집 실패해도 메인 루프는 계속 진행
+        
         # 메인 루프
         cycle_count = 0
         while True:

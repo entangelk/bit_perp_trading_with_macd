@@ -262,7 +262,7 @@ class TechnicalIndicators:
             result_df = self.calculate_support_resistance(result_df)
             
             # NaN 값 처리
-            result_df = result_df.fillna(method='bfill').fillna(method='ffill')
+            result_df = result_df = result_df.bfill().ffill()
             
             # 설정값 반환 (참고용)
             config_info = {
