@@ -219,10 +219,14 @@ class DataScheduler:
         )
         logger.info(f"데이터 작업 등록: {name} (수집주기: {interval_minutes}분, 캐시: {cache_duration_minutes}분)")
     
-    def should_run_task(self, task: DataTask) -> bool:
-        """작업 실행 여부 판단"""
+    def should_run_task(self, task: DataTask, force_run: bool = False) -> bool:
+        """작업 실행 여부 판단 - 수정된 버전 (의존성 고려)"""
         if task.is_running:
             return False
+        
+        # 🔧 추가: 강제 실행 옵션
+        if force_run:
+            return True
         
         # 실시간 데이터는 항상 실행
         if task.interval_minutes == 0:
@@ -381,153 +385,163 @@ class DataScheduler:
             return self.get_cached_data(task_name)
     
     async def run_scheduled_collections(self, initial_run=False):
-        """예정된 수집 작업들 실행 - 수정된 버전 (AI 분석 직렬 처리)"""
+        """예정된 수집 작업들 실행 - 수정된 버전 (의존성 기반 강제 실행)"""
         logger.info("예정된 데이터 수집 작업 실행")
         
-        tasks_to_run = []
+        # 🔧 수정: 모든 AI 분석과 최종 결정을 강제로 포함
+        all_tasks = []
         disabled_tasks = []
         
+        # 1단계: 원시 데이터 작업들 (주기 기반)
+        raw_data_tasks = []
         for task_name, task in self.tasks.items():
-            if task.interval_minutes > 0:  # 스케줄링된 작업만
-                if task.error_count >= task.max_errors and not self._should_attempt_auto_recovery(task):
-                    disabled_tasks.append(task_name)
-                elif self.should_run_task(task):
-                    tasks_to_run.append((task_name, task))
+            if (not task_name.startswith('ai_') and 
+                task.interval_minutes > 0 and 
+                not task.error_count >= task.max_errors):
+                if self.should_run_task(task):
+                    raw_data_tasks.append((task_name, task))
+        
+        # 2단계: AI 분석 작업들 (강제 실행)
+        ai_analysis_tasks = []
+        ai_priority_order = [
+            'ai_technical_analysis',    
+            'ai_macro_analysis',        
+            'ai_onchain_analysis',      
+            'ai_institutional_analysis', 
+            'ai_sentiment_analysis'     
+        ]
+        
+        for priority_task in ai_priority_order:
+            if priority_task in self.tasks:
+                task = self.tasks[priority_task]
+                if task.error_count < task.max_errors:
+                    ai_analysis_tasks.append((priority_task, task))
+                    logger.info(f"AI 분석 강제 실행 예정: {priority_task}")
+                else:
+                    disabled_tasks.append(priority_task)
+                    logger.warning(f"AI 분석 비활성화: {priority_task} (에러 {task.error_count}/{task.max_errors})")
+        
+        # 3단계: 최종 결정 작업 (강제 실행)
+        final_decision_tasks = []
+        if 'ai_final_decision' in self.tasks:
+            task = self.tasks['ai_final_decision']
+            if task.error_count < task.max_errors:
+                final_decision_tasks.append(('ai_final_decision', task))
+                logger.info("최종 결정 강제 실행 예정")
         
         if disabled_tasks:
-            logger.warning(f"비활성화된 작업들 (최대 오류 초과): {disabled_tasks}")
+            logger.warning(f"비활성화된 작업들: {disabled_tasks}")
         
-        if not tasks_to_run:
-            logger.debug("실행할 예정 작업 없음")
+        # 실행할 작업이 없으면 종료
+        total_tasks = len(raw_data_tasks) + len(ai_analysis_tasks) + len(final_decision_tasks)
+        if total_tasks == 0:
+            logger.info("실행할 작업이 없음")
             return
         
-        logger.info(f"실행할 작업: {[name for name, _ in tasks_to_run]}")
+        logger.info(f"실행 예정: 원시데이터 {len(raw_data_tasks)}개, AI분석 {len(ai_analysis_tasks)}개, 최종결정 {len(final_decision_tasks)}개")
         
-        # 🔧 수정: 작업 우선순위 분류
-        raw_data_tasks = []      # 원시 데이터 수집
-        ai_analysis_tasks = []   # AI 분석 작업
-        final_decision_tasks = [] # 최종 결정 작업
+        # 🔧 수정: 3단계 순차 실행
         
-        for task_name, task in tasks_to_run:
-            if task_name.startswith('ai_') and 'final_decision' not in task_name:
-                ai_analysis_tasks.append((task_name, task))
-            elif 'final_decision' in task_name:
-                final_decision_tasks.append((task_name, task))
-            else:
-                raw_data_tasks.append((task_name, task))
-        
-        # 🔧 수정: 3단계 직렬 처리
-        
-        # 1단계: 원시 데이터 수집 (병렬 가능)
+        # 1단계: 원시 데이터 수집
         if raw_data_tasks:
-            logger.info(f"1단계: 원시 데이터 수집 ({len(raw_data_tasks)}개 작업)")
+            logger.info(f"1단계: 원시 데이터 수집 시작 ({len(raw_data_tasks)}개)")
             if initial_run:
-                # 초기 실행은 직렬
                 for task_name, task in raw_data_tasks:
-                    logger.info(f"  실행 중: {task_name}")
+                    logger.info(f"  원시데이터 수집: {task_name}")
                     await self.run_task(task)
-                    await asyncio.sleep(3)  # 3초 대기
+                    await asyncio.sleep(2)
             else:
-                # 일반 실행은 병렬
                 await asyncio.gather(*[self.run_task(task) for _, task in raw_data_tasks])
-            
-            # 원시 데이터 수집 완료 후 잠시 대기
-            await asyncio.sleep(2)
             logger.info("1단계 완료: 원시 데이터 수집")
         
-        # 2단계: AI 분석 작업 (직렬 처리)
+        # 2단계: AI 분석 작업 (순차 실행 + 강제 실행)
         if ai_analysis_tasks:
-            logger.info(f"2단계: AI 분석 작업 직렬 처리 ({len(ai_analysis_tasks)}개 작업)")
+            logger.info(f"2단계: AI 분석 강제 실행 시작 ({len(ai_analysis_tasks)}개)")
             
-            # 🔧 수정: AI 분석 우선순위 설정
-            ai_priority_order = [
-                'ai_technical_analysis',    # 1순위: 기술적 분석 (차트 데이터 기반)
-                'ai_macro_analysis',        # 2순위: 거시경제 분석
-                'ai_onchain_analysis',      # 3순위: 온체인 분석
-                'ai_institutional_analysis', # 4순위: 기관투자 분석
-                'ai_sentiment_analysis'     # 5순위: 감정 분석 (뉴스 의존성)
-            ]
-            
-            # 우선순위에 따라 정렬
-            ai_tasks_sorted = []
-            for priority_task in ai_priority_order:
-                for task_name, task in ai_analysis_tasks:
-                    if task_name == priority_task:
-                        ai_tasks_sorted.append((task_name, task))
-                        break
-            
-            # 누락된 AI 작업들 추가
-            for task_name, task in ai_analysis_tasks:
-                if not any(existing_name == task_name for existing_name, _ in ai_tasks_sorted):
-                    ai_tasks_sorted.append((task_name, task))
-            
-            # AI 분석 작업들 직렬 실행
-            for i, (task_name, task) in enumerate(ai_tasks_sorted, 1):
-                logger.info(f"  2-{i}: {task_name} 실행 중...")
-                result = await self.run_task(task)
+            for i, (task_name, task) in enumerate(ai_analysis_tasks, 1):
+                logger.info(f"  2-{i}: {task_name} 강제 실행 중...")
                 
-                # 결과 로깅
-                if result and isinstance(result, dict):
-                    analysis_result = result.get('analysis_result', {})
-                    if analysis_result.get('success', False):
-                        logger.info(f"    ✅ {task_name} 성공")
+                # 🔧 핵심: 강제 실행 (주기 무시)
+                try:
+                    task.is_running = True
+                    start_time = datetime.now()
+                    
+                    # AI 분석 함수 직접 호출 (주기 체크 무시)
+                    result = await asyncio.wait_for(task.func(), timeout=180)  # 3분 타임아웃
+                    
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    if result is not None:
+                        self._update_cache(task, result)
+                        task.last_run = datetime.now(timezone.utc)
+                        task.error_count = 0
+                        logger.info(f"    ✅ {task_name} 강제 실행 성공 ({duration:.1f}초)")
                     else:
-                        logger.warning(f"    ❌ {task_name} 실패: {analysis_result.get('error', 'Unknown')}")
-                else:
-                    logger.warning(f"    ❌ {task_name} 실패: 결과 없음")
+                        task.error_count += 1
+                        logger.warning(f"    ❌ {task_name} 강제 실행 실패 (결과 없음)")
+                        
+                except asyncio.TimeoutError:
+                    task.error_count += 1
+                    logger.error(f"    ⏰ {task_name} 강제 실행 타임아웃 (180초)")
+                except Exception as e:
+                    task.error_count += 1
+                    logger.error(f"    💥 {task_name} 강제 실행 오류: {e}")
+                finally:
+                    task.is_running = False
                 
-                # AI 분석 간 짧은 대기 (API 레이트 리밋 방지)
-                if i < len(ai_tasks_sorted):
-                    await asyncio.sleep(1)  # 1초만 대기
+                # AI 분석 간 대기
+                if i < len(ai_analysis_tasks):
+                    await asyncio.sleep(1)
             
-            logger.info("2단계 완료: AI 분석 작업")
+            logger.info("2단계 완료: AI 분석 강제 실행")
         
-        # 3단계: 최종 결정 작업 (맨 마지막)
+        # 3단계: 최종 결정 (강제 실행)
         if final_decision_tasks:
-            logger.info(f"3단계: 최종 결정 작업 ({len(final_decision_tasks)}개 작업)")
+            logger.info("3단계: 최종 결정 강제 실행 시작")
             
             for task_name, task in final_decision_tasks:
-                logger.info(f"  최종 결정: {task_name} 실행 중...")
-                result = await self.run_task(task)
+                logger.info(f"  최종결정 강제 실행: {task_name}")
                 
-                # 최종 결정 결과 로깅
-                if result and isinstance(result, dict):
-                    analysis_result = result.get('analysis_result', {})
-                    if analysis_result.get('success', False):
-                        action = analysis_result.get('final_decision', 'unknown')
-                        confidence = analysis_result.get('ai_confidence', 0)
-                        logger.info(f"    ✅ 최종 결정 성공: {action} (신뢰도: {confidence}%)")
+                try:
+                    task.is_running = True
+                    start_time = datetime.now()
+                    
+                    # 🔧 핵심: 최종 결정도 강제 실행
+                    result = await asyncio.wait_for(task.func(), timeout=300)  # 5분 타임아웃
+                    
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    if result is not None:
+                        self._update_cache(task, result)
+                        task.last_run = datetime.now(timezone.utc)
+                        task.error_count = 0
+                        
+                        # 최종 결정 결과 로깅
+                        if isinstance(result, dict):
+                            analysis_result = result.get('analysis_result', {})
+                            action = analysis_result.get('final_decision', 'unknown')
+                            confidence = analysis_result.get('ai_confidence', 0)
+                            logger.info(f"    ✅ 최종결정 성공: {action} (신뢰도: {confidence}%, {duration:.1f}초)")
+                        else:
+                            logger.info(f"    ✅ 최종결정 성공 ({duration:.1f}초)")
                     else:
-                        logger.warning(f"    ❌ 최종 결정 실패: {analysis_result.get('error', 'Unknown')}")
-                else:
-                    logger.warning(f"    ❌ 최종 결정 실패: 결과 없음")
+                        task.error_count += 1
+                        logger.warning(f"    ❌ 최종결정 실패 (결과 없음)")
+                        
+                except asyncio.TimeoutError:
+                    task.error_count += 1
+                    logger.error(f"    ⏰ 최종결정 타임아웃 (300초)")
+                except Exception as e:
+                    task.error_count += 1
+                    logger.error(f"    💥 최종결정 오류: {e}")
+                finally:
+                    task.is_running = False
             
             logger.info("3단계 완료: 최종 결정")
         
-        logger.info("모든 데이터 수집 및 분석 작업 완료")
-        
-        def _update_cache(self, task: DataTask, data: Any):
-            """MongoDB에 캐시 데이터 저장"""
-            if task.cache_duration_minutes == 0 or self.cache_collection is None:
-                return
-            
-            try:
-                expire_at = datetime.now(timezone.utc) + timedelta(minutes=task.cache_duration_minutes)
-                
-                # upsert를 사용하여 기존 데이터 업데이트 또는 새로 삽입
-                self.cache_collection.replace_one(
-                    {"task_name": task.name},
-                    {
-                        "task_name": task.name,
-                        "data": data,
-                        "created_at": datetime.now(timezone.utc),
-                        "expire_at": expire_at
-                    },
-                    upsert=True
-                )
-                logger.debug(f"MongoDB 캐시 업데이트: {task.name}")
-            except Exception as e:
-                logger.error(f"캐시 업데이트 오류: {e}")
+        logger.info("🎉 모든 데이터 수집 및 AI 분석 완료!")
     
     def get_task_status(self) -> Dict:
         """모든 작업의 상태 반환"""
