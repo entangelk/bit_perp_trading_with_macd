@@ -32,7 +32,97 @@ class AITradingIntegration:
         # 결정 히스토리 추적
         self.decision_history = []
         self.max_history = 100
-        
+
+
+    # 🔧 완전히 새로운 메서드: 스케줄러 기반 분석 결과 조회
+    async def get_analysis_results_from_scheduler(self) -> Dict:
+        """스케줄러에서 분석 결과들을 가져와서 최종결정용 형식으로 변환"""
+        try:
+            logger.info("스케줄러에서 분석 결과 조회 시작")
+            
+            # 1. 데이터 수집과 AI 분석 실행 (await로 완료 대기)
+            logger.info("데이터 수집 및 AI 분석 실행 중...")
+            await run_scheduled_data_collection()
+            logger.info("데이터 수집 및 AI 분석 완료")
+            
+            # 2. 스케줄러 인스턴스 가져오기
+            from docs.investment_ai.data_scheduler import get_data_scheduler
+            scheduler = get_data_scheduler()
+            
+            # 3. 최종 결정 메이커 인스턴스 가져오기
+            from docs.investment_ai.final_decisionmaker import get_final_decision_maker
+            decision_maker = get_final_decision_maker()
+            
+            # 4. 🔧 핵심: 스케줄러에서 데이터를 가져와서 매핑하는 새로운 메서드 사용
+            mapped_results = decision_maker.get_analysis_data_from_scheduler(scheduler)
+            
+            if not mapped_results:
+                logger.error("스케줄러에서 분석 결과 매핑 실패")
+                return {
+                    'error': '스케줄러 연동 실패 - 매핑된 결과 없음',
+                    'current_position': await self.get_current_position_data()
+                }
+            
+            # 5. 매핑 결과 검증 및 로깅
+            success_count = sum(1 for result in mapped_results.values() 
+                              if isinstance(result, dict) and result.get('success', False))
+            total_count = len(mapped_results)
+            
+            logger.info(f"스케줄러 연동 분석 결과 매핑 완료: {success_count}/{total_count} 성공")
+            
+            # 실패한 분석들 상세 로깅
+            failed_analyses = []
+            for key, value in mapped_results.items():
+                if isinstance(value, dict) and not value.get('success', False):
+                    reason = value.get('skip_reason', value.get('error', 'unknown'))
+                    failed_analyses.append(f"{key}({reason})")
+            
+            if failed_analyses:
+                logger.warning(f"실패한 분석들: {', '.join(failed_analyses)}")
+            
+            return mapped_results
+            
+        except Exception as e:
+            logger.error(f"스케줄러 기반 분석 결과 조회 중 오류: {e}")
+            return {
+                'error': str(e),
+                'current_position': await self.get_current_position_data()
+            }
+
+    # 🔧 기존 run_all_analyses 메서드를 대체하는 새로운 메서드
+    async def run_all_analyses_v2(self) -> Dict:
+        """모든 AI 분석 결과 조회 - 스케줄러 연동 버전"""
+        try:
+            logger.info("AI 분석 결과 조회 시작 (스케줄러 연동 v2)")
+            
+            # 스케줄러에서 매핑된 분석 결과 가져오기
+            analysis_results = await self.get_analysis_results_from_scheduler()
+            
+            if 'error' in analysis_results:
+                logger.error(f"분석 결과 조회 실패: {analysis_results['error']}")
+                return analysis_results
+            
+            # 현재 포지션 정보 별도 추가 (실시간 업데이트)
+            current_position = await self.get_current_position_data()
+            analysis_results['current_position'] = current_position
+            
+            # 성공 통계 계산
+            total_analyses = len([k for k in analysis_results.keys() if k != 'current_position'])
+            successful_analyses = sum(1 for k, v in analysis_results.items() 
+                                    if k != 'current_position' and isinstance(v, dict) and v.get('success', False))
+            
+            logger.info(f"최종 분석 결과 준비 완료: {successful_analyses}/{total_analyses} 성공")
+            
+            return analysis_results
+            
+        except Exception as e:
+            logger.error(f"AI 분석 결과 조회 중 오류 (v2): {e}")
+            return {
+                'error': str(e),
+                'current_position': await self.get_current_position_data()
+            }
+
+
     async def get_current_position_data(self) -> Dict:
         """현재 포지션 정보를 AI 분석용 형태로 변환"""
         try:
@@ -223,14 +313,35 @@ class AITradingIntegration:
     
 
     
+    # 🔧 수정된 get_ai_decision 메서드
     async def get_ai_decision(self) -> Dict:
-        """AI 기반 투자 결정 도출"""
+        """AI 기반 투자 결정 도출 - 스케줄러 연동 버전"""
         try:
-            # 모든 분석 실행
-            all_analysis_results = await self.run_all_analyses()
+            # 🔧 핵심 변경: 새로운 분석 결과 조회 방법 사용
+            all_analysis_results = await self.run_all_analyses_v2()
             
-            # 최종 투자 결정
-            final_decision = await make_final_investment_decision(all_analysis_results)
+            # 에러가 있으면 조기 반환
+            if 'error' in all_analysis_results:
+                return {
+                    'success': False,
+                    'error': all_analysis_results['error'],
+                    'result': {
+                        'final_decision': 'Hold',
+                        'decision_confidence': 0,
+                        'needs_human_review': True,
+                        'human_review_reason': f'분석 결과 조회 실패: {all_analysis_results["error"]}'
+                    }
+                }
+            
+            # 🔧 핵심 변경: 스케줄러 연동 최종 결정 메서드 사용
+            from docs.investment_ai.final_decisionmaker import get_final_decision_maker
+            from docs.investment_ai.data_scheduler import get_data_scheduler
+            
+            decision_maker = get_final_decision_maker()
+            scheduler = get_data_scheduler()
+            
+            # 새로운 스케줄러 연동 메서드 사용
+            final_decision = await decision_maker.make_final_decision_with_scheduler(scheduler)
             
             # 결정 히스토리에 추가
             decision_record = {
@@ -238,7 +349,8 @@ class AITradingIntegration:
                 'analysis_results': all_analysis_results,
                 'final_decision': final_decision,
                 'symbol': self.symbol,
-                'timeframe': self.timeframe
+                'timeframe': self.timeframe,
+                'method': 'scheduler_integration_v2'
             }
             
             self.decision_history.append(decision_record)
@@ -250,7 +362,7 @@ class AITradingIntegration:
             return final_decision
             
         except Exception as e:
-            logger.error(f"AI 결정 도출 중 오류: {e}")
+            logger.error(f"AI 결정 도출 중 오류 (스케줄러 연동): {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -261,7 +373,69 @@ class AITradingIntegration:
                     'human_review_reason': f'AI 시스템 오류: {str(e)}'
                 }
             }
-    
+
+
+    # 🔧 추가: 디버깅용 스케줄러 상태 확인 메서드
+    async def debug_scheduler_status(self) -> Dict:
+        """스케줄러 상태 및 캐시된 데이터 확인 (디버깅용)"""
+        try:
+            from docs.investment_ai.data_scheduler import get_data_scheduler, get_data_status
+            
+            scheduler = get_data_scheduler()
+            status = get_data_status()
+            
+            # 각 AI 분석의 캐시 상태 확인
+            ai_cache_status = {}
+            ai_analysis_tasks = [
+                'ai_technical_analysis',
+                'ai_sentiment_analysis', 
+                'ai_macro_analysis',
+                'ai_onchain_analysis',
+                'ai_institutional_analysis'
+            ]
+            
+            for task_name in ai_analysis_tasks:
+                try:
+                    cached_data = scheduler.get_cached_data(task_name)
+                    if cached_data:
+                        if 'analysis_result' in cached_data:
+                            analysis_result = cached_data['analysis_result']
+                            ai_cache_status[task_name] = {
+                                'has_cache': True,
+                                'success': analysis_result.get('success', False),
+                                'skip_reason': analysis_result.get('skip_reason'),
+                                'error': analysis_result.get('error'),
+                                'cache_timestamp': cached_data.get('analysis_timestamp', 'unknown')
+                            }
+                        else:
+                            ai_cache_status[task_name] = {
+                                'has_cache': True,
+                                'malformed': True,
+                                'cache_keys': list(cached_data.keys()) if isinstance(cached_data, dict) else str(type(cached_data))
+                            }
+                    else:
+                        ai_cache_status[task_name] = {
+                            'has_cache': False
+                        }
+                except Exception as e:
+                    ai_cache_status[task_name] = {
+                        'has_cache': False,
+                        'error': str(e)
+                    }
+            
+            return {
+                'scheduler_status': status,
+                'ai_cache_status': ai_cache_status,
+                'debug_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"스케줄러 상태 확인 중 오류: {e}")
+            return {
+                'error': str(e),
+                'debug_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+
     def interpret_ai_decision(self, ai_decision: Dict) -> Dict:
         """AI 결정을 거래 실행 가능한 형태로 해석"""
         try:
@@ -419,12 +593,17 @@ class AITradingIntegration:
                 'reason': f'실행 중 오류 발생: {str(e)}'
             }
     
+    # run_ai_trading_cycle은 기본적으로 동일하게 유지 (get_ai_decision만 수정됨)
     async def run_ai_trading_cycle(self) -> Dict:
-        """완전한 AI 트레이딩 사이클 실행"""
+        """완전한 AI 트레이딩 사이클 실행 - 스케줄러 연동 버전"""
         try:
-            logger.info("AI 트레이딩 사이클 시작")
+            logger.info("AI 트레이딩 사이클 시작 (스케줄러 연동)")
             
-            # 1. AI 결정 도출
+            # 🔧 디버깅: 스케줄러 상태 먼저 확인
+            debug_info = await self.debug_scheduler_status()
+            logger.debug(f"스케줄러 디버그 정보: AI 캐시 상태 = {len([k for k, v in debug_info.get('ai_cache_status', {}).items() if v.get('has_cache', False)])}개 캐시됨")
+            
+            # 1. AI 결정 도출 (이제 스케줄러 연동 버전 사용)
             ai_decision = await self.get_ai_decision()
             
             # 2. 결정 해석
@@ -439,24 +618,27 @@ class AITradingIntegration:
                 'ai_decision': ai_decision,
                 'interpreted_decision': interpreted_decision,
                 'execution_result': execution_result,
-                'success': True
+                'success': True,
+                'method': 'scheduler_integration_v2',
+                'debug_info': debug_info  # 디버깅 정보 포함
             }
             
             # 최종 AI 투자 결정 결과를 데이터베이스에 저장
             await self._save_final_decision_result(cycle_result)
             
-            logger.info(f"AI 트레이딩 사이클 완료: {interpreted_decision['action']}")
+            logger.info(f"AI 트레이딩 사이클 완료 (스케줄러 연동): {interpreted_decision['action']}")
             return cycle_result
             
         except Exception as e:
-            logger.error(f"AI 트레이딩 사이클 중 오류: {e}")
+            logger.error(f"AI 트레이딩 사이클 중 오류 (스케줄러 연동): {e}")
             return {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'success': False,
                 'error': str(e),
                 'ai_decision': None,
                 'interpreted_decision': None,
-                'execution_result': None
+                'execution_result': None,
+                'method': 'scheduler_integration_v2'
             }
     
     def get_decision_history(self, limit: int = 10) -> list:
@@ -539,14 +721,20 @@ class AITradingIntegration:
 
 # 외부에서 사용할 함수들
 async def run_ai_trading_analysis(trading_config: Dict) -> Dict:
-    """AI 트레이딩 분석 실행"""
+    """AI 트레이딩 분석 실행 - 스케줄러 연동 버전"""
     integration = AITradingIntegration(trading_config)
     return await integration.get_ai_decision()
 
 async def execute_ai_trading_cycle(trading_config: Dict) -> Dict:
-    """완전한 AI 트레이딩 사이클 실행"""
+    """완전한 AI 트레이딩 사이클 실행 - 스케줄러 연동 버전"""
     integration = AITradingIntegration(trading_config)
     return await integration.run_ai_trading_cycle()
+
+# 🔧 추가: 디버깅용 함수
+async def debug_ai_trading_system(trading_config: Dict) -> Dict:
+    """AI 트레이딩 시스템 디버깅 정보 반환"""
+    integration = AITradingIntegration(trading_config)
+    return await integration.debug_scheduler_status()
 
 # 🔧 추가: 개별 분석 조회 함수들도 data_scheduler 사용하도록 수정
 async def get_ai_sentiment_analysis():

@@ -51,7 +51,406 @@ class FinalDecisionMaker:
             'stop_loss_range': (2, 8),    # 스톱로스 범위 (%)
             'take_profit_range': (4, 15)  # 테이크프로핏 범위 (%)
         }
-    
+
+        self.scheduler_to_analysis_mapping = {
+            # 스케줄러 키 → 최종결정에서 사용하는 키
+            'ai_technical_analysis': 'technical_analysis',
+            'ai_sentiment_analysis': 'sentiment_analysis', 
+            'ai_macro_analysis': 'macro_analysis',
+            'ai_onchain_analysis': 'onchain_analysis',
+            'ai_institutional_analysis': 'institutional_analysis',
+            'position_data': 'position_analysis',  # 포지션은 원시 데이터
+            # 현재 포지션은 별도 처리
+        }
+        logger.info("최종 결정 메이커 초기화 완료 - 스케줄러 연동 지원")
+
+    def get_analysis_data_from_scheduler(self, scheduler) -> Dict:
+        """스케줄러에서 AI 분석 결과들을 가져와서 최종결정 형식으로 변환"""
+        try:
+            logger.info("스케줄러에서 분석 데이터 매핑 시작")
+            mapped_results = {}
+            
+            # 1. AI 분석 결과들 매핑
+            for scheduler_key, analysis_key in self.scheduler_to_analysis_mapping.items():
+                try:
+                    logger.debug(f"매핑 시도: {scheduler_key} → {analysis_key}")
+                    
+                    # 스케줄러에서 캐시된 데이터 조회
+                    cached_data = scheduler.get_cached_data(scheduler_key)
+                    
+                    if cached_data:
+                        if scheduler_key.startswith('ai_'):
+                            # AI 분석 결과는 analysis_result 안에 있음
+                            if 'analysis_result' in cached_data:
+                                analysis_result = cached_data['analysis_result']
+                                mapped_results[analysis_key] = analysis_result
+                                
+                                # 성공/실패 로깅
+                                if analysis_result.get('success', False):
+                                    logger.debug(f"✅ {scheduler_key} → {analysis_key} 매핑 성공 (AI 분석)")
+                                else:
+                                    skip_reason = analysis_result.get('skip_reason', 'unknown')
+                                    logger.warning(f"⚠️ {scheduler_key} → {analysis_key} 실패한 분석 매핑 (이유: {skip_reason})")
+                            else:
+                                logger.error(f"❌ {scheduler_key}: analysis_result 키가 없음")
+                                mapped_results[analysis_key] = {
+                                    'success': False,
+                                    'error': f'{scheduler_key}: analysis_result 키 누락',
+                                    'skip_reason': 'malformed_cache_data'
+                                }
+                        else:
+                            # 원시 데이터 (position_data 등)는 직접 사용
+                            mapped_results[analysis_key] = cached_data
+                            logger.debug(f"✅ {scheduler_key} → {analysis_key} 원시데이터 매핑")
+                    else:
+                        logger.warning(f"❌ {scheduler_key} 캐시 데이터 없음")
+                        mapped_results[analysis_key] = {
+                            'success': False,
+                            'error': f'{scheduler_key} 캐시 데이터 없음',
+                            'skip_reason': 'no_cached_data'
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"❌ {scheduler_key} 매핑 중 오류: {e}")
+                    mapped_results[analysis_key] = {
+                        'success': False,
+                        'error': f'{scheduler_key} 매핑 실패: {str(e)}',
+                        'skip_reason': 'mapping_error'
+                    }
+            
+            # 2. 포지션 분석 별도 처리 (포지션 데이터로부터 실시간 분석 수행)
+            try:
+                logger.debug("포지션 분석 실시간 수행 시작")
+                position_data = scheduler.get_cached_data('position_data')
+                
+                if position_data:
+                    # 포지션 데이터를 바탕으로 포지션 분석 수행
+                    from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
+                    
+                    # 포지션 데이터에서 현재 포지션 정보 추출
+                    current_position_info = self._extract_current_position_from_data(position_data)
+                    
+                    # 실시간 포지션 분석 수행
+                    position_analysis = analyze_position_status()
+                    
+                    if position_analysis and position_analysis.get('success', False):
+                        mapped_results['position_analysis'] = position_analysis
+                        logger.info("✅ 포지션 분석 실시간 수행 성공")
+                    else:
+                        logger.warning("❌ 포지션 분석 실시간 수행 실패")
+                        mapped_results['position_analysis'] = {
+                            'success': False,
+                            'error': '포지션 분석 실패',
+                            'skip_reason': 'position_analysis_failed'
+                        }
+                else:
+                    logger.warning("❌ 포지션 데이터 없음")
+                    mapped_results['position_analysis'] = {
+                        'success': False,
+                        'error': '포지션 데이터 없음',
+                        'skip_reason': 'no_position_data'
+                    }
+                    
+            except Exception as e:
+                logger.error(f"❌ 포지션 분석 중 오류: {e}")
+                mapped_results['position_analysis'] = {
+                    'success': False,
+                    'error': f'포지션 분석 오류: {str(e)}',
+                    'skip_reason': 'position_analysis_error'
+                }
+            
+            # 3. 현재 포지션 정보 추가 (최종 결정에서 필요)
+            try:
+                logger.debug("현재 포지션 정보 추출 시작")
+                position_data = scheduler.get_cached_data('position_data')
+                
+                if position_data and 'balance' in position_data:
+                    current_position = self._extract_current_position_from_data(position_data)
+                    mapped_results['current_position'] = current_position
+                    logger.debug("✅ 현재 포지션 정보 추출 성공")
+                else:
+                    # 기본 포지션 정보
+                    mapped_results['current_position'] = {
+                        'has_position': False,
+                        'side': 'none',
+                        'size': 0,
+                        'entry_price': 0
+                    }
+                    logger.warning("❌ 포지션 데이터 없음 - 기본값 사용")
+                    
+            except Exception as e:
+                logger.error(f"❌ 현재 포지션 추출 중 오류: {e}")
+                mapped_results['current_position'] = {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0,
+                    'error': str(e)
+                }
+            
+            # 4. 매핑 결과 요약 및 검증
+            success_count = 0
+            failed_count = 0
+            skipped_count = 0
+            
+            for key, value in mapped_results.items():
+                if key == 'current_position':
+                    continue  # 현재 포지션은 별도 처리
+                    
+                if isinstance(value, dict):
+                    if value.get('success', False):
+                        success_count += 1
+                    elif value.get('skip_reason'):
+                        skipped_count += 1
+                    else:
+                        failed_count += 1
+                else:
+                    success_count += 1  # 원시 데이터
+            
+            total_analyses = success_count + failed_count + skipped_count
+            
+            logger.info(f"데이터 매핑 완료: 성공 {success_count}, 실패 {failed_count}, 스킵 {skipped_count} / 총 {total_analyses}개")
+            
+            # 실패한 분석들 상세 로깅
+            failed_analyses = []
+            for key, value in mapped_results.items():
+                if isinstance(value, dict) and not value.get('success', False) and key != 'current_position':
+                    reason = value.get('skip_reason', value.get('error', 'unknown'))
+                    failed_analyses.append(f"{key}({reason})")
+            
+            if failed_analyses:
+                logger.warning(f"실패한 분석들: {', '.join(failed_analyses)}")
+            
+            # 매핑 메타데이터 추가
+            mapped_results['_mapping_metadata'] = {
+                'mapping_timestamp': datetime.now(timezone.utc).isoformat(),
+                'total_analyses': total_analyses,
+                'success_count': success_count,
+                'failed_count': failed_count,
+                'skipped_count': skipped_count,
+                'success_rate': (success_count / total_analyses * 100) if total_analyses > 0 else 0,
+                'failed_analyses': failed_analyses,
+                'scheduler_keys_processed': list(self.scheduler_to_analysis_mapping.keys())
+            }
+            
+            return mapped_results
+            
+        except Exception as e:
+            logger.error(f"데이터 매핑 중 전체 오류: {e}")
+            return {
+                'error': f'매핑 전체 실패: {str(e)}',
+                '_mapping_metadata': {
+                    'mapping_timestamp': datetime.now(timezone.utc).isoformat(),
+                    'total_error': True,
+                    'error_details': str(e)
+                }
+            }
+
+    def _extract_current_position_from_data(self, position_data: Dict) -> Dict:
+        """포지션 데이터에서 현재 포지션 상태 추출"""
+        try:
+            current_position = {
+                'has_position': False,
+                'side': 'none',
+                'size': 0,
+                'entry_price': 0,
+                'unrealized_pnl': 0,
+                'margin_ratio': 0,
+                'total_equity': 0,
+                'available_balance': 0
+            }
+            
+            # 잔고 정보 추출
+            balance = position_data.get('balance', {})
+            if isinstance(balance, dict) and 'USDT' in balance:
+                usdt_balance = balance['USDT']
+                current_position.update({
+                    'total_equity': float(usdt_balance.get('total', 0)),
+                    'available_balance': float(usdt_balance.get('free', 0))
+                })
+            
+            # positions 필드에서 BTC 포지션 찾기
+            positions = position_data.get('positions', [])
+            if isinstance(positions, str):
+                import json
+                try:
+                    positions = json.loads(positions)
+                except:
+                    positions = []
+            
+            btc_position = None
+            if isinstance(positions, list):
+                for pos in positions:
+                    if isinstance(pos, dict):
+                        symbol = pos.get('symbol', '').upper()
+                        if 'BTC' in symbol:
+                            btc_position = pos
+                            break
+            
+            if btc_position:
+                size = float(btc_position.get('size', btc_position.get('contracts', 0)))
+                if abs(size) > 0:
+                    current_position.update({
+                        'has_position': True,
+                        'side': 'long' if size > 0 else 'short',
+                        'size': abs(size),
+                        'entry_price': float(btc_position.get('avgPrice', btc_position.get('entryPrice', 0))),
+                        'unrealized_pnl': float(btc_position.get('unrealizedPnl', 0)),
+                        'margin_ratio': float(btc_position.get('marginRatio', 0))
+                    })
+            
+            logger.debug(f"포지션 상태 추출 완료: {current_position['side']} {current_position['size']}")
+            return current_position
+            
+        except Exception as e:
+            logger.error(f"포지션 상태 추출 오류: {e}")
+            return {
+                'has_position': False,
+                'side': 'none',
+                'size': 0,
+                'entry_price': 0,
+                'error': str(e)
+            }
+
+
+
+    async def make_final_decision_with_scheduler(self, scheduler) -> Dict:
+        """스케줄러를 사용한 최종 투자 결정 (새로운 메인 함수)"""
+        try:
+            logger.info("최종 투자 결정 분석 시작 (스케줄러 연동)")
+            
+            # 1. 스케줄러에서 분석 결과들 가져오기 및 매핑
+            all_analysis_results = self.get_analysis_data_from_scheduler(scheduler)
+            
+            # 매핑 실패 확인
+            if 'error' in all_analysis_results:
+                logger.error(f"스케줄러에서 분석 결과 매핑 실패: {all_analysis_results['error']}")
+                return {
+                    "success": False,
+                    "error": f"스케줄러 연동 실패: {all_analysis_results['error']}",
+                    "analysis_type": "final_decision",
+                    "skip_reason": "scheduler_mapping_failed"
+                }
+            
+            if not all_analysis_results:
+                logger.error("스케줄러에서 분석 결과를 가져오지 못함")
+                return {
+                    "success": False,
+                    "error": "스케줄러 연동 실패 - 분석 결과 없음",
+                    "analysis_type": "final_decision",
+                    "skip_reason": "scheduler_integration_failed"
+                }
+            
+            # 2. 매핑 품질 검증
+            mapping_metadata = all_analysis_results.get('_mapping_metadata', {})
+            success_rate = mapping_metadata.get('success_rate', 0)
+            
+            if success_rate < 40:  # 40% 미만 성공률이면 위험
+                logger.warning(f"매핑 성공률이 낮음 ({success_rate:.1f}%) - 신중한 결정 필요")
+                
+            # 3. 기존 최종 결정 로직 실행 (매핑된 데이터 사용)
+            logger.info(f"최종 결정 로직 실행 (매핑 성공률: {success_rate:.1f}%)")
+            final_decision_result = await self.make_final_decision(all_analysis_results)
+            
+            # 4. 결과에 스케줄러 연동 정보 추가
+            if final_decision_result.get('success', False):
+                result_data = final_decision_result.get('result', {})
+                if 'analysis_metadata' not in result_data:
+                    result_data['analysis_metadata'] = {}
+                
+                result_data['analysis_metadata'].update({
+                    'scheduler_integration': True,
+                    'mapping_success_rate': success_rate,
+                    'mapping_timestamp': mapping_metadata.get('mapping_timestamp'),
+                    'scheduler_keys_used': mapping_metadata.get('scheduler_keys_processed', []),
+                    'failed_mappings': mapping_metadata.get('failed_analyses', [])
+                })
+            
+            logger.info("최종 투자 결정 완료 (스케줄러 연동)")
+            return final_decision_result
+            
+        except Exception as e:
+            logger.error(f"스케줄러 연동 최종 결정 중 오류: {e}")
+            return {
+                "success": False,
+                "error": f"스케줄러 연동 중 오류: {str(e)}",
+                "analysis_type": "final_decision",
+                "skip_reason": "scheduler_integration_error"
+            }
+
+    def debug_scheduler_data_mapping(self, scheduler) -> Dict:
+        """스케줄러 데이터 매핑 디버깅 정보 (개발/테스트용)"""
+        try:
+            debug_info = {
+                'scheduler_cache_status': {},
+                'mapping_test_results': {},
+                'raw_cache_data_preview': {},
+                'debug_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+            
+            # 각 스케줄러 키의 캐시 상태 확인
+            for scheduler_key, analysis_key in self.scheduler_to_analysis_mapping.items():
+                try:
+                    cached_data = scheduler.get_cached_data(scheduler_key)
+                    
+                    if cached_data:
+                        debug_info['scheduler_cache_status'][scheduler_key] = {
+                            'has_cache': True,
+                            'data_type': str(type(cached_data)),
+                            'keys': list(cached_data.keys()) if isinstance(cached_data, dict) else 'not_dict',
+                            'size_estimate': len(str(cached_data))
+                        }
+                        
+                        # 첫 100자만 미리보기
+                        preview = str(cached_data)[:100] + "..." if len(str(cached_data)) > 100 else str(cached_data)
+                        debug_info['raw_cache_data_preview'][scheduler_key] = preview
+                        
+                        # 매핑 테스트
+                        if scheduler_key.startswith('ai_') and isinstance(cached_data, dict):
+                            if 'analysis_result' in cached_data:
+                                analysis_result = cached_data['analysis_result']
+                                debug_info['mapping_test_results'][analysis_key] = {
+                                    'mapping_possible': True,
+                                    'analysis_success': analysis_result.get('success', False),
+                                    'analysis_keys': list(analysis_result.keys()) if isinstance(analysis_result, dict) else 'not_dict'
+                                }
+                            else:
+                                debug_info['mapping_test_results'][analysis_key] = {
+                                    'mapping_possible': False,
+                                    'issue': 'no_analysis_result_key'
+                                }
+                        else:
+                            debug_info['mapping_test_results'][analysis_key] = {
+                                'mapping_possible': True,
+                                'note': 'raw_data_direct_mapping'
+                            }
+                    else:
+                        debug_info['scheduler_cache_status'][scheduler_key] = {
+                            'has_cache': False
+                        }
+                        debug_info['mapping_test_results'][analysis_key] = {
+                            'mapping_possible': False,
+                            'issue': 'no_cache_data'
+                        }
+                        
+                except Exception as e:
+                    debug_info['scheduler_cache_status'][scheduler_key] = {
+                        'has_cache': False,
+                        'error': str(e)
+                    }
+                    debug_info['mapping_test_results'][analysis_key] = {
+                        'mapping_possible': False,
+                        'issue': f'debug_error: {str(e)}'
+                    }
+            
+            return debug_info
+            
+        except Exception as e:
+            return {
+                'debug_error': str(e),
+                'debug_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+
     def get_model(self):
         """AI 모델을 필요할 때만 초기화"""
         if not API_KEY:
@@ -1251,6 +1650,18 @@ async def make_final_investment_decision(all_analysis_results: Dict) -> Dict:
     """최종 투자 결정을 내리는 함수"""
     decision_maker = get_final_decision_maker()
     return await decision_maker.make_final_decision(all_analysis_results)
+
+# 🔧 기존 외부 함수에 스케줄러 연동 버전 추가
+async def make_final_investment_decision_with_scheduler(scheduler) -> Dict:
+    """스케줄러 연동 최종 투자 결정 함수"""
+    decision_maker = get_final_decision_maker()
+    return await decision_maker.make_final_decision_with_scheduler(scheduler)
+
+def debug_final_decision_mapping(scheduler) -> Dict:
+    """최종 결정 매핑 디버깅 함수"""
+    decision_maker = get_final_decision_maker()
+    return decision_maker.debug_scheduler_data_mapping(scheduler)
+
 
 # 테스트용 코드
 if __name__ == "__main__":
