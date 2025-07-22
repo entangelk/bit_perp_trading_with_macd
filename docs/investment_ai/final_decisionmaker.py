@@ -1531,45 +1531,55 @@ class FinalDecisionMaker:
         }
     
     def check_analysis_data_availability(self, all_analysis_results: Dict) -> Tuple[bool, Dict]:
-        """분석 데이터 사용 가능성 확인 - 디버깅 로그 추가"""
+        """분석 데이터 사용 가능성 확인 - 포지션 유무에 따른 조건부 로직 추가"""
         try:
-            # 🔍 디버깅: 입력 검증 상세 로그
             logger.info(f"🔍 DEBUG: check_analysis_data_availability 시작")
-            logger.info(f"🔍 DEBUG: all_analysis_results type: {type(all_analysis_results)}")
-            logger.info(f"🔍 DEBUG: all_analysis_results is None: {all_analysis_results is None}")
-            logger.info(f"🔍 DEBUG: all_analysis_results length: {len(all_analysis_results) if all_analysis_results else 'N/A'}")
             
-            # all_analysis_results가 None이거나 비어있는 경우 체크
             if not all_analysis_results or not isinstance(all_analysis_results, dict):
                 logger.error("분석 결과가 None이거나 딕셔너리가 아님")
                 return False, {
                     'analysis_status': {},
-                    'failed_due_to_data': 0,
-                    'failed_due_to_disabled': 0,
-                    'total_core_analyses': 0,
-                    'core_success_count': 0,
-                    'essential_success_count': 0,
-                    'critical_failures': ['all_analysis_results_is_none'],
-                    'data_availability_rate': 0,
                     'decision_viability': 'not_viable',
                     'failure_reasons': ['분석 결과가 None 또는 빈 딕셔너리']
+                }
+            
+            # 🔧 포지션 유무 확인
+            current_position = all_analysis_results.get('current_position', {})
+            has_position = current_position.get('has_position', False)
+            
+            logger.info(f"🔍 DEBUG: 현재 포지션 상태: {has_position}")
+            
+            # 🔧 포지션 없으면 position_analysis 기본값 설정
+            if not has_position and ('position_analysis' not in all_analysis_results or 
+                                not isinstance(all_analysis_results.get('position_analysis'), dict)):
+                logger.info("🔍 DEBUG: 포지션 없음 - position_analysis 기본값 설정")
+                all_analysis_results['position_analysis'] = {
+                    'success': True,
+                    'result': {
+                        'recommended_action': 'Wait',
+                        'position_status': 'No Position',
+                        'risk_level': 'None',
+                        'confidence': 100
+                    },
+                    'analysis_type': 'position_analysis',
+                    'note': 'No position - default analysis'
                 }
             
             analysis_status = {}
             failed_due_to_data = 0
             failed_due_to_disabled = 0
-            total_analyses = 0
             critical_failures = []
             
-            # 핵심 분석들 (최소 2개는 성공해야 함)
+            # 핵심 분석들
             core_analyses = ['sentiment_analysis', 'technical_analysis', 'macro_analysis', 'onchain_analysis', 'institutional_analysis']
             
-            # 필수 분석 (반드시 성공해야 함)
-            essential_analyses = ['technical_analysis', 'position_analysis']
-            
-            # 🔍 디버깅: 분석 대상 목록
-            logger.info(f"🔍 DEBUG: 핵심 분석 목록: {core_analyses}")
-            logger.info(f"🔍 DEBUG: 필수 분석 목록: {essential_analyses}")
+            # 🔧 포지션 유무에 따른 필수 분석 결정
+            if has_position:
+                essential_analyses = ['technical_analysis', 'position_analysis']
+                logger.info("🔍 DEBUG: 포지션 있음 - position_analysis 필수")
+            else:
+                essential_analyses = ['technical_analysis']
+                logger.info("🔍 DEBUG: 포지션 없음 - position_analysis 필수 아님")
             
             for analysis_type in core_analyses + essential_analyses:
                 logger.info(f"🔍 DEBUG: {analysis_type} 검사 시작")
@@ -1696,6 +1706,11 @@ class FinalDecisionMaker:
                 'decision_viability': 'not_viable',
                 'failure_reasons': [f'가용성 확인 오류: {str(e)}']
             }
+
+
+
+
+
 
     async def make_final_decision(self, all_analysis_results: Dict) -> Dict:
         """최종 투자 결정 메인 함수 - 디버깅 로그 추가"""

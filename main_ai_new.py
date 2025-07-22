@@ -203,7 +203,7 @@ def get_action_from_decision(final_decision, current_position):
         return 'wait'
 
 async def get_all_analysis_for_decision():
-    """최종 결정용 분석 데이터 수집 - 디버깅 로그 추가"""
+    """최종 결정용 분석 데이터 수집 - 포지션 조건부 처리 추가"""
     try:
         logger.info("🔍 DEBUG: 메인봇 get_all_analysis_for_decision 시작")
         
@@ -216,9 +216,6 @@ async def get_all_analysis_for_decision():
             get_ai_institutional_analysis,
             get_position_data
         )
-        
-        # 포지션 분석 직접 호출
-        from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
         
         # 각 분석 결과 수집
         results = {}
@@ -253,30 +250,7 @@ async def get_all_analysis_for_decision():
                 logger.error(f"🔍 DEBUG: {result_key} 수집 실패: {e}")
                 results[result_key] = {'success': False, 'error': str(e)}
         
-        # 포지션 분석 (동기 함수)
-        logger.info("🔍 DEBUG: 포지션 분석 수집 시작")
-        try:
-            position_analysis = analyze_position_status()
-            
-            logger.info(f"🔍 DEBUG: 포지션 분석 결과 타입: {type(position_analysis)}")
-            logger.info(f"🔍 DEBUG: 포지션 분석 결과가 None: {position_analysis is None}")
-            
-            if position_analysis and isinstance(position_analysis, dict):
-                logger.info(f"🔍 DEBUG: 포지션 분석 키들: {list(position_analysis.keys())}")
-                if 'success' in position_analysis:
-                    logger.info(f"🔍 DEBUG: 포지션 분석 success: {position_analysis.get('success')}")
-            
-            results['position_analysis'] = position_analysis if position_analysis else {
-                'success': False, 'error': '포지션 분석 실패'
-            }
-            logger.info("🔍 DEBUG: 포지션 분석 완료")
-        except Exception as e:
-            logger.error(f"🔍 DEBUG: 포지션 분석 실패: {e}")
-            results['position_analysis'] = {
-                'success': False, 'error': str(e)
-            }
-        
-        # 현재 포지션 정보
+        # 🔧 현재 포지션 정보 먼저 수집
         logger.info("🔍 DEBUG: 현재 포지션 정보 수집 시작")
         try:
             position_data = await get_position_data()
@@ -287,24 +261,81 @@ async def get_all_analysis_for_decision():
             if position_data:
                 if isinstance(position_data, dict):
                     logger.info(f"🔍 DEBUG: position_data 키들: {list(position_data.keys())}")
-                results['current_position'] = extract_position_info(position_data)
+                current_position_info = extract_position_info(position_data)
+                results['current_position'] = current_position_info
                 logger.info("🔍 DEBUG: 포지션 데이터 추출 완료")
             else:
                 logger.warning("🔍 DEBUG: 포지션 데이터가 없음 - 기본값 사용")
-                results['current_position'] = {
+                current_position_info = {
                     'has_position': False,
                     'side': 'none',
                     'size': 0,
                     'entry_price': 0
                 }
+                results['current_position'] = current_position_info
         except Exception as e:
             logger.error(f"🔍 DEBUG: 포지션 데이터 수집 실패: {e}")
-            results['current_position'] = {
+            current_position_info = {
                 'has_position': False,
                 'side': 'none',
                 'size': 0,
                 'entry_price': 0,
                 'error': str(e)
+            }
+            results['current_position'] = current_position_info
+        
+        # 🔧 포지션 분석 (포지션 유무에 따라 조건부 실행)
+        logger.info("🔍 DEBUG: 포지션 분석 수집 시작")
+        try:
+            has_position = current_position_info.get('has_position', False)
+            logger.info(f"🔍 DEBUG: 포지션 상태 확인 - has_position: {has_position}")
+            
+            if has_position:
+                # 포지션이 있을 때만 실제 분석 실행
+                logger.info("🔍 DEBUG: 포지션 있음 - 실제 position_analysis 실행")
+                from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
+                
+                # analyze_position_status가 비동기인지 동기인지 확인 후 처리
+                import inspect
+                if inspect.iscoroutinefunction(analyze_position_status):
+                    position_analysis = await analyze_position_status()
+                else:
+                    position_analysis = analyze_position_status()
+                
+                logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과 타입: {type(position_analysis)}")
+                logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과가 None: {position_analysis is None}")
+                
+                if position_analysis and isinstance(position_analysis, dict):
+                    logger.info(f"🔍 DEBUG: 실제 포지션 분석 키들: {list(position_analysis.keys())}")
+                    if 'success' in position_analysis:
+                        logger.info(f"🔍 DEBUG: 실제 포지션 분석 success: {position_analysis.get('success')}")
+                
+                results['position_analysis'] = position_analysis if position_analysis else {
+                    'success': False, 'error': '포지션 분석 실패'
+                }
+            else:
+                # 포지션이 없으면 기본값
+                logger.info("🔍 DEBUG: 포지션 없음 - 기본값 position_analysis 설정")
+                position_analysis = {
+                    'success': True,
+                    'result': {
+                        'recommended_action': 'Wait',
+                        'position_status': 'No Position',
+                        'risk_level': 'None',
+                        'confidence': 100,
+                        'analysis_summary': '현재 포지션이 없어 대기 상태 권장'
+                    },
+                    'analysis_type': 'position_analysis',
+                    'note': 'No position - default analysis'
+                }
+                results['position_analysis'] = position_analysis
+            
+            logger.info("🔍 DEBUG: 포지션 분석 완료")
+            
+        except Exception as e:
+            logger.error(f"🔍 DEBUG: 포지션 분석 호출 오류: {e}")
+            results['position_analysis'] = {
+                'success': False, 'error': str(e)
             }
         
         # 성공 통계
@@ -324,8 +355,6 @@ async def get_all_analysis_for_decision():
     except Exception as e:
         logger.error(f"🔍 DEBUG: 분석 데이터 수집 전체 오류: {e}")
         return {}
-
-
 
 def extract_position_info(position_data):
     """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화"""

@@ -295,7 +295,7 @@ class SerialDataScheduler:
         return task.last_result
     
     def get_all_analysis_for_decision(self) -> Dict:
-        """최종 결정용 모든 분석 결과 반환 - 디버깅 로그 추가"""
+        """최종 결정용 모든 분석 결과 반환 - 포지션 조건부 처리 추가"""
         try:
             logger.info("🔍 DEBUG: get_all_analysis_for_decision 시작")
             results = {}
@@ -311,53 +311,32 @@ class SerialDataScheduler:
             
             # 🔍 디버깅: AI 분석 결과 수집
             for ai_task, result_key in ai_mapping.items():
-                logger.info(f"🔍 DEBUG: {ai_task} 데이터 조회 중...")
-                data = self.get_data(ai_task)
-                
-                logger.info(f"🔍 DEBUG: {ai_task} 결과 타입: {type(data)}")
-                logger.info(f"🔍 DEBUG: {ai_task} 결과가 None: {data is None}")
-                
-                if data:
-                    if isinstance(data, dict):
-                        logger.info(f"🔍 DEBUG: {ai_task} 결과 키들: {list(data.keys())}")
-                        if 'success' in data:
-                            logger.info(f"🔍 DEBUG: {ai_task} success: {data.get('success')}")
-                    results[result_key] = data
-                    logger.info(f"🔍 DEBUG: {result_key} 설정 완료")
-                else:
-                    logger.warning(f"🔍 DEBUG: {ai_task} 결과 없음")
-                    results[result_key] = {
-                        'success': False,
-                        'error': f'{ai_task} 결과 없음',
-                        'skip_reason': 'no_result'
-                    }
+                try:
+                    logger.info(f"🔍 DEBUG: {ai_task} 데이터 조회 중...")
+                    data = self.get_data(ai_task)
+                    
+                    logger.info(f"🔍 DEBUG: {ai_task} 결과 타입: {type(data)}")
+                    logger.info(f"🔍 DEBUG: {ai_task} 결과가 None: {data is None}")
+                    
+                    if data:
+                        if isinstance(data, dict):
+                            logger.info(f"🔍 DEBUG: {ai_task} 결과 키들: {list(data.keys())}")
+                            if 'success' in data:
+                                logger.info(f"🔍 DEBUG: {ai_task} success: {data.get('success')}")
+                        results[result_key] = data
+                        logger.info(f"🔍 DEBUG: {result_key} 설정 완료")
+                    else:
+                        logger.warning(f"🔍 DEBUG: {ai_task} 결과 없음")
+                        results[result_key] = {
+                            'success': False,
+                            'error': f'{ai_task} 결과 없음',
+                            'skip_reason': 'no_result'
+                        }
+                except Exception as e:
+                    logger.error(f"🔍 DEBUG: {ai_task} 조회 실패: {e}")
+                    results[result_key] = {'success': False, 'error': str(e)}
             
-            # 포지션 분석 (동기적으로 호출)
-            logger.info("🔍 DEBUG: 포지션 분석 시작")
-            try:
-                from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
-                position_analysis = analyze_position_status()
-                
-                logger.info(f"🔍 DEBUG: 포지션 분석 결과 타입: {type(position_analysis)}")
-                logger.info(f"🔍 DEBUG: 포지션 분석 결과가 None: {position_analysis is None}")
-                
-                if position_analysis:
-                    if isinstance(position_analysis, dict):
-                        logger.info(f"🔍 DEBUG: 포지션 분석 결과 키들: {list(position_analysis.keys())}")
-                        logger.info(f"🔍 DEBUG: 포지션 분석 success: {position_analysis.get('success')}")
-                    results['position_analysis'] = position_analysis
-                else:
-                    logger.warning("🔍 DEBUG: 포지션 분석 결과가 None")
-                    results['position_analysis'] = {
-                        'success': False, 'error': '포지션 분석 실패'
-                    }
-            except Exception as e:
-                logger.error(f"🔍 DEBUG: 포지션 분석 호출 오류: {e}")
-                results['position_analysis'] = {
-                    'success': False, 'error': str(e)
-                }
-            
-            # 현재 포지션 정보
+            # 🔧 현재 포지션 정보 먼저 수집 및 확인
             logger.info("🔍 DEBUG: 현재 포지션 정보 수집 시작")
             position_data = self.get_data('position_data')
             
@@ -367,15 +346,86 @@ class SerialDataScheduler:
             if position_data:
                 if isinstance(position_data, dict):
                     logger.info(f"🔍 DEBUG: position_data 키들: {list(position_data.keys())}")
-                results['current_position'] = self._extract_position_info(position_data)
-                logger.info("🔍 DEBUG: current_position 설정 완료")
+                current_position = self._extract_position_info(position_data)
+                results['current_position'] = current_position
+                has_position = current_position.get('has_position', False)
+                logger.info(f"🔍 DEBUG: 포지션 데이터 추출 완료 - has_position: {has_position}")
             else:
                 logger.warning("🔍 DEBUG: position_data가 None - 기본값 사용")
-                results['current_position'] = {
+                current_position = {
                     'has_position': False,
                     'side': 'none',
                     'size': 0,
                     'entry_price': 0
+                }
+                results['current_position'] = current_position
+                has_position = False
+            
+            # 🔧 포지션 분석 (포지션 유무에 따라 조건부 실행)
+            logger.info("🔍 DEBUG: 포지션 분석 시작")
+            try:
+                logger.info(f"🔍 DEBUG: 포지션 상태 - has_position: {has_position}")
+                
+                if has_position:
+                    # 포지션이 있을 때만 실제 분석 실행
+                    logger.info("🔍 DEBUG: 포지션 있음 - 실제 position_analysis 실행")
+                    from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
+                    
+                    # analyze_position_status 함수 호출 (동기 함수로 가정)
+                    import inspect
+                    if inspect.iscoroutinefunction(analyze_position_status):
+                        logger.warning("🔍 DEBUG: position_analyzer가 비동기 함수임 - 동기적으로 호출할 수 없음")
+                        # 비동기 함수는 직렬 스케줄러에서 직접 호출 불가
+                        position_analysis = {
+                            'success': False,
+                            'error': 'position_analyzer는 비동기 함수로 직렬 스케줄러에서 호출 불가',
+                            'skip_reason': 'async_function_in_sync_context'
+                        }
+                    else:
+                        position_analysis = analyze_position_status()
+                        
+                        logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과 타입: {type(position_analysis)}")
+                        logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과가 None: {position_analysis is None}")
+                        
+                        if position_analysis and isinstance(position_analysis, dict):
+                            logger.info(f"🔍 DEBUG: 실제 포지션 분석 키들: {list(position_analysis.keys())}")
+                            if 'success' in position_analysis:
+                                logger.info(f"🔍 DEBUG: 실제 포지션 분석 success: {position_analysis.get('success')}")
+                else:
+                    # 포지션이 없으면 기본값
+                    logger.info("🔍 DEBUG: 포지션 없음 - 기본값 position_analysis 설정")
+                    position_analysis = {
+                        'success': True,
+                        'result': {
+                            'recommended_action': 'Wait',
+                            'position_status': 'No Position',
+                            'risk_level': 'None',
+                            'confidence': 100,
+                            'analysis_summary': '현재 포지션이 없어 대기 상태 권장',
+                            'position_health': 'N/A - No Position'
+                        },
+                        'analysis_type': 'position_analysis',
+                        'note': 'No position - default analysis'
+                    }
+                
+                if position_analysis and position_analysis.get('success', False):
+                    results['position_analysis'] = position_analysis
+                    logger.info("🔍 DEBUG: 포지션 분석 성공")
+                else:
+                    logger.warning("🔍 DEBUG: 포지션 분석 실패")
+                    error_msg = position_analysis.get('error', '포지션 분석 실패') if isinstance(position_analysis, dict) else '포지션 분석 실패'
+                    results['position_analysis'] = {
+                        'success': False, 
+                        'error': error_msg,
+                        'skip_reason': position_analysis.get('skip_reason', 'analysis_failed') if isinstance(position_analysis, dict) else 'analysis_failed'
+                    }
+                    
+            except Exception as e:
+                logger.error(f"🔍 DEBUG: 포지션 분석 중 오류: {e}")
+                results['position_analysis'] = {
+                    'success': False,
+                    'error': f'포지션 분석 오류: {str(e)}',
+                    'skip_reason': 'position_analysis_error'
                 }
             
             # 🔍 디버깅: 최종 결과 요약
@@ -385,12 +435,10 @@ class SerialDataScheduler:
                     logger.info(f"🔍 DEBUG: {key} success: {value.get('success')}")
                 
             return results
+            
         except Exception as e:
             logger.error(f"🔍 DEBUG: get_all_analysis_for_decision 전체 오류: {e}")
             return {}
-
-
-
 
     def _extract_position_info(self, position_data) -> Dict:
         """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화"""
