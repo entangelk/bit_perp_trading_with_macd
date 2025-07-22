@@ -30,7 +30,7 @@ def get_coingecko_headers():
     headers = {'User-Agent': 'trading-bot/1.0'}
     if COINGECKO_API_KEY:
         headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
-        logger.debug("CoinGecko API 키 적용됨")
+        # logger.debug("CoinGecko API 키 적용됨")
     else:
         logger.warning("CoinGecko API 키가 설정되지 않음 - 무료 한도 적용")
     return headers

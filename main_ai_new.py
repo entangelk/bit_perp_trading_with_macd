@@ -630,7 +630,7 @@ async def main():
                 status = get_data_status()
                 total_tasks = len(status.get('tasks', {}))
                 healthy_tasks = len([t for t in status.get('tasks', {}).values() if not t.get('is_disabled', False)])
-                logger.debug(f"스케줄러 상태: {healthy_tasks}/{total_tasks} 작업 정상")
+                # logger.debug(f"스케줄러 상태: {healthy_tasks}/{total_tasks} 작업 정상")
                 
             except Exception as e:
                 logger.error(f"사이클 실행 중 오류: {e}")

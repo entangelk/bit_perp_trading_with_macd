@@ -86,7 +86,7 @@ class SerialDataScheduler:
             dependencies=dependencies or []
         )
         interval_minutes = interval_cycles * self.main_cycle_minutes
-        logger.debug(f"작업 등록: {name} [{stage}] (주기: {interval_minutes}분)")
+        # logger.debug(f"작업 등록: {name} [{stage}] (주기: {interval_minutes}분)")
     
     def should_run_task(self, task: SerialTask, force_all_analysis: bool = False) -> Tuple[bool, str]:
         """작업 실행 여부 판단 - 카운팅 + 의존성 체크 + 초기 강제 실행"""
@@ -200,10 +200,10 @@ class SerialDataScheduler:
                     if task_name.startswith('ai_') and 'forced_initial_execution' not in reason:
                         logger.warning(f"  ⚠️ 초기 실행에서도 스킵: {task_name} ({reason})")
                     else:
-                        logger.debug(f"  스킵: {task_name} ({reason})")
+                        # logger.debug(f"  스킵: {task_name} ({reason})")
             else:
                 for task_name, reason in skipped_tasks:
-                    logger.debug(f"  스킵: {task_name} ({reason})")
+                    # logger.debug(f"  스킵: {task_name} ({reason})")
             
             # 단계 내 작업들 순차 실행
             stage_success = 0

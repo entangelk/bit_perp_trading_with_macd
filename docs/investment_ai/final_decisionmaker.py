@@ -73,7 +73,7 @@ class FinalDecisionMaker:
             # 1. AI 분석 결과들 매핑
             for scheduler_key, analysis_key in self.scheduler_to_analysis_mapping.items():
                 try:
-                    logger.debug(f"매핑 시도: {scheduler_key} → {analysis_key}")
+                    # logger.debug(f"매핑 시도: {scheduler_key} → {analysis_key}")
                     
                     # 스케줄러에서 캐시된 데이터 조회
                     cached_data = scheduler.get_cached_data(scheduler_key)
@@ -87,7 +87,7 @@ class FinalDecisionMaker:
                                 
                                 # 성공/실패 로깅
                                 if analysis_result.get('success', False):
-                                    logger.debug(f"✅ {scheduler_key} → {analysis_key} 매핑 성공 (AI 분석)")
+                                    # logger.debug(f"✅ {scheduler_key} → {analysis_key} 매핑 성공 (AI 분석)")
                                 else:
                                     skip_reason = analysis_result.get('skip_reason', 'unknown')
                                     logger.warning(f"⚠️ {scheduler_key} → {analysis_key} 실패한 분석 매핑 (이유: {skip_reason})")
@@ -101,7 +101,7 @@ class FinalDecisionMaker:
                         else:
                             # 원시 데이터 (position_data 등)는 직접 사용
                             mapped_results[analysis_key] = cached_data
-                            logger.debug(f"✅ {scheduler_key} → {analysis_key} 원시데이터 매핑")
+                            # logger.debug(f"✅ {scheduler_key} → {analysis_key} 원시데이터 매핑")
                     else:
                         logger.warning(f"❌ {scheduler_key} 캐시 데이터 없음")
                         mapped_results[analysis_key] = {
@@ -120,7 +120,7 @@ class FinalDecisionMaker:
             
             # 2. 포지션 분석 별도 처리 (포지션 데이터로부터 실시간 분석 수행)
             try:
-                logger.debug("포지션 분석 실시간 수행 시작")
+                # logger.debug("포지션 분석 실시간 수행 시작")
                 position_data = scheduler.get_cached_data('position_data')
                 
                 if position_data:
@@ -161,13 +161,13 @@ class FinalDecisionMaker:
             
             # 3. 현재 포지션 정보 추가 (최종 결정에서 필요)
             try:
-                logger.debug("현재 포지션 정보 추출 시작")
+                # logger.debug("현재 포지션 정보 추출 시작")
                 position_data = scheduler.get_cached_data('position_data')
                 
                 if position_data and 'balance' in position_data:
                     current_position = self._extract_current_position_from_data(position_data)
                     mapped_results['current_position'] = current_position
-                    logger.debug("✅ 현재 포지션 정보 추출 성공")
+                    # logger.debug("✅ 현재 포지션 정보 추출 성공")
                 else:
                     # 기본 포지션 정보
                     mapped_results['current_position'] = {
@@ -299,7 +299,7 @@ class FinalDecisionMaker:
                         'margin_ratio': float(btc_position.get('marginRatio', 0))
                     })
             
-            logger.debug(f"포지션 상태 추출 완료: {current_position['side']} {current_position['size']}")
+            # logger.debug(f"포지션 상태 추출 완료: {current_position['side']} {current_position['size']}")
             return current_position
             
         except Exception as e:

@@ -215,11 +215,11 @@ class AITradingIntegration:
             # 🔧 수정: 각 분석 결과를 순차적으로 조회 (직렬 처리 완료 후)
             for analysis_name in cached_analysis_names:
                 try:
-                    logger.debug(f"캐시 조회 중: {analysis_name}")
+                    # logger.debug(f"캐시 조회 중: {analysis_name}")
                     cached_result = await scheduler.get_data(analysis_name)
                     
                     if cached_result is not None:
-                        logger.debug(f"{analysis_name} 캐시된 결과 사용")
+                        # logger.debug(f"{analysis_name} 캐시된 결과 사용")
                         cached_analysis_results[analysis_name] = cached_result
                     else:
                         logger.warning(f"{analysis_name} 캐시된 결과 없음")
@@ -281,7 +281,7 @@ class AITradingIntegration:
                             # analysis_result 키가 없는 경우
                             all_analysis_results[result_name] = cached_result
                             successful_analyses += 1
-                            logger.debug(f"✅ {result_name} 캐시된 결과 직접 사용")
+                            # logger.debug(f"✅ {result_name} 캐시된 결과 직접 사용")
                     else:
                         # 캐시 결과가 딕셔너리가 아닌 경우
                         fresh_analysis_needed.append(result_name)
@@ -601,7 +601,7 @@ class AITradingIntegration:
             
             # 🔧 디버깅: 스케줄러 상태 먼저 확인
             debug_info = await self.debug_scheduler_status()
-            logger.debug(f"스케줄러 디버그 정보: AI 캐시 상태 = {len([k for k, v in debug_info.get('ai_cache_status', {}).items() if v.get('has_cache', False)])}개 캐시됨")
+            # logger.debug(f"스케줄러 디버그 정보: AI 캐시 상태 = {len([k for k, v in debug_info.get('ai_cache_status', {}).items() if v.get('has_cache', False)])}개 캐시됨")
             
             # 1. AI 결정 도출 (이제 스케줄러 연동 버전 사용)
             ai_decision = await self.get_ai_decision()
@@ -705,7 +705,7 @@ class AITradingIntegration:
                 upsert=True
             )
             
-            logger.debug("최종 AI 투자 결정 결과 저장 완료")
+            # logger.debug("최종 AI 투자 결정 결과 저장 완료")
             
         except Exception as e:
             logger.error(f"최종 AI 투자 결정 결과 저장 중 오류: {e}")
