@@ -1,10 +1,11 @@
-# 직렬 카운팅 기반 스케줄러 (분석기 호출만)
+# 직렬 카운팅 기반 스케줄러 (분석기 호출 + MongoDB 저장)
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass
+from pymongo import MongoClient
 
 logger = logging.getLogger("serial_scheduler")
 
@@ -21,14 +22,18 @@ class SerialTask:
     max_errors: int = 5
     is_running: bool = False
     dependencies: List[str] = None  # 의존성 작업들
+    cache_duration_minutes: int = 60  # 기본 1시간 캐시
 
 class SerialDataScheduler:
-    """직렬 카운팅 기반 스케줄러 - 분석기 호출 전용"""
+    """직렬 카운팅 기반 스케줄러 - 분석기 호출 + MongoDB 저장"""
     
     def __init__(self, main_cycle_minutes: int = 15):
         self.main_cycle_minutes = main_cycle_minutes
         self.tasks: Dict[str, SerialTask] = {}
         self.global_cycle_count = 0
+        
+        # MongoDB 연결 설정
+        self._setup_mongodb()
         
         # 실행 단계 순서 정의 (데이터 의존성에 따라)
         self.execution_stages = [
@@ -42,32 +47,54 @@ class SerialDataScheduler:
         # 작업들 등록
         self._register_tasks()
         
-        logger.info(f"직렬 스케줄러 초기화 완료 (메인 사이클: {main_cycle_minutes}분)")
+        logger.info(f"직렬 스케줄러 초기화 완료 (메인 사이클: {main_cycle_minutes}분) - MongoDB 저장 기능 포함")
+
+    def _setup_mongodb(self):
+        """MongoDB 연결 및 캐시 컬렉션 설정"""
+        try:
+            self.mongo_client = MongoClient("mongodb://mongodb:27017")
+            self.database = self.mongo_client["bitcoin"]
+            self.cache_collection = self.database["data_cache"]
+            
+            # 만료 시간을 위한 TTL 인덱스 생성
+            try:
+                self.cache_collection.create_index("expire_at", expireAfterSeconds=0)
+                logger.info("데이터 캐시 컬렉션 TTL 인덱스 생성 완료")
+            except Exception as e:
+                logger.debug(f"TTL 인덱스 생성 오류 (이미 존재할 수 있음): {e}")
+                
+            logger.info("MongoDB 데이터 캐시 연결 완료")
+        except Exception as e:
+            logger.error(f"MongoDB 연결 실패: {e}")
+            self.mongo_client = None
+            self.database = None
+            self.cache_collection = None
     
     def _register_tasks(self):
         """작업들 등록 - 분석기 함수 호출만"""
         
-        # 1단계: 포지션 데이터 (매번 실행)
-        self.register_task("position_data", self._get_position_data, 1, "position")
+        # 1단계: 포지션 데이터 (매번 실행, 캐시 없음)
+        self.register_task("position_data", self._get_position_data, 1, "position", cache_duration_minutes=0)
         
         # 2단계: 차트 외 AI 분석들 (각 분석기가 데이터 수집 포함)
-        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 2, "analysis")  # 30분마다
-        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 24, "analysis")  # 6시간마다
-        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 4, "analysis")  # 1시간마다
-        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 8, "analysis")  # 2시간마다
+        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 2, "analysis", cache_duration_minutes=25)  # 30분마다, 25분 캐시
+        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 24, "analysis", cache_duration_minutes=300)  # 6시간마다, 5시간 캐시
+        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 4, "analysis", cache_duration_minutes=50)  # 1시간마다, 50분 캐시
+        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 8, "analysis", cache_duration_minutes=100)  # 2시간마다, 100분 캐시
         
         # 3단계: 차트 데이터 업데이트 (매번 실행)
-        self.register_task("chart_update", self._update_chart_data, 1, "chart")
+        self.register_task("chart_update", self._update_chart_data, 1, "chart", cache_duration_minutes=5)
         
         # 4단계: 기술적 분석 (차트 데이터 의존)
         self.register_task("ai_technical_analysis", self._ai_technical_analysis, 1, "technical",
-                          dependencies=["chart_update"])
+                          dependencies=["chart_update"], cache_duration_minutes=10)
         
         # 5단계: 최종 결정 (모든 분석 의존)
         self.register_task("final_decision", self._final_decision, 1, "final",
                           dependencies=["ai_technical_analysis", "ai_sentiment_analysis", 
                                       "ai_macro_analysis", "ai_onchain_analysis", 
-                                      "ai_institutional_analysis", "position_data"])
+                                      "ai_institutional_analysis", "position_data"],
+                          cache_duration_minutes=5)
         
         logger.info(f"작업 등록 완료: {len(self.tasks)}개")
         
@@ -76,17 +103,19 @@ class SerialDataScheduler:
             stage_tasks = [name for name, task in self.tasks.items() if task.stage == stage]
             logger.info(f"  {stage}: {len(stage_tasks)}개 작업")
     
-    def register_task(self, name: str, func: callable, interval_cycles: int, stage: str, dependencies: List[str] = None):
+    def register_task(self, name: str, func: callable, interval_cycles: int, stage: str, 
+                     dependencies: List[str] = None, cache_duration_minutes: int = 60):
         """작업 등록"""
         self.tasks[name] = SerialTask(
             name=name,
             func=func,
             interval_cycles=interval_cycles,
             stage=stage,
-            dependencies=dependencies or []
+            dependencies=dependencies or [],
+            cache_duration_minutes=cache_duration_minutes
         )
         interval_minutes = interval_cycles * self.main_cycle_minutes
-        # logger.debug(f"작업 등록: {name} [{stage}] (주기: {interval_minutes}분)")
+        logger.debug(f"작업 등록: {name} [{stage}] (주기: {interval_minutes}분, 캐시: {cache_duration_minutes}분)")
     
     def should_run_task(self, task: SerialTask, force_all_analysis: bool = False) -> Tuple[bool, str]:
         """작업 실행 여부 판단 - 카운팅 + 의존성 체크 + 초기 강제 실행"""
@@ -123,9 +152,59 @@ class SerialDataScheduler:
             return False, f"missing_deps:{','.join(missing_deps)}"
         
         return True, "ready"
+
+    def get_cached_data(self, task_name: str) -> Optional[any]:
+        """MongoDB에서 캐시된 데이터 반환"""
+        if task_name not in self.tasks:
+            return None
+        
+        task = self.tasks[task_name]
+        
+        # 캐시 사용 안하는 경우
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+            return None
+        
+        try:
+            # MongoDB에서 캐시 데이터 조회
+            cache_doc = self.cache_collection.find_one({
+                "task_name": task_name,
+                "expire_at": {"$gt": datetime.now(timezone.utc)}
+            })
+            
+            if cache_doc:
+                logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")
+                return cache_doc.get("data")
+            
+            return None
+        except Exception as e:
+            logger.error(f"캐시 데이터 조회 오류: {e}")
+            return None
+
+    def _update_cache(self, task: SerialTask, data: any):
+        """MongoDB에 캐시 데이터 저장"""
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+            return
+        
+        try:
+            expire_at = datetime.now(timezone.utc) + timedelta(minutes=task.cache_duration_minutes)
+            
+            # upsert를 사용하여 기존 데이터 업데이트 또는 새로 삽입
+            self.cache_collection.replace_one(
+                {"task_name": task.name},
+                {
+                    "task_name": task.name,
+                    "data": data,
+                    "created_at": datetime.now(timezone.utc),
+                    "expire_at": expire_at
+                },
+                upsert=True
+            )
+            logger.debug(f"MongoDB 캐시 업데이트: {task.name}")
+        except Exception as e:
+            logger.error(f"캐시 업데이트 오류: {e}")
     
     async def run_task(self, task: SerialTask, stage_name: str, task_index: int, total_tasks: int) -> bool:
-        """개별 작업 실행"""
+        """개별 작업 실행 - MongoDB 저장 기능 추가"""
         try:
             task.is_running = True
             logger.info(f"  {stage_name}-{task_index}: {task.name} 실행 중...")
@@ -135,8 +214,12 @@ class SerialDataScheduler:
             duration = (datetime.now() - start_time).total_seconds()
             
             if result is not None:
+                # 🔧 핵심 추가: 메모리 저장
                 task.last_result = result
                 task.error_count = 0  # 성공 시 에러 카운트 리셋
+                
+                # 🔧 핵심 추가: MongoDB 저장
+                self._update_cache(task, result)
                 
                 # 결과 요약 로깅
                 result_summary = self._get_result_summary(task.name, result)
@@ -163,7 +246,7 @@ class SerialDataScheduler:
         self.global_cycle_count += 1
         cycle_start = datetime.now()
         
-        logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 시작 ===")
+        logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 시작 (MongoDB 저장 포함) ===")
         if force_all_analysis:
             logger.info("🔥 초기 실행 모드: 모든 AI 분석 강제 실행")
         
@@ -193,20 +276,6 @@ class SerialDataScheduler:
                 continue  # 해당 단계에 작업이 없음
             
             logger.info(f"{stage_idx}단계: {stage} ({len(stage_tasks)}개 실행, {len(skipped_tasks)}개 스킵)")
-            '''
-            # 스킵된 작업들 로깅
-            if force_all_analysis and skipped_tasks:
-                for task_name, reason in skipped_tasks:
-                    if task_name.startswith('ai_') and 'forced_initial_execution' not in reason:
-                        logger.warning(f"  ⚠️ 초기 실행에서도 스킵: {task_name} ({reason})")
-                    else:
-                        # logger.debug(f"  스킵: {task_name} ({reason})")
-                        pass
-            else:
-                for task_name, reason in skipped_tasks:
-                    # logger.debug(f"  스킵: {task_name} ({reason})")
-                    pass
-            '''
             
             # 단계 내 작업들 순차 실행
             stage_success = 0
@@ -238,14 +307,14 @@ class SerialDataScheduler:
         cycle_duration = (datetime.now() - cycle_start).total_seconds()
         
         logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 완료 ({cycle_duration:.1f}초) ===")
-        logger.info(f"전체 성공률: {total_tasks_success}/{total_tasks_run}")
+        logger.info(f"전체 성공률: {total_tasks_success}/{total_tasks_run} (MongoDB 저장 포함)")
         
         # 초기 실행 결과 요약
         if force_all_analysis:
             ai_tasks_run = sum(1 for stage_result in stage_results.values() 
                             for task_name in [t[0] for t in stage_tasks] 
                             if task_name.startswith('ai_'))
-            logger.info(f"🔥 초기 실행 완료: AI 분석 {ai_tasks_run}개 실행")
+            logger.info(f"🔥 초기 실행 완료: AI 분석 {ai_tasks_run}개 실행 및 MongoDB 저장")
         
         return {
             'success': True,
@@ -254,7 +323,8 @@ class SerialDataScheduler:
             'tasks_success': total_tasks_success,
             'duration_seconds': cycle_duration,
             'stage_results': stage_results,
-            'forced_all_analysis': force_all_analysis
+            'forced_all_analysis': force_all_analysis,
+            'mongodb_enabled': True
         }
 
     def _get_result_summary(self, task_name: str, result) -> str:
@@ -292,7 +362,7 @@ class SerialDataScheduler:
             return "요약 실패"
     
     def get_data(self, task_name: str) -> any:
-        """데이터 요청 - 단순히 마지막 결과 반환"""
+        """데이터 요청 - 캐시 우선, 메모리 백업"""
         if task_name not in self.tasks:
             logger.error(f"등록되지 않은 작업: {task_name}")
             return None
@@ -303,7 +373,21 @@ class SerialDataScheduler:
             logger.warning(f"비활성화된 작업: {task_name}")
             return None
         
-        return task.last_result
+        # 🔧 핵심 수정: 캐시 우선, 메모리 백업
+        # 1. MongoDB 캐시에서 먼저 조회
+        cached_data = self.get_cached_data(task_name)
+        if cached_data is not None:
+            logger.debug(f"MongoDB 캐시 데이터 사용: {task_name}")
+            return cached_data
+        
+        # 2. 캐시에 없으면 메모리에서 조회
+        if task.last_result is not None:
+            logger.debug(f"메모리 데이터 사용: {task_name}")
+            return task.last_result
+        
+        # 3. 둘 다 없으면 None
+        logger.warning(f"사용 가능한 데이터 없음: {task_name}")
+        return None
     
     def get_all_analysis_for_decision(self) -> Dict:
         """최종 결정용 모든 분석 결과 반환 - 포지션 조건부 처리 추가"""
@@ -537,15 +621,16 @@ class SerialDataScheduler:
                 'entry_price': 0,
                 'error': str(e)
             }
-
+    
     def get_status(self) -> Dict:
-        """스케줄러 상태 반환"""
+        """스케줄러 상태 반환 - MongoDB 캐시 정보 포함"""
         status = {
             'global_cycle_count': self.global_cycle_count,
             'next_cycle_in_minutes': self.main_cycle_minutes,
             'execution_stages': self.execution_stages,
             'tasks_by_stage': {},
-            'tasks': {}
+            'tasks': {},
+            'mongodb_connected': self.cache_collection is not None
         }
         
         # 단계별 작업 정리
@@ -556,7 +641,7 @@ class SerialDataScheduler:
                     stage_tasks.append(task_name)
             status['tasks_by_stage'][stage] = stage_tasks
         
-        # 개별 작업 상태
+        # 개별 작업 상태 - MongoDB 캐시 상태 포함
         for task_name, task in self.tasks.items():
             next_run_cycle = (
                 (task.interval_cycles - (self.global_cycle_count % task.interval_cycles)) 
@@ -565,11 +650,29 @@ class SerialDataScheduler:
             
             should_run, reason = self.should_run_task(task)
             
+            # MongoDB 캐시 상태 확인
+            has_cache = False
+            cache_age_minutes = 0
+            
+            if self.cache_collection is not None:
+                try:
+                    cache_doc = self.cache_collection.find_one({"task_name": task_name})
+                    if cache_doc:
+                        has_cache = True
+                        if cache_doc.get("created_at"):
+                            cache_age = datetime.now(timezone.utc) - cache_doc["created_at"]
+                            cache_age_minutes = cache_age.total_seconds() / 60
+                except Exception as e:
+                    logger.error(f"캐시 상태 확인 오류: {e}")
+            
             status['tasks'][task_name] = {
                 'stage': task.stage,
                 'interval_cycles': task.interval_cycles,
                 'interval_minutes': task.interval_cycles * self.main_cycle_minutes,
+                'cache_duration_minutes': task.cache_duration_minutes,
                 'has_result': task.last_result is not None,
+                'has_cache': has_cache,
+                'cache_age_minutes': round(cache_age_minutes, 1),
                 'error_count': task.error_count,
                 'is_disabled': task.error_count >= task.max_errors,
                 'is_running': task.is_running,
@@ -583,10 +686,17 @@ class SerialDataScheduler:
         return status
     
     def get_final_decision_result(self) -> Dict:
-        """최종 결정 결과 반환"""
+        """최종 결정 결과 반환 - 캐시 우선"""
         final_task = self.tasks.get('final_decision')
-        if final_task and final_task.last_result:
-            return final_task.last_result
+        if final_task:
+            # 캐시에서 먼저 조회
+            cached_result = self.get_cached_data('final_decision')
+            if cached_result:
+                return cached_result
+            
+            # 캐시에 없으면 메모리에서 조회
+            if final_task.last_result:
+                return final_task.last_result
         
         return {
             'success': False,
@@ -614,6 +724,67 @@ class SerialDataScheduler:
                     reset_count += 1
             logger.info(f"모든 작업 에러 리셋: {reset_count}개")
     
+    def clear_cache(self, task_name: str = None):
+        """MongoDB 캐시 삭제"""
+        if self.cache_collection is None:
+            logger.warning("MongoDB 연결되지 않음 - 캐시 삭제 불가")
+            return False
+        
+        try:
+            if task_name:
+                # 특정 작업 캐시 삭제
+                result = self.cache_collection.delete_many({"task_name": task_name})
+                logger.info(f"캐시 삭제: {task_name} ({result.deleted_count}개 문서)")
+                return result.deleted_count > 0
+            else:
+                # 모든 캐시 삭제
+                result = self.cache_collection.delete_many({})
+                logger.info(f"모든 캐시 삭제: {result.deleted_count}개 문서")
+                return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f"캐시 삭제 오류: {e}")
+            return False
+    
+    def get_cache_info(self) -> Dict:
+        """MongoDB 캐시 상태 정보"""
+        if self.cache_collection is None:
+            return {'error': 'MongoDB 연결되지 않음'}
+        
+        try:
+            # 전체 캐시 문서 수
+            total_count = self.cache_collection.count_documents({})
+            
+            # 만료된 캐시 수 (수동 계산)
+            expired_count = self.cache_collection.count_documents({
+                "expire_at": {"$lt": datetime.now(timezone.utc)}
+            })
+            
+            # 작업별 캐시 상태
+            task_cache_info = {}
+            for task_name in self.tasks.keys():
+                task_docs = self.cache_collection.count_documents({"task_name": task_name})
+                active_docs = self.cache_collection.count_documents({
+                    "task_name": task_name,
+                    "expire_at": {"$gt": datetime.now(timezone.utc)}
+                })
+                
+                task_cache_info[task_name] = {
+                    'total_docs': task_docs,
+                    'active_docs': active_docs,
+                    'expired_docs': task_docs - active_docs
+                }
+            
+            return {
+                'total_documents': total_count,
+                'expired_documents': expired_count,
+                'active_documents': total_count - expired_count,
+                'task_cache_info': task_cache_info,
+                'mongodb_connected': True
+            }
+        except Exception as e:
+            logger.error(f"캐시 정보 조회 오류: {e}")
+            return {'error': str(e)}
+    
     # ========== 작업 함수들 (분석기 호출만) ==========
     
     async def _get_position_data(self):
@@ -640,7 +811,12 @@ class SerialDataScheduler:
         try:
             from docs.get_chart import chart_update_one
             result, server_time, execution_time = chart_update_one('15m', 'BTCUSDT')
-            return result is not None
+            return {
+                'success': result is not None,
+                'server_time': server_time,
+                'execution_time': execution_time,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
         except Exception as e:
             logger.error(f"차트 데이터 업데이트 오류: {e}")
             return None
@@ -763,3 +939,18 @@ def get_final_decision():
     """최종 결정 결과"""
     scheduler = get_serial_scheduler()
     return scheduler.get_final_decision_result()
+
+def clear_serial_cache(task_name: str = None):
+    """직렬 스케줄러 캐시 삭제"""
+    scheduler = get_serial_scheduler()
+    return scheduler.clear_cache(task_name)
+
+def get_cache_status():
+    """캐시 상태 정보"""
+    scheduler = get_serial_scheduler()
+    return scheduler.get_cache_info()
+
+def reset_serial_errors(task_name: str = None):
+    """직렬 스케줄러 에러 리셋"""
+    scheduler = get_serial_scheduler()
+    scheduler.reset_errors(task_name)
