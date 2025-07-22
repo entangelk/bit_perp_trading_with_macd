@@ -1775,7 +1775,7 @@ class FinalDecisionMaker:
 
 
     async def make_final_decision(self, all_analysis_results: Dict) -> Dict:
-        """최종 투자 결정 메인 함수 - 디버깅 로그 추가"""
+        """최종 투자 결정 메인 함수 - 문자열/딕셔너리 처리 강화"""
         try:
             logger.info("최종 투자 결정 분석 시작")
             
@@ -1798,7 +1798,6 @@ class FinalDecisionMaker:
             # 데이터 사용 가능성 확인
             data_sufficient, availability_info = self.check_analysis_data_availability(all_analysis_results)
             
-            # 🔍 디버깅: 가용성 확인 결과 상세 로그
             logger.info(f"🔍 DEBUG: 데이터 충분성: {data_sufficient}")
             logger.info(f"🔍 DEBUG: 가용성 정보: {availability_info}")
             
@@ -1841,21 +1840,53 @@ class FinalDecisionMaker:
                 'data_availability': availability_info
             }
             
-            # 🔍 디버깅: 통합 데이터 확인
             logger.info(f"🔍 DEBUG: 통합된 데이터 키들: {list(integrated_data.keys())}")
             
             # 2. AI 또는 규칙 기반 최종 분석
             final_result = await self.analyze_with_ai(integrated_data)
             
-            logger.info(f"최종 투자 결정 완료: {final_result.get('final_decision', 'Unknown')}")
+            # 🔧 수정: final_result 타입 확인 및 안전한 처리
+            logger.info(f"🔍 DEBUG: final_result 타입: {type(final_result)}")
+            logger.info(f"🔍 DEBUG: final_result가 None: {final_result is None}")
             
+            if not final_result:
+                logger.error("🔍 DEBUG: final_result가 None 또는 빈 값")
+                return {
+                    "success": False,
+                    "error": "최종 결정 결과가 없음",
+                    "analysis_type": "final_decision"
+                }
+            
+            if not isinstance(final_result, dict):
+                logger.error(f"🔍 DEBUG: final_result가 딕셔너리가 아님: {type(final_result)}")
+                logger.error(f"🔍 DEBUG: final_result 내용: {final_result}")
+                return {
+                    "success": False,
+                    "error": f"최종 결정 결과가 잘못된 형식: {type(final_result)}",
+                    "analysis_type": "final_decision"
+                }
+            
+            # 🔧 수정: final_result에서 final_decision 추출시 안전한 처리
+            final_decision = final_result.get('final_decision', 'Hold')
+            if isinstance(final_decision, dict):
+                # final_decision이 딕셔너리인 경우 (잘못된 구조)
+                logger.warning(f"🔍 DEBUG: final_decision이 딕셔너리임: {final_decision}")
+                final_decision = 'Hold'  # 안전한 기본값
+            elif not isinstance(final_decision, str):
+                logger.warning(f"🔍 DEBUG: final_decision이 문자열이 아님: {type(final_decision)}")
+                final_decision = str(final_decision) if final_decision else 'Hold'
+            
+            logger.info(f"최종 투자 결정 완료: {final_decision}")
+            
+            # 🔧 수정: 반환값 구조 안전하게 처리
             return {
                 "success": True,
-                "result": final_result,
+                "result": final_result,  # 이미 딕셔너리임을 확인했으므로 안전
                 "analysis_type": "final_decision",
                 "integration_summary": {
                     "total_analyses": len([k for k in integrated_data.keys() if k not in ['integration_timestamp', 'data_availability']]),
-                    "successful_analyses": len([k for k, v in integrated_data.items() if v.get('success', False)]),
+                    "successful_analyses": len([k for k, v in integrated_data.items() 
+                                            if isinstance(v, dict) and v.get('success', False)]),
                     "integration_method": "weighted_composite_scoring",
                     "decision_framework": "multi_factor_analysis",
                     "data_availability_rate": availability_info['data_availability_rate']
@@ -1865,11 +1896,21 @@ class FinalDecisionMaker:
         except Exception as e:
             logger.error(f"최종 투자 결정 중 오류: {e}")
             logger.error(f"🔍 DEBUG: 에러 발생 시점의 all_analysis_results: {all_analysis_results}")
+            
+            # 🔧 수정: 예외 발생시에도 안전한 응답 구조
+            emergency_result = self._get_emergency_decision()
+            
             return {
                 "success": False,
                 "error": f"최종 결정 중 오류 발생: {str(e)}",
-                "result": self._get_emergency_decision(),
-                "analysis_type": "final_decision"
+                "result": emergency_result,  # 응급 결정도 딕셔너리 구조
+                "analysis_type": "final_decision",
+                "debug_info": {
+                    "error_type": str(type(e).__name__),
+                    "error_details": str(e),
+                    "input_data_available": all_analysis_results is not None,
+                    "input_data_type": str(type(all_analysis_results)) if all_analysis_results else "None"
+                }
             }
 
 # 전역 최종 결정 인스턴스
