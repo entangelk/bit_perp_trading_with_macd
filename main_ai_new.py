@@ -461,7 +461,7 @@ async def main():
         try:
             # 초기 직렬 사이클 실행 (모든 데이터 수집 + AI 분석)
             initial_start_time = time.time()
-            await run_scheduled_data_collection()
+            await run_scheduled_data_collection(initial_run=True)
             initial_duration = time.time() - initial_start_time
             
             logger.info(f"초기 데이터 수집 및 AI 분석 완료 ({initial_duration:.1f}초)")
