@@ -193,7 +193,7 @@ class SerialDataScheduler:
                 continue  # 해당 단계에 작업이 없음
             
             logger.info(f"{stage_idx}단계: {stage} ({len(stage_tasks)}개 실행, {len(skipped_tasks)}개 스킵)")
-            
+            '''
             # 스킵된 작업들 로깅
             if force_all_analysis and skipped_tasks:
                 for task_name, reason in skipped_tasks:
@@ -201,9 +201,12 @@ class SerialDataScheduler:
                         logger.warning(f"  ⚠️ 초기 실행에서도 스킵: {task_name} ({reason})")
                     else:
                         # logger.debug(f"  스킵: {task_name} ({reason})")
+                        pass
             else:
                 for task_name, reason in skipped_tasks:
                     # logger.debug(f"  스킵: {task_name} ({reason})")
+                    pass
+            '''
             
             # 단계 내 작업들 순차 실행
             stage_success = 0
