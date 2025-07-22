@@ -84,13 +84,14 @@ class FinalDecisionMaker:
                             if 'analysis_result' in cached_data:
                                 analysis_result = cached_data['analysis_result']
                                 mapped_results[analysis_key] = analysis_result
-                                
+                                '''
                                 # 성공/실패 로깅
                                 if analysis_result.get('success', False):
                                     # logger.debug(f"✅ {scheduler_key} → {analysis_key} 매핑 성공 (AI 분석)")
                                 else:
                                     skip_reason = analysis_result.get('skip_reason', 'unknown')
                                     logger.warning(f"⚠️ {scheduler_key} → {analysis_key} 실패한 분석 매핑 (이유: {skip_reason})")
+                                '''
                             else:
                                 logger.error(f"❌ {scheduler_key}: analysis_result 키가 없음")
                                 mapped_results[analysis_key] = {
