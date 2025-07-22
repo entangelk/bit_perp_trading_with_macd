@@ -1079,28 +1079,71 @@ class FinalDecisionMaker:
                 contents=prompt
             )
             
-            # JSON 파싱
-            result_text = response.text
-            json_match = re.search(r'\{[\s\S]*\}', result_text)
-            if json_match:
-                result_json = json.loads(json_match.group(0))
-                
-                # 분석 메타데이터 추가
-                result_json['analysis_metadata'] = {
-                    'analysis_type': 'ai_based',
-                    'decision_timestamp': datetime.now(timezone.utc).isoformat(),
-                    'model_used': self.model_name,
-                    'integrated_analyses': list(integrated_data.keys()),
-                    'raw_data': integrated_data
-                }
-                
-                return result_json
-            else:
-                logger.error("AI 응답에서 JSON을 찾을 수 없습니다.")
+            # 🔧 수정: AI 응답 처리 강화
+            if not response or not hasattr(response, 'text') or not response.text:
+                logger.error("AI 응답이 비어있음")
                 return self.rule_based_final_decision(integrated_data)
-                
+            
+            result_text = response.text.strip()
+            logger.info(f"🔍 DEBUG: AI 응답 길이: {len(result_text)}")
+            logger.info(f"🔍 DEBUG: AI 응답 첫 100자: {result_text[:100]}")
+            
+            # JSON 파싱 시도
+            try:
+                # 1차: 전체 응답이 JSON인지 확인
+                result_json = json.loads(result_text)
+                logger.info("🔍 DEBUG: 전체 응답이 JSON으로 파싱됨")
+            except json.JSONDecodeError:
+                # 2차: JSON 블록 찾기
+                json_match = re.search(r'\{[\s\S]*\}', result_text)
+                if json_match:
+                    try:
+                        result_json = json.loads(json_match.group(0))
+                        logger.info("🔍 DEBUG: JSON 블록 추출 후 파싱 성공")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"🔍 DEBUG: JSON 블록 파싱 실패: {e}")
+                        logger.error(f"🔍 DEBUG: 추출된 JSON: {json_match.group(0)[:200]}")
+                        return self.rule_based_final_decision(integrated_data)
+                else:
+                    logger.error("🔍 DEBUG: AI 응답에서 JSON을 찾을 수 없음")
+                    logger.error(f"🔍 DEBUG: 전체 응답: {result_text[:500]}")
+                    return self.rule_based_final_decision(integrated_data)
+            
+            # 🔧 수정: 파싱된 결과 타입 확인
+            if not isinstance(result_json, dict):
+                logger.error(f"🔍 DEBUG: 파싱된 결과가 딕셔너리가 아님: {type(result_json)}")
+                logger.error(f"🔍 DEBUG: 파싱된 결과: {result_json}")
+                return self.rule_based_final_decision(integrated_data)
+            
+            logger.info(f"🔍 DEBUG: AI 결과 키들: {list(result_json.keys())}")
+            
+            # 🔧 수정: 필수 키 확인 및 기본값 설정
+            required_keys = ['final_decision', 'decision_confidence', 'recommended_action']
+            for key in required_keys:
+                if key not in result_json:
+                    logger.warning(f"🔍 DEBUG: 필수 키 누락: {key}")
+                    if key == 'final_decision':
+                        result_json[key] = 'Hold'
+                    elif key == 'decision_confidence':
+                        result_json[key] = 50
+                    elif key == 'recommended_action':
+                        result_json[key] = {'action_type': 'Wait'}
+            
+            # 분석 메타데이터 추가
+            result_json['analysis_metadata'] = {
+                'analysis_type': 'ai_based',
+                'decision_timestamp': datetime.now(timezone.utc).isoformat(),
+                'model_used': self.model_name,
+                'integrated_analyses': list(integrated_data.keys()),
+                'raw_data': integrated_data
+            }
+            
+            logger.info(f"🔍 DEBUG: 최종 AI 결과 처리 완료 - {result_json.get('final_decision', 'Unknown')}")
+            return result_json
+            
         except Exception as e:
             logger.error(f"AI 최종 결정 분석 중 오류: {e}")
+            logger.error(f"🔍 DEBUG: 오류 발생 지점에서 integrated_data 키들: {list(integrated_data.keys()) if isinstance(integrated_data, dict) else 'Not dict'}")
             return self.rule_based_final_decision(integrated_data)
     
     def rule_based_final_decision(self, integrated_data: Dict) -> Dict:
