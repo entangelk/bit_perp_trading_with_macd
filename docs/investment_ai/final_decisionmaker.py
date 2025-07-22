@@ -1534,11 +1534,22 @@ class FinalDecisionMaker:
         """분석 데이터 사용 가능성 확인 - 포지션 유무에 따른 조건부 로직 추가"""
         try:
             logger.info(f"🔍 DEBUG: check_analysis_data_availability 시작")
+            logger.info(f"🔍 DEBUG: all_analysis_results type: {type(all_analysis_results)}")
+            logger.info(f"🔍 DEBUG: all_analysis_results is None: {all_analysis_results is None}")
+            logger.info(f"🔍 DEBUG: all_analysis_results length: {len(all_analysis_results) if all_analysis_results else 'N/A'}")
             
+            # all_analysis_results가 None이거나 비어있는 경우 체크
             if not all_analysis_results or not isinstance(all_analysis_results, dict):
                 logger.error("분석 결과가 None이거나 딕셔너리가 아님")
                 return False, {
                     'analysis_status': {},
+                    'failed_due_to_data': 0,
+                    'failed_due_to_disabled': 0,
+                    'total_core_analyses': 0,
+                    'core_success_count': 0,
+                    'essential_success_count': 0,
+                    'critical_failures': ['all_analysis_results_is_none'],
+                    'data_availability_rate': 0,
                     'decision_viability': 'not_viable',
                     'failure_reasons': ['분석 결과가 None 또는 빈 딕셔너리']
                 }
@@ -1565,12 +1576,14 @@ class FinalDecisionMaker:
                     'note': 'No position - default analysis'
                 }
             
+            # 🔧 변수들 초기화
             analysis_status = {}
             failed_due_to_data = 0
             failed_due_to_disabled = 0
+            total_analyses = 0
             critical_failures = []
             
-            # 핵심 분석들
+            # 핵심 분석들 (최소 2개는 성공해야 함)
             core_analyses = ['sentiment_analysis', 'technical_analysis', 'macro_analysis', 'onchain_analysis', 'institutional_analysis']
             
             # 🔧 포지션 유무에 따른 필수 분석 결정
@@ -1581,6 +1594,11 @@ class FinalDecisionMaker:
                 essential_analyses = ['technical_analysis']
                 logger.info("🔍 DEBUG: 포지션 없음 - position_analysis 필수 아님")
             
+            # 🔍 디버깅: 분석 대상 목록
+            logger.info(f"🔍 DEBUG: 핵심 분석 목록: {core_analyses}")
+            logger.info(f"🔍 DEBUG: 필수 분석 목록: {essential_analyses}")
+            
+            # 각 분석 검사
             for analysis_type in core_analyses + essential_analyses:
                 logger.info(f"🔍 DEBUG: {analysis_type} 검사 시작")
                 
@@ -1654,7 +1672,7 @@ class FinalDecisionMaker:
             
             # 데이터 충분성 판단 로직
             core_success_count = sum(1 for analysis_type in core_analyses 
-                                   if analysis_status.get(analysis_type) == 'success')
+                                if analysis_status.get(analysis_type) == 'success')
             essential_success_count = sum(1 for analysis_type in essential_analyses 
                                         if analysis_status.get(analysis_type) == 'success')
             
@@ -1706,6 +1724,7 @@ class FinalDecisionMaker:
                 'decision_viability': 'not_viable',
                 'failure_reasons': [f'가용성 확인 오류: {str(e)}']
             }
+
 
 
 
