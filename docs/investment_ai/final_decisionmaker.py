@@ -473,14 +473,14 @@ class FinalDecisionMaker:
             return None, None
     
     def validate_analysis_results(self, analysis_results: Dict) -> Dict:
-        """분석 결과 검증 및 정제 - 안전한 버전"""
+        """분석 결과 검증 및 정제 - NoneType 에러 수정"""
         try:
             validated = {}
             
-            # analysis_results가 None이거나 비어있으면 안전하게 처리
+            # 🔧 수정: analysis_results None 체크 추가
             if not analysis_results or not isinstance(analysis_results, dict):
-                logger.warning("분석 결과가 None이거나 비어있음")
-                analysis_results = {}
+                logger.error("분석 결과가 None이거나 딕셔너리가 아님")
+                return {}
             
             # 각 분석 결과 검증
             required_analyses = [
@@ -493,37 +493,22 @@ class FinalDecisionMaker:
                     if analysis_type in analysis_results:
                         result = analysis_results[analysis_type]
                         
-                        # result가 None인 경우 안전하게 처리
+                        # 🔧 수정: result가 None인 경우 체크
                         if result is None:
-                            logger.warning(f"{analysis_type} 결과가 None임")
+                            logger.warning(f"{analysis_type} 결과가 None")
                             validated[analysis_type] = {
                                 'result': {},
                                 'confidence': 0,
                                 'signal': 'Hold',
                                 'timestamp': datetime.now().isoformat(),
                                 'data_quality': 0,
-                                'error': 'None 결과',
-                                'timing_metadata': {'status': 'null_result', 'analysis_type': analysis_type}
+                                'error': f'{analysis_type} 결과가 None',
+                                'timing_metadata': {'status': 'none_result', 'analysis_type': analysis_type}
                             }
                             continue
                         
-                        # result가 dict가 아닌 경우 안전하게 처리
-                        if not isinstance(result, dict):
-                            logger.warning(f"{analysis_type} 결과가 딕셔너리가 아님: {type(result)}")
-                            validated[analysis_type] = {
-                                'result': {},
-                                'confidence': 0,
-                                'signal': 'Hold',
-                                'timestamp': datetime.now().isoformat(),
-                                'data_quality': 0,
-                                'error': f'잘못된 결과 타입: {type(result)}',
-                                'timing_metadata': {'status': 'invalid_type', 'analysis_type': analysis_type}
-                            }
-                            continue
-                        
-                        # 성공 여부 확인 - 안전하게
-                        success = result.get('success', False)
-                        if success:
+                        # 성공 여부 확인
+                        if isinstance(result, dict) and result.get('success', False):
                             validated[analysis_type] = {
                                 'result': result.get('result', {}),
                                 'confidence': self._extract_confidence(result.get('result', {})),
@@ -534,18 +519,18 @@ class FinalDecisionMaker:
                             }
                         else:
                             # 실패한 분석은 중립으로 처리
+                            error_msg = result.get('error', '분석 실패') if isinstance(result, dict) else '잘못된 결과 형식'
                             validated[analysis_type] = {
                                 'result': {},
                                 'confidence': 0,
                                 'signal': 'Hold',
                                 'timestamp': datetime.now().isoformat(),
                                 'data_quality': 0,
-                                'error': result.get('error', '분석 실패'),
-                                'timing_metadata': self._extract_timing_metadata(result, analysis_type)
+                                'error': error_msg,
+                                'timing_metadata': self._extract_timing_metadata(result if isinstance(result, dict) else {}, analysis_type)
                             }
                     else:
                         # 누락된 분석도 중립으로 처리
-                        logger.warning(f"{analysis_type} 분석 결과 누락")
                         validated[analysis_type] = {
                             'result': {},
                             'confidence': 0,
@@ -555,7 +540,6 @@ class FinalDecisionMaker:
                             'error': '분석 누락',
                             'timing_metadata': {'status': 'missing', 'analysis_type': analysis_type}
                         }
-                        
                 except Exception as e:
                     logger.error(f"{analysis_type} 검증 중 오류: {e}")
                     validated[analysis_type] = {
@@ -573,37 +557,38 @@ class FinalDecisionMaker:
         except Exception as e:
             logger.error(f"분석 결과 검증 중 전체 오류: {e}")
             return {}
+
     
     def _extract_confidence(self, result: Dict) -> float:
-        """분석 결과에서 신뢰도 추출 - 안전한 버전"""
+        """분석 결과에서 신뢰도 추출 - None 체크 강화"""
         try:
-            # result가 None이거나 dict가 아니면 기본값
+            # 🔧 수정: result가 None이거나 딕셔너리가 아닌 경우 체크
             if not result or not isinstance(result, dict):
                 return 50.0
-                
+            
             # 다양한 신뢰도 키 시도
             confidence_keys = ['confidence', 'analysis_confidence', 'reliability_score']
             
             for key in confidence_keys:
                 if key in result:
                     confidence = result[key]
-                    if confidence is not None and isinstance(confidence, (int, float)):
+                    if isinstance(confidence, (int, float)) and confidence is not None:
                         return min(100, max(0, float(confidence)))
             
             # 신뢰도가 없으면 기본값
             return 50.0
             
         except Exception as e:
-            logger.error(f"신뢰도 추출 오류: {e}")
+            logger.warning(f"신뢰도 추출 오류: {e}")
             return 50.0
-    
+
     def _extract_signal(self, result: Dict) -> str:
-        """분석 결과에서 투자 신호 추출 - 안전한 버전"""
+        """분석 결과에서 투자 신호 추출 - None 체크 강화"""
         try:
-            # result가 None이거나 dict가 아니면 기본값
+            # 🔧 수정: result가 None이거나 딕셔너리가 아닌 경우 체크
             if not result or not isinstance(result, dict):
                 return 'Hold'
-                
+            
             # 다양한 신호 키 시도
             signal_keys = [
                 'investment_signal', 'final_decision', 'btc_signal', 
@@ -620,10 +605,10 @@ class FinalDecisionMaker:
             return 'Hold'
             
         except Exception as e:
-            logger.error(f"신호 추출 오류: {e}")
+            logger.warning(f"신호 추출 오류: {e}")
             return 'Hold'
 
-    
+
     def _normalize_signal(self, signal: str) -> str:
         """투자 신호 정규화"""
         signal_lower = signal.lower()
@@ -649,25 +634,39 @@ class FinalDecisionMaker:
             return 'Hold'
     
     def _extract_timing_metadata(self, result: Dict, analysis_type: str) -> Dict:
-        """분석 결과에서 타이밍 메타데이터 추출"""
+        """분석 결과에서 타이밍 메타데이터 추출 - None 체크 강화"""
         try:
             timing_metadata = {
                 'analysis_type': analysis_type,
                 'extraction_time': datetime.now(timezone.utc).isoformat()
             }
             
+            # 🔧 수정: result가 None이거나 딕셔너리가 아닌 경우 체크
+            if not result or not isinstance(result, dict):
+                timing_metadata.update({
+                    'status': 'no_result_data',
+                    'error_reason': 'Result is None or not dict'
+                })
+                return timing_metadata
+            
             # 기본 분석 정보
             if result.get('success', False):
                 analysis_result = result.get('result', {})
-                analysis_metadata = analysis_result.get('analysis_metadata', {})
-                
-                timing_metadata.update({
-                    'status': 'success',
-                    'analysis_timestamp': analysis_metadata.get('data_timestamp', analysis_metadata.get('analysis_timestamp')),
-                    'model_used': analysis_metadata.get('model_used'),
-                    'analysis_duration': analysis_metadata.get('analysis_duration'),
-                    'data_collection_time': analysis_metadata.get('data_collection_time')
-                })
+                if isinstance(analysis_result, dict):
+                    analysis_metadata = analysis_result.get('analysis_metadata', {})
+                    
+                    timing_metadata.update({
+                        'status': 'success',
+                        'analysis_timestamp': analysis_metadata.get('data_timestamp', analysis_metadata.get('analysis_timestamp')),
+                        'model_used': analysis_metadata.get('model_used'),
+                        'analysis_duration': analysis_metadata.get('analysis_duration'),
+                        'data_collection_time': analysis_metadata.get('data_collection_time')
+                    })
+                else:
+                    timing_metadata.update({
+                        'status': 'success_but_no_metadata',
+                        'note': 'Result exists but no metadata'
+                    })
             else:
                 timing_metadata.update({
                     'status': 'failed',
@@ -703,7 +702,7 @@ class FinalDecisionMaker:
                 'error': str(e),
                 'extraction_time': datetime.now(timezone.utc).isoformat()
             }
-    
+
     def calculate_dynamic_weights(self, validated_results: Dict) -> Dict:
         """분석별 동적 가중치 계산"""
         try:
@@ -1532,98 +1531,139 @@ class FinalDecisionMaker:
         }
     
     def check_analysis_data_availability(self, all_analysis_results: Dict) -> Tuple[bool, Dict]:
-        """분석 데이터 사용 가능성 확인 (강화된 버전)"""
-        analysis_status = {}
-        failed_due_to_data = 0
-        failed_due_to_disabled = 0
-        total_analyses = 0
-        critical_failures = []
-        
-        # 핵심 분석들 (최소 2개는 성공해야 함)
-        core_analyses = ['sentiment_analysis', 'technical_analysis', 'macro_analysis', 'onchain_analysis', 'institutional_analysis']
-        
-        # 필수 분석 (반드시 성공해야 함)
-        essential_analyses = ['technical_analysis', 'position_analysis']
-        
-        for analysis_type in core_analyses + essential_analyses:
-            if analysis_type in all_analysis_results:
-                total_analyses += 1
-                result = all_analysis_results[analysis_type]
-                
-                # 캐시된 분석 결과인 경우 analysis_result 내부 확인
-                if 'analysis_result' in result:
-                    actual_result = result['analysis_result']
-                else:
-                    actual_result = result
-                
-                if not actual_result.get('success', False):
-                    # 실패 원인 분석
-                    skip_reason = actual_result.get('skip_reason', '')
-                    error_msg = actual_result.get('error', '')
+        """분석 데이터 사용 가능성 확인 - None 체크 강화"""
+        try:
+            # 🔧 수정: all_analysis_results가 None이거나 비어있는 경우 체크
+            if not all_analysis_results or not isinstance(all_analysis_results, dict):
+                logger.error("분석 결과가 None이거나 딕셔너리가 아님")
+                return False, {
+                    'analysis_status': {},
+                    'failed_due_to_data': 0,
+                    'failed_due_to_disabled': 0,
+                    'total_core_analyses': 0,
+                    'core_success_count': 0,
+                    'essential_success_count': 0,
+                    'critical_failures': ['all_analysis_results_is_none'],
+                    'data_availability_rate': 0,
+                    'decision_viability': 'not_viable',
+                    'failure_reasons': ['분석 결과가 None 또는 빈 딕셔너리']
+                }
+            
+            analysis_status = {}
+            failed_due_to_data = 0
+            failed_due_to_disabled = 0
+            total_analyses = 0
+            critical_failures = []
+            
+            # 핵심 분석들 (최소 2개는 성공해야 함)
+            core_analyses = ['sentiment_analysis', 'technical_analysis', 'macro_analysis', 'onchain_analysis', 'institutional_analysis']
+            
+            # 필수 분석 (반드시 성공해야 함)
+            essential_analyses = ['technical_analysis', 'position_analysis']
+            
+            for analysis_type in core_analyses + essential_analyses:
+                if analysis_type in all_analysis_results:
+                    total_analyses += 1
+                    result = all_analysis_results[analysis_type]
                     
-                    if skip_reason in ['insufficient_raw_data', 'no_valid_data', 'insufficient_data']:
+                    # 🔧 수정: result가 None인 경우 체크
+                    if result is None:
+                        analysis_status[analysis_type] = 'failed_none_result'
                         failed_due_to_data += 1
-                        analysis_status[analysis_type] = 'failed_data_insufficient'
                         if analysis_type in essential_analyses:
-                            critical_failures.append(f"{analysis_type}: 데이터 부족")
-                    elif skip_reason == 'analyzer_disabled':
-                        failed_due_to_disabled += 1
-                        analysis_status[analysis_type] = 'failed_disabled'
-                        if analysis_type in essential_analyses:
-                            critical_failures.append(f"{analysis_type}: 분석기 비활성화")
+                            critical_failures.append(f"{analysis_type}: 결과가 None")
+                        continue
+                    
+                    # 캐시된 분석 결과인 경우 analysis_result 내부 확인
+                    if isinstance(result, dict) and 'analysis_result' in result:
+                        actual_result = result['analysis_result']
                     else:
-                        analysis_status[analysis_type] = 'failed_other'
+                        actual_result = result
+                    
+                    # actual_result가 딕셔너리가 아닌 경우 체크
+                    if not isinstance(actual_result, dict):
+                        analysis_status[analysis_type] = 'failed_invalid_format'
+                        failed_due_to_data += 1
                         if analysis_type in essential_analyses:
-                            critical_failures.append(f"{analysis_type}: {error_msg}")
+                            critical_failures.append(f"{analysis_type}: 잘못된 결과 형식")
+                        continue
+                    
+                    if not actual_result.get('success', False):
+                        # 실패 원인 분석
+                        skip_reason = actual_result.get('skip_reason', '')
+                        error_msg = actual_result.get('error', '')
+                        
+                        if skip_reason in ['insufficient_raw_data', 'no_valid_data', 'insufficient_data']:
+                            failed_due_to_data += 1
+                            analysis_status[analysis_type] = 'failed_data_insufficient'
+                            if analysis_type in essential_analyses:
+                                critical_failures.append(f"{analysis_type}: 데이터 부족")
+                        elif skip_reason == 'analyzer_disabled':
+                            failed_due_to_disabled += 1
+                            analysis_status[analysis_type] = 'failed_disabled'
+                            if analysis_type in essential_analyses:
+                                critical_failures.append(f"{analysis_type}: 분석기 비활성화")
+                        else:
+                            analysis_status[analysis_type] = 'failed_other'
+                            if analysis_type in essential_analyses:
+                                critical_failures.append(f"{analysis_type}: {error_msg}")
+                    else:
+                        analysis_status[analysis_type] = 'success'
                 else:
-                    analysis_status[analysis_type] = 'success'
-            else:
-                # 분석 결과 자체가 없음
-                if analysis_type in essential_analyses:
-                    critical_failures.append(f"{analysis_type}: 결과 없음")
-                analysis_status[analysis_type] = 'missing'
-        
-        # 데이터 충분성 판단 로직 강화
-        core_success_count = sum(1 for analysis_type in core_analyses 
-                               if analysis_status.get(analysis_type) == 'success')
-        essential_success_count = sum(1 for analysis_type in essential_analyses 
-                                    if analysis_status.get(analysis_type) == 'success')
-        
-        # 판단 기준:
-        # 1. 필수 분석 중 하나라도 실패하면 불가
-        # 2. 핵심 분석 중 2개 미만 성공하면 불가  
-        # 3. 전체 데이터 부족 실패가 4개 이상이면 불가
-        data_sufficient = (
-            len(critical_failures) == 0 and  # 필수 분석 모두 성공
-            core_success_count >= 2 and      # 핵심 분석 최소 2개 성공
-            failed_due_to_data < 4           # 데이터 부족 실패 4개 미만
-        )
-        
-        # 상세 정보
-        availability_info = {
-            'analysis_status': analysis_status,
-            'failed_due_to_data': failed_due_to_data,
-            'failed_due_to_disabled': failed_due_to_disabled,
-            'total_core_analyses': len(core_analyses),
-            'core_success_count': core_success_count,
-            'essential_success_count': essential_success_count,
-            'critical_failures': critical_failures,
-            'data_availability_rate': (core_success_count / len(core_analyses) * 100) if core_analyses else 0,
-            'decision_viability': 'viable' if data_sufficient else 'not_viable',
-            'failure_reasons': []
-        }
-        
-        # 실패 이유 상세 분석
-        if not data_sufficient:
-            if critical_failures:
-                availability_info['failure_reasons'].append(f"필수 분석 실패: {', '.join(critical_failures)}")
-            if core_success_count < 2:
-                availability_info['failure_reasons'].append(f"핵심 분석 부족 (성공: {core_success_count}/5)")
-            if failed_due_to_data >= 4:
-                availability_info['failure_reasons'].append(f"광범위한 데이터 부족 ({failed_due_to_data}개 분석)")
-        
-        return data_sufficient, availability_info
-    
+                    # 분석 결과 자체가 없음
+                    if analysis_type in essential_analyses:
+                        critical_failures.append(f"{analysis_type}: 결과 없음")
+                    analysis_status[analysis_type] = 'missing'
+            
+            # 데이터 충분성 판단 로직 강화
+            core_success_count = sum(1 for analysis_type in core_analyses 
+                                   if analysis_status.get(analysis_type) == 'success')
+            essential_success_count = sum(1 for analysis_type in essential_analyses 
+                                        if analysis_status.get(analysis_type) == 'success')
+            
+            # 판단 기준:
+            # 1. 필수 분석 중 하나라도 실패하면 불가
+            # 2. 핵심 분석 중 2개 미만 성공하면 불가  
+            # 3. 전체 데이터 부족 실패가 4개 이상이면 불가
+            data_sufficient = (
+                len(critical_failures) == 0 and  # 필수 분석 모두 성공
+                core_success_count >= 2 and      # 핵심 분석 최소 2개 성공
+                failed_due_to_data < 4           # 데이터 부족 실패 4개 미만
+            )
+            
+            # 상세 정보
+            availability_info = {
+                'analysis_status': analysis_status,
+                'failed_due_to_data': failed_due_to_data,
+                'failed_due_to_disabled': failed_due_to_disabled,
+                'total_core_analyses': len(core_analyses),
+                'core_success_count': core_success_count,
+                'essential_success_count': essential_success_count,
+                'critical_failures': critical_failures,
+                'data_availability_rate': (core_success_count / len(core_analyses) * 100) if core_analyses else 0,
+                'decision_viability': 'viable' if data_sufficient else 'not_viable',
+                'failure_reasons': []
+            }
+            
+            # 실패 이유 상세 분석
+            if not data_sufficient:
+                if critical_failures:
+                    availability_info['failure_reasons'].append(f"필수 분석 실패: {', '.join(critical_failures)}")
+                if core_success_count < 2:
+                    availability_info['failure_reasons'].append(f"핵심 분석 부족 (성공: {core_success_count}/5)")
+                if failed_due_to_data >= 4:
+                    availability_info['failure_reasons'].append(f"광범위한 데이터 부족 ({failed_due_to_data}개 분석)")
+            
+            return data_sufficient, availability_info
+            
+        except Exception as e:
+            logger.error(f"분석 데이터 가용성 확인 중 오류: {e}")
+            return False, {
+                'error': str(e),
+                'decision_viability': 'not_viable',
+                'failure_reasons': [f'가용성 확인 오류: {str(e)}']
+            }
+
     async def make_final_decision(self, all_analysis_results: Dict) -> Dict:
         """최종 투자 결정 메인 함수"""
         try:
