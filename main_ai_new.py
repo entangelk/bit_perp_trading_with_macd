@@ -203,9 +203,11 @@ def get_action_from_decision(final_decision, current_position):
         return 'wait'
 
 async def get_all_analysis_for_decision():
-    """최종 결정용 분석 데이터 수집 - 코루틴 에러 수정"""
+    """최종 결정용 분석 데이터 수집 - 디버깅 로그 추가"""
     try:
-        # 🔧 포워딩된 data_scheduler 사용
+        logger.info("🔍 DEBUG: 메인봇 get_all_analysis_for_decision 시작")
+        
+        # 포워딩된 data_scheduler 사용
         from docs.investment_ai.data_scheduler import (
             get_ai_technical_analysis,
             get_ai_sentiment_analysis, 
@@ -215,71 +217,80 @@ async def get_all_analysis_for_decision():
             get_position_data
         )
         
-        # 🔧 포지션 분석 직접 호출
+        # 포지션 분석 직접 호출
         from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
         
         # 각 분석 결과 수집
         results = {}
         
-        # 🔧 수정: await 추가 (포워딩된 함수들이 비동기)
-        logger.debug("AI 분석 결과 수집 시작")
+        logger.info("🔍 DEBUG: AI 분석 결과 수집 시작")
         
-        try:
-            results['technical_analysis'] = await get_ai_technical_analysis()
-            logger.debug("기술적 분석 결과 수집 완료")
-        except Exception as e:
-            logger.warning(f"기술적 분석 결과 수집 실패: {e}")
-            results['technical_analysis'] = {'success': False, 'error': str(e)}
+        # AI 분석들 개별 수집 및 로깅
+        analyses = [
+            ('technical_analysis', get_ai_technical_analysis),
+            ('sentiment_analysis', get_ai_sentiment_analysis),
+            ('macro_analysis', get_ai_macro_analysis),
+            ('onchain_analysis', get_ai_onchain_analysis),
+            ('institutional_analysis', get_ai_institutional_analysis)
+        ]
         
-        try:
-            results['sentiment_analysis'] = await get_ai_sentiment_analysis()
-            logger.debug("감정 분석 결과 수집 완료")
-        except Exception as e:
-            logger.warning(f"감정 분석 결과 수집 실패: {e}")
-            results['sentiment_analysis'] = {'success': False, 'error': str(e)}
+        for result_key, get_func in analyses:
+            try:
+                logger.info(f"🔍 DEBUG: {result_key} 수집 시작")
+                result = await get_func()
+                
+                logger.info(f"🔍 DEBUG: {result_key} 결과 타입: {type(result)}")
+                logger.info(f"🔍 DEBUG: {result_key} 결과가 None: {result is None}")
+                
+                if result and isinstance(result, dict):
+                    logger.info(f"🔍 DEBUG: {result_key} 키들: {list(result.keys())}")
+                    if 'success' in result:
+                        logger.info(f"🔍 DEBUG: {result_key} success: {result.get('success')}")
+                
+                results[result_key] = result if result else {'success': False, 'error': f'{result_key} 결과 없음'}
+                logger.info(f"🔍 DEBUG: {result_key} 수집 완료")
+            except Exception as e:
+                logger.error(f"🔍 DEBUG: {result_key} 수집 실패: {e}")
+                results[result_key] = {'success': False, 'error': str(e)}
         
-        try:
-            results['macro_analysis'] = await get_ai_macro_analysis()
-            logger.debug("거시경제 분석 결과 수집 완료")
-        except Exception as e:
-            logger.warning(f"거시경제 분석 결과 수집 실패: {e}")
-            results['macro_analysis'] = {'success': False, 'error': str(e)}
-        
-        try:
-            results['onchain_analysis'] = await get_ai_onchain_analysis()
-            logger.debug("온체인 분석 결과 수집 완료")
-        except Exception as e:
-            logger.warning(f"온체인 분석 결과 수집 실패: {e}")
-            results['onchain_analysis'] = {'success': False, 'error': str(e)}
-        
-        try:
-            results['institutional_analysis'] = await get_ai_institutional_analysis()
-            logger.debug("기관투자 분석 결과 수집 완료")
-        except Exception as e:
-            logger.warning(f"기관투자 분석 결과 수집 실패: {e}")
-            results['institutional_analysis'] = {'success': False, 'error': str(e)}
-        
-        # 🔧 수정: 포지션 분석 (동기 함수이므로 await 제거)
+        # 포지션 분석 (동기 함수)
+        logger.info("🔍 DEBUG: 포지션 분석 수집 시작")
         try:
             position_analysis = analyze_position_status()
+            
+            logger.info(f"🔍 DEBUG: 포지션 분석 결과 타입: {type(position_analysis)}")
+            logger.info(f"🔍 DEBUG: 포지션 분석 결과가 None: {position_analysis is None}")
+            
+            if position_analysis and isinstance(position_analysis, dict):
+                logger.info(f"🔍 DEBUG: 포지션 분석 키들: {list(position_analysis.keys())}")
+                if 'success' in position_analysis:
+                    logger.info(f"🔍 DEBUG: 포지션 분석 success: {position_analysis.get('success')}")
+            
             results['position_analysis'] = position_analysis if position_analysis else {
                 'success': False, 'error': '포지션 분석 실패'
             }
-            logger.debug("포지션 분석 완료")
+            logger.info("🔍 DEBUG: 포지션 분석 완료")
         except Exception as e:
-            logger.warning(f"포지션 분석 실패: {e}")
+            logger.error(f"🔍 DEBUG: 포지션 분석 실패: {e}")
             results['position_analysis'] = {
                 'success': False, 'error': str(e)
             }
         
         # 현재 포지션 정보
+        logger.info("🔍 DEBUG: 현재 포지션 정보 수집 시작")
         try:
             position_data = await get_position_data()
+            
+            logger.info(f"🔍 DEBUG: position_data 타입: {type(position_data)}")
+            logger.info(f"🔍 DEBUG: position_data가 None: {position_data is None}")
+            
             if position_data:
+                if isinstance(position_data, dict):
+                    logger.info(f"🔍 DEBUG: position_data 키들: {list(position_data.keys())}")
                 results['current_position'] = extract_position_info(position_data)
-                logger.debug("포지션 데이터 추출 완료")
+                logger.info("🔍 DEBUG: 포지션 데이터 추출 완료")
             else:
-                logger.warning("포지션 데이터가 없음 - 기본값 사용")
+                logger.warning("🔍 DEBUG: 포지션 데이터가 없음 - 기본값 사용")
                 results['current_position'] = {
                     'has_position': False,
                     'side': 'none',
@@ -287,7 +298,7 @@ async def get_all_analysis_for_decision():
                     'entry_price': 0
                 }
         except Exception as e:
-            logger.warning(f"포지션 데이터 수집 실패: {e}")
+            logger.error(f"🔍 DEBUG: 포지션 데이터 수집 실패: {e}")
             results['current_position'] = {
                 'has_position': False,
                 'side': 'none',
@@ -301,11 +312,17 @@ async def get_all_analysis_for_decision():
                           if isinstance(result, dict) and result.get('success', False))
         total_count = len(results)
         
-        logger.info(f"분석 데이터 수집 완료: {success_count}/{total_count} 성공")
+        logger.info(f"🔍 DEBUG: 최종 수집 결과 - 성공: {success_count}/{total_count}")
+        logger.info(f"🔍 DEBUG: 최종 결과 키들: {list(results.keys())}")
+        
+        # 각 결과의 success 상태 로깅
+        for key, value in results.items():
+            if isinstance(value, dict) and 'success' in value:
+                logger.info(f"🔍 DEBUG: 최종 {key} success: {value.get('success')}")
         
         return results
     except Exception as e:
-        logger.error(f"분석 데이터 수집 오류: {e}")
+        logger.error(f"🔍 DEBUG: 분석 데이터 수집 전체 오류: {e}")
         return {}
 
 

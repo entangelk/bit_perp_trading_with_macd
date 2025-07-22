@@ -1531,9 +1531,15 @@ class FinalDecisionMaker:
         }
     
     def check_analysis_data_availability(self, all_analysis_results: Dict) -> Tuple[bool, Dict]:
-        """분석 데이터 사용 가능성 확인 - None 체크 강화"""
+        """분석 데이터 사용 가능성 확인 - 디버깅 로그 추가"""
         try:
-            # 🔧 수정: all_analysis_results가 None이거나 비어있는 경우 체크
+            # 🔍 디버깅: 입력 검증 상세 로그
+            logger.info(f"🔍 DEBUG: check_analysis_data_availability 시작")
+            logger.info(f"🔍 DEBUG: all_analysis_results type: {type(all_analysis_results)}")
+            logger.info(f"🔍 DEBUG: all_analysis_results is None: {all_analysis_results is None}")
+            logger.info(f"🔍 DEBUG: all_analysis_results length: {len(all_analysis_results) if all_analysis_results else 'N/A'}")
+            
+            # all_analysis_results가 None이거나 비어있는 경우 체크
             if not all_analysis_results or not isinstance(all_analysis_results, dict):
                 logger.error("분석 결과가 None이거나 딕셔너리가 아님")
                 return False, {
@@ -1561,13 +1567,23 @@ class FinalDecisionMaker:
             # 필수 분석 (반드시 성공해야 함)
             essential_analyses = ['technical_analysis', 'position_analysis']
             
+            # 🔍 디버깅: 분석 대상 목록
+            logger.info(f"🔍 DEBUG: 핵심 분석 목록: {core_analyses}")
+            logger.info(f"🔍 DEBUG: 필수 분석 목록: {essential_analyses}")
+            
             for analysis_type in core_analyses + essential_analyses:
+                logger.info(f"🔍 DEBUG: {analysis_type} 검사 시작")
+                
                 if analysis_type in all_analysis_results:
                     total_analyses += 1
                     result = all_analysis_results[analysis_type]
                     
-                    # 🔧 수정: result가 None인 경우 체크
+                    # 🔍 디버깅: 개별 분석 결과 상세 확인
+                    logger.info(f"🔍 DEBUG: {analysis_type} 결과 타입: {type(result)}")
+                    logger.info(f"🔍 DEBUG: {analysis_type} 결과가 None: {result is None}")
+                    
                     if result is None:
+                        logger.warning(f"🔍 DEBUG: {analysis_type} 결과가 None")
                         analysis_status[analysis_type] = 'failed_none_result'
                         failed_due_to_data += 1
                         if analysis_type in essential_analyses:
@@ -1577,21 +1593,30 @@ class FinalDecisionMaker:
                     # 캐시된 분석 결과인 경우 analysis_result 내부 확인
                     if isinstance(result, dict) and 'analysis_result' in result:
                         actual_result = result['analysis_result']
+                        logger.info(f"🔍 DEBUG: {analysis_type} 캐시된 결과 사용, analysis_result 타입: {type(actual_result)}")
                     else:
                         actual_result = result
+                        logger.info(f"🔍 DEBUG: {analysis_type} 직접 결과 사용")
                     
                     # actual_result가 딕셔너리가 아닌 경우 체크
                     if not isinstance(actual_result, dict):
+                        logger.warning(f"🔍 DEBUG: {analysis_type} actual_result가 딕셔너리가 아님: {type(actual_result)}")
                         analysis_status[analysis_type] = 'failed_invalid_format'
                         failed_due_to_data += 1
                         if analysis_type in essential_analyses:
                             critical_failures.append(f"{analysis_type}: 잘못된 결과 형식")
                         continue
                     
-                    if not actual_result.get('success', False):
+                    # 성공 여부 확인
+                    success = actual_result.get('success', False)
+                    logger.info(f"🔍 DEBUG: {analysis_type} success: {success}")
+                    
+                    if not success:
                         # 실패 원인 분석
                         skip_reason = actual_result.get('skip_reason', '')
                         error_msg = actual_result.get('error', '')
+                        
+                        logger.warning(f"🔍 DEBUG: {analysis_type} 실패 - skip_reason: {skip_reason}, error: {error_msg}")
                         
                         if skip_reason in ['insufficient_raw_data', 'no_valid_data', 'insufficient_data']:
                             failed_due_to_data += 1
@@ -1609,27 +1634,34 @@ class FinalDecisionMaker:
                                 critical_failures.append(f"{analysis_type}: {error_msg}")
                     else:
                         analysis_status[analysis_type] = 'success'
+                        logger.info(f"🔍 DEBUG: {analysis_type} 성공으로 분류")
                 else:
                     # 분석 결과 자체가 없음
+                    logger.warning(f"🔍 DEBUG: {analysis_type} 키가 all_analysis_results에 없음")
                     if analysis_type in essential_analyses:
                         critical_failures.append(f"{analysis_type}: 결과 없음")
                     analysis_status[analysis_type] = 'missing'
             
-            # 데이터 충분성 판단 로직 강화
+            # 데이터 충분성 판단 로직
             core_success_count = sum(1 for analysis_type in core_analyses 
                                    if analysis_status.get(analysis_type) == 'success')
             essential_success_count = sum(1 for analysis_type in essential_analyses 
                                         if analysis_status.get(analysis_type) == 'success')
             
-            # 판단 기준:
-            # 1. 필수 분석 중 하나라도 실패하면 불가
-            # 2. 핵심 분석 중 2개 미만 성공하면 불가  
-            # 3. 전체 데이터 부족 실패가 4개 이상이면 불가
+            # 🔍 디버깅: 성공 카운트
+            logger.info(f"🔍 DEBUG: 핵심 분석 성공 카운트: {core_success_count}/{len(core_analyses)}")
+            logger.info(f"🔍 DEBUG: 필수 분석 성공 카운트: {essential_success_count}/{len(essential_analyses)}")
+            logger.info(f"🔍 DEBUG: 데이터 부족 실패: {failed_due_to_data}")
+            logger.info(f"🔍 DEBUG: 치명적 실패: {critical_failures}")
+            
+            # 판단 기준
             data_sufficient = (
                 len(critical_failures) == 0 and  # 필수 분석 모두 성공
                 core_success_count >= 2 and      # 핵심 분석 최소 2개 성공
                 failed_due_to_data < 4           # 데이터 부족 실패 4개 미만
             )
+            
+            logger.info(f"🔍 DEBUG: 최종 데이터 충분성 판단: {data_sufficient}")
             
             # 상세 정보
             availability_info = {
@@ -1658,6 +1690,7 @@ class FinalDecisionMaker:
             
         except Exception as e:
             logger.error(f"분석 데이터 가용성 확인 중 오류: {e}")
+            logger.error(f"🔍 DEBUG: 에러 발생, all_analysis_results: {all_analysis_results}")
             return False, {
                 'error': str(e),
                 'decision_viability': 'not_viable',
@@ -1665,12 +1698,32 @@ class FinalDecisionMaker:
             }
 
     async def make_final_decision(self, all_analysis_results: Dict) -> Dict:
-        """최종 투자 결정 메인 함수"""
+        """최종 투자 결정 메인 함수 - 디버깅 로그 추가"""
         try:
             logger.info("최종 투자 결정 분석 시작")
             
+            # 🔍 디버깅: 입력 데이터 상세 확인
+            logger.info(f"🔍 DEBUG: 전달받은 분석 결과 키들: {list(all_analysis_results.keys()) if all_analysis_results else 'None'}")
+            
+            if all_analysis_results:
+                for key, value in all_analysis_results.items():
+                    if value is None:
+                        logger.warning(f"🔍 DEBUG: {key} = None")
+                    elif isinstance(value, dict):
+                        logger.info(f"🔍 DEBUG: {key} = dict with keys: {list(value.keys())}")
+                        if 'success' in value:
+                            logger.info(f"🔍 DEBUG: {key}.success = {value.get('success')}")
+                        if 'error' in value:
+                            logger.warning(f"🔍 DEBUG: {key}.error = {value.get('error')}")
+                    else:
+                        logger.info(f"🔍 DEBUG: {key} = {type(value)} (not dict)")
+            
             # 데이터 사용 가능성 확인
             data_sufficient, availability_info = self.check_analysis_data_availability(all_analysis_results)
+            
+            # 🔍 디버깅: 가용성 확인 결과 상세 로그
+            logger.info(f"🔍 DEBUG: 데이터 충분성: {data_sufficient}")
+            logger.info(f"🔍 DEBUG: 가용성 정보: {availability_info}")
             
             if not data_sufficient:
                 failure_summary = "; ".join(availability_info['failure_reasons'])
@@ -1682,6 +1735,10 @@ class FinalDecisionMaker:
                     "analysis_type": "final_decision",
                     "skip_reason": "insufficient_analysis_data",
                     "data_availability": availability_info,
+                    "debug_info": {
+                        "input_keys": list(all_analysis_results.keys()) if all_analysis_results else [],
+                        "input_types": {k: str(type(v)) for k, v in all_analysis_results.items()} if all_analysis_results else {}
+                    },
                     "safety_protocol": {
                         "triggered": True,
                         "reason": "minimum_data_requirements_not_met",
@@ -1707,6 +1764,9 @@ class FinalDecisionMaker:
                 'data_availability': availability_info
             }
             
+            # 🔍 디버깅: 통합 데이터 확인
+            logger.info(f"🔍 DEBUG: 통합된 데이터 키들: {list(integrated_data.keys())}")
+            
             # 2. AI 또는 규칙 기반 최종 분석
             final_result = await self.analyze_with_ai(integrated_data)
             
@@ -1727,6 +1787,7 @@ class FinalDecisionMaker:
             
         except Exception as e:
             logger.error(f"최종 투자 결정 중 오류: {e}")
+            logger.error(f"🔍 DEBUG: 에러 발생 시점의 all_analysis_results: {all_analysis_results}")
             return {
                 "success": False,
                 "error": f"최종 결정 중 오류 발생: {str(e)}",
