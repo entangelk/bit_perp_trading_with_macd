@@ -88,13 +88,18 @@ class SerialDataScheduler:
         interval_minutes = interval_cycles * self.main_cycle_minutes
         logger.debug(f"작업 등록: {name} [{stage}] (주기: {interval_minutes}분)")
     
-    def should_run_task(self, task: SerialTask) -> Tuple[bool, str]:
-        """작업 실행 여부 판단 - 카운팅 + 의존성 체크"""
+    def should_run_task(self, task: SerialTask, force_all_analysis: bool = False) -> Tuple[bool, str]:
+        """작업 실행 여부 판단 - 카운팅 + 의존성 체크 + 초기 강제 실행"""
         if task.is_running:
             return False, "already_running"
         
         if task.error_count >= task.max_errors:
             return False, f"disabled({task.error_count} errors)"
+        
+        # 🔧 초기 실행시 모든 AI 분석 강제 실행
+        if force_all_analysis and task.name.startswith('ai_'):
+            logger.info(f"🔥 초기 실행: {task.name} 강제 실행")
+            return True, "forced_initial_execution"
         
         # 카운팅 기반 실행 주기 체크
         if (self.global_cycle_count % task.interval_cycles) != 0:
@@ -154,13 +159,13 @@ class SerialDataScheduler:
             task.is_running = False
 
     async def run_cycle(self, force_all_analysis=False) -> Dict:
-        """한 사이클 직렬 실행 - 강제 모든 분석 옵션 추가"""
+        """한 사이클 직렬 실행 - 초기 실행 강제 분석 로직 수정"""
         self.global_cycle_count += 1
         cycle_start = datetime.now()
         
         logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 시작 ===")
         if force_all_analysis:
-            logger.info("🔥 강제 모든 분석 모드 활성화")
+            logger.info("🔥 초기 실행 모드: 모든 AI 분석 강제 실행")
         
         total_tasks_run = 0
         total_tasks_success = 0
@@ -176,12 +181,8 @@ class SerialDataScheduler:
             
             for task_name, task in self.tasks.items():
                 if task.stage == stage:
-                    # 🔧 수정: force_all_analysis가 True면 모든 분석 실행
-                    if force_all_analysis and task_name.startswith('ai_'):
-                        should_run = True
-                        reason = "forced_execution"
-                    else:
-                        should_run, reason = self.should_run_task(task)
+                    # 🔧 수정: force_all_analysis를 should_run_task에 전달
+                    should_run, reason = self.should_run_task(task, force_all_analysis)
                     
                     if should_run:
                         stage_tasks.append((task_name, task))
@@ -193,11 +194,11 @@ class SerialDataScheduler:
             
             logger.info(f"{stage_idx}단계: {stage} ({len(stage_tasks)}개 실행, {len(skipped_tasks)}개 스킵)")
             
-            # 스킵된 작업들 로깅 (force_all_analysis 모드에서는 더 자세히)
+            # 스킵된 작업들 로깅
             if force_all_analysis and skipped_tasks:
                 for task_name, reason in skipped_tasks:
-                    if task_name.startswith('ai_'):
-                        logger.warning(f"  AI 분석 스킵됨: {task_name} ({reason}) - 강제 모드에서도 스킵")
+                    if task_name.startswith('ai_') and 'forced_initial_execution' not in reason:
+                        logger.warning(f"  ⚠️ 초기 실행에서도 스킵: {task_name} ({reason})")
                     else:
                         logger.debug(f"  스킵: {task_name} ({reason})")
             else:
@@ -235,6 +236,13 @@ class SerialDataScheduler:
         
         logger.info(f"=== 직렬 사이클 #{self.global_cycle_count} 완료 ({cycle_duration:.1f}초) ===")
         logger.info(f"전체 성공률: {total_tasks_success}/{total_tasks_run}")
+        
+        # 초기 실행 결과 요약
+        if force_all_analysis:
+            ai_tasks_run = sum(1 for stage_result in stage_results.values() 
+                            for task_name in [t[0] for t in stage_tasks] 
+                            if task_name.startswith('ai_'))
+            logger.info(f"🔥 초기 실행 완료: AI 분석 {ai_tasks_run}개 실행")
         
         return {
             'success': True,
