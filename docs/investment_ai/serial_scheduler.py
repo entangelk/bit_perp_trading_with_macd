@@ -295,57 +295,65 @@ class SerialDataScheduler:
         return task.last_result
     
     def get_all_analysis_for_decision(self) -> Dict:
-        """최종 결정용 모든 분석 결과 반환"""
-        results = {}
-        
-        # AI 분석 결과 매핑
-        ai_mapping = {
-            'ai_technical_analysis': 'technical_analysis',
-            'ai_sentiment_analysis': 'sentiment_analysis',
-            'ai_macro_analysis': 'macro_analysis',
-            'ai_onchain_analysis': 'onchain_analysis',
-            'ai_institutional_analysis': 'institutional_analysis'
-        }
-        
-        for ai_task, result_key in ai_mapping.items():
-            data = self.get_data(ai_task)
-            if data:
-                results[result_key] = data
-            else:
-                results[result_key] = {
-                    'success': False,
-                    'error': f'{ai_task} 결과 없음',
-                    'skip_reason': 'no_result'
-                }
-        
-        # 포지션 분석 (실시간)
+        """최종 결정용 모든 분석 결과 반환 - 코루틴 에러 수정"""
         try:
-            from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
-            position_analysis = analyze_position_status()
-            results['position_analysis'] = position_analysis if position_analysis else {
-                'success': False, 'error': '포지션 분석 실패'
+            results = {}
+            
+            # AI 분석 결과 매핑
+            ai_mapping = {
+                'ai_technical_analysis': 'technical_analysis',
+                'ai_sentiment_analysis': 'sentiment_analysis',
+                'ai_macro_analysis': 'macro_analysis',
+                'ai_onchain_analysis': 'onchain_analysis',
+                'ai_institutional_analysis': 'institutional_analysis'
             }
+            
+            for ai_task, result_key in ai_mapping.items():
+                data = self.get_data(ai_task)
+                if data:
+                    results[result_key] = data
+                else:
+                    results[result_key] = {
+                        'success': False,
+                        'error': f'{ai_task} 결과 없음',
+                        'skip_reason': 'no_result'
+                    }
+            
+            # 🔧 수정: 포지션 분석 (동기적으로 호출)
+            try:
+                from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
+                # 🔧 핵심 수정: await 제거 (동기 함수)
+                position_analysis = analyze_position_status()
+                results['position_analysis'] = position_analysis if position_analysis else {
+                    'success': False, 'error': '포지션 분석 실패'
+                }
+            except Exception as e:
+                logger.error(f"포지션 분석 호출 오류: {e}")
+                results['position_analysis'] = {
+                    'success': False, 'error': str(e)
+                }
+            
+            # 현재 포지션 정보
+            position_data = self.get_data('position_data')
+            if position_data:
+                results['current_position'] = self._extract_position_info(position_data)
+            else:
+                results['current_position'] = {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0
+                }
+            
+            return results
         except Exception as e:
-            results['position_analysis'] = {
-                'success': False, 'error': str(e)
-            }
-        
-        # 현재 포지션 정보
-        position_data = self.get_data('position_data')
-        if position_data:
-            results['current_position'] = self._extract_position_info(position_data)
-        else:
-            results['current_position'] = {
-                'has_position': False,
-                'side': 'none',
-                'size': 0,
-                'entry_price': 0
-            }
-        
-        return results
-    
+            logger.error(f"최종 결정용 분석 결과 수집 오류: {e}")
+            return {}   
+
+
+
     def _extract_position_info(self, position_data) -> Dict:
-        """포지션 데이터에서 현재 포지션 정보 추출"""
+        """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화"""
         try:
             # 기본값
             position_info = {
@@ -358,31 +366,65 @@ class SerialDataScheduler:
                 'available_balance': 0
             }
             
+            # 🔧 수정: position_data가 None이거나 잘못된 형태 체크
+            if not position_data or not isinstance(position_data, dict):
+                logger.warning("포지션 데이터가 없거나 잘못된 형태")
+                return position_info
+            
             # 잔고 정보
             balance = position_data.get('balance', {})
             if isinstance(balance, dict) and 'USDT' in balance:
                 usdt_balance = balance['USDT']
-                position_info.update({
-                    'total_equity': float(usdt_balance.get('total', 0)),
-                    'available_balance': float(usdt_balance.get('free', 0))
-                })
+                # 🔧 수정: None 값 체크 추가
+                total = usdt_balance.get('total', 0)
+                free = usdt_balance.get('free', 0)
+                if total is not None and free is not None:
+                    position_info.update({
+                        'total_equity': float(total),
+                        'available_balance': float(free)
+                    })
             
             # positions에서 BTC 포지션 찾기
             positions = position_data.get('positions', [])
             if isinstance(positions, str):
                 import json
-                positions = json.loads(positions)
+                try:
+                    positions = json.loads(positions)
+                except:
+                    logger.warning("포지션 JSON 파싱 실패")
+                    return position_info
+            
+            if not isinstance(positions, list):
+                logger.warning("포지션 데이터가 리스트가 아님")
+                return position_info
             
             for pos in positions:
-                if 'BTC' in pos.get('symbol', ''):
-                    size = float(pos.get('size', pos.get('contracts', 0)))
+                if not isinstance(pos, dict):
+                    continue
+                    
+                symbol = pos.get('symbol', '')
+                if 'BTC' in symbol:
+                    # 🔧 수정: None 값 체크 강화
+                    size_raw = pos.get('size', pos.get('contracts', 0))
+                    entry_price_raw = pos.get('avgPrice', pos.get('entryPrice', 0))
+                    unrealized_pnl_raw = pos.get('unrealizedPnl', 0)
+                    
+                    # None 체크 후 float 변환
+                    try:
+                        size = float(size_raw) if size_raw is not None else 0
+                        entry_price = float(entry_price_raw) if entry_price_raw is not None else 0
+                        unrealized_pnl = float(unrealized_pnl_raw) if unrealized_pnl_raw is not None else 0
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"포지션 수치 변환 실패: {e}")
+                        continue
+                    
                     if abs(size) > 0:
                         position_info.update({
                             'has_position': True,
                             'side': 'long' if size > 0 else 'short',
                             'size': abs(size),
-                            'entry_price': float(pos.get('avgPrice', pos.get('entryPrice', 0))),
-                            'unrealized_pnl': float(pos.get('unrealizedPnl', 0))
+                            'entry_price': entry_price,
+                            'unrealized_pnl': unrealized_pnl
                         })
                     break
             
@@ -396,7 +438,9 @@ class SerialDataScheduler:
                 'entry_price': 0,
                 'error': str(e)
             }
-    
+
+
+
     def get_status(self) -> Dict:
         """스케줄러 상태 반환"""
         status = {
@@ -551,17 +595,46 @@ class SerialDataScheduler:
             return None
     
     async def _final_decision(self):
-        """최종 결정"""
+        """최종 결정 - 코루틴 에러 수정"""
         try:
-            # 모든 분석 결과 수집
+            # 🔧 수정: 동기적으로 분석 결과 수집
             all_analysis_results = self.get_all_analysis_for_decision()
+            
+            if not all_analysis_results:
+                logger.warning("분석 결과가 없어 최종 결정 불가")
+                return {
+                    'success': False,
+                    'error': '분석 결과 없음',
+                    'result': {
+                        'final_decision': 'Hold',
+                        'decision_confidence': 0,
+                        'needs_human_review': True,
+                        'human_review_reason': '분석 결과 없음'
+                    }
+                }
+            
+            # 성공한 분석 개수 확인
+            success_count = sum(1 for result in all_analysis_results.values() 
+                              if isinstance(result, dict) and result.get('success', False))
+            total_count = len([k for k in all_analysis_results.keys() if k != 'current_position'])
+            
+            logger.info(f"분석 결과 수집 완료: {success_count}/{total_count} 성공")
             
             # 최종 결정 실행
             from docs.investment_ai.final_decisionmaker import make_final_investment_decision
             return await make_final_investment_decision(all_analysis_results)
         except Exception as e:
             logger.error(f"최종 결정 오류: {e}")
-            return None
+            return {
+                'success': False,
+                'error': str(e),
+                'result': {
+                    'final_decision': 'Hold',
+                    'decision_confidence': 0,
+                    'needs_human_review': True,
+                    'human_review_reason': f'최종 결정 오류: {str(e)}'
+                }
+            }
 
 # 전역 인스턴스
 _serial_scheduler: Optional[SerialDataScheduler] = None
