@@ -348,7 +348,7 @@ class SerialDataScheduler:
             return results
         except Exception as e:
             logger.error(f"최종 결정용 분석 결과 수집 오류: {e}")
-            return {}   
+            return {}
 
 
 
@@ -438,8 +438,6 @@ class SerialDataScheduler:
                 'entry_price': 0,
                 'error': str(e)
             }
-
-
 
     def get_status(self) -> Dict:
         """스케줄러 상태 반환"""
