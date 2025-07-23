@@ -1135,8 +1135,7 @@ class FinalDecisionMaker:
                 'analysis_type': 'ai_based',
                 'decision_timestamp': datetime.now(timezone.utc).isoformat(),
                 'model_used': self.model_name,
-                'integrated_analyses': list(integrated_data.keys()),
-                'raw_data': integrated_data
+                'integrated_analyses': list(integrated_data.keys())
             }
             
             logger.info(f"🔍 DEBUG: 최종 AI 결과 처리 완료 - {result_json.get('final_decision', 'Unknown')}")
