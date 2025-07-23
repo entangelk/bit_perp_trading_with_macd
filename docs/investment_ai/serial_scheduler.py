@@ -949,7 +949,7 @@ class SerialDataScheduler:
         """최종 결정 - 코루틴 에러 수정"""
         try:
             # 🔧 수정: 동기적으로 분석 결과 수집
-            all_analysis_results = self.get_all_analysis_for_decision()
+            all_analysis_results = await self.get_all_analysis_for_decision()
             
             if not all_analysis_results:
                 logger.warning("분석 결과가 없어 최종 결정 불가")
