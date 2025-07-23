@@ -76,24 +76,18 @@ class AIAnalysisViewer:
                         "display_name": self.get_task_display_name(doc.get("task_name", "")),
                         "created_at": doc.get("created_at"),
                         "expire_at": doc.get("expire_at"),
-                        "success": False,
-                        "analysis_result": None,
+                        "success": analysis_data.get("success", False),  # ✅ 여기서 바로 설정
+                        "analysis_result": analysis_data,                # ✅ 전체 데이터 저장
                         "raw_data": analysis_data
                     }
-                    
-                    # 분석 결과 파싱
-                    if "analysis_result" in analysis_data:
-                        analysis_result = analysis_data["analysis_result"]
-                        result["success"] = analysis_result.get("success", False)
-                        result["analysis_result"] = analysis_result
-                        
-                        # 성공한 분석의 경우 요약 정보 추출
-                        if result["success"] and isinstance(analysis_result, dict):
-                            result["summary"] = self._extract_summary(doc.get("task_name"), analysis_result)
-                        else:
-                            # 실패한 분석의 경우 실패 정보 추출
-                            result["failure_info"] = self._extract_failure_info(analysis_result)
-                    
+
+                    # 성공한 분석의 경우 요약 정보 추출  
+                    if result["success"] and "result" in analysis_data:
+                        result["summary"] = self._extract_summary(doc.get("task_name"), analysis_data.get("result", {}))
+                    else:
+                        # 실패한 분석의 경우 실패 정보 추출
+                        result["failure_info"] = self._extract_failure_info(analysis_data)
+
                     results.append(result)
                     
                 except Exception as e:
@@ -109,7 +103,7 @@ class AIAnalysisViewer:
     def _extract_summary(self, task_name: str, analysis_result: Dict) -> Dict:
         """분석 결과에서 요약 정보 추출"""
         summary = {
-            "confidence": 0,
+            "confidence": analysis_result.get("confidence", 0),
             "key_points": [],
             "recommendation": "분석 불가"
         }
@@ -118,58 +112,57 @@ class AIAnalysisViewer:
             if task_name == "ai_sentiment_analysis":
                 summary.update({
                     "confidence": analysis_result.get("confidence", 0),
-                    "sentiment": analysis_result.get("market_sentiment_score", 50),
-                    "state": analysis_result.get("sentiment_state", "중립"),
+                    "sentiment_score": analysis_result.get("market_sentiment_score", 50),
+                    "sentiment_state": analysis_result.get("sentiment_state", "중립"),
                     "recommendation": analysis_result.get("investment_recommendation", "중립적 접근")
                 })
                 
             elif task_name == "ai_technical_analysis":
                 summary.update({
                     "confidence": analysis_result.get("confidence", 0),
-                    "trend": analysis_result.get("overall_trend", "중립"),
-                    "signal": analysis_result.get("trading_signal", "Hold"),
-                    "recommendation": analysis_result.get("recommendation", "관망")
+                    "signal": analysis_result.get("overall_signal", "Hold"),
+                    "trend": analysis_result.get("trend_analysis", {}).get("trend_direction", "중립"),
+                    "momentum": analysis_result.get("momentum_analysis", {}).get("momentum_direction", "중립"),
+                    "recommendation": f"{analysis_result.get('overall_signal', 'Hold')} - {analysis_result.get('trend_analysis', {}).get('trend_direction', '중립')} 추세"
                 })
                 
             elif task_name == "ai_macro_analysis":
                 summary.update({
                     "confidence": analysis_result.get("confidence", 0),
-                    "outlook": analysis_result.get("market_outlook", "중립"),
-                    "impact": analysis_result.get("bitcoin_impact", "중립적"),
-                    "recommendation": analysis_result.get("investment_strategy", "신중한 접근")
+                    "macro_score": analysis_result.get("macro_environment_score", 50),
+                    "investment_environment": analysis_result.get("investment_environment", "중립"),
+                    "recommendation": analysis_result.get("btc_recommendation", "신중한 접근")
                 })
                 
             elif task_name == "ai_onchain_analysis":
                 summary.update({
                     "confidence": analysis_result.get("confidence", 0),
-                    "health": analysis_result.get("network_health", "정상"),
-                    "activity": analysis_result.get("activity_level", "보통"),
-                    "recommendation": analysis_result.get("investment_implication", "중립적")
+                    "health_score": analysis_result.get("onchain_health_score", 50),
+                    "signal": analysis_result.get("investment_signal", "Hold"),
+                    "network_security": analysis_result.get("network_security_analysis", "정상"),
+                    "recommendation": analysis_result.get("investment_signal", "중립적")
                 })
                 
             elif task_name == "ai_institutional_analysis":
                 summary.update({
                     "confidence": analysis_result.get("confidence", 0),
-                    "flow": analysis_result.get("flow_direction", "중립"),
-                    "sentiment": analysis_result.get("institutional_sentiment", "중립"),
-                    "recommendation": analysis_result.get("market_implication", "관망")
+                    "flow_score": analysis_result.get("institutional_flow_score", 50),
+                    "signal": analysis_result.get("investment_signal", "Hold"),
+                    "flow_direction": "분산" if "Sell" in analysis_result.get("investment_signal", "") else "중립",
+                    "recommendation": analysis_result.get("investment_signal", "관망")
                 })
                 
-            elif task_name == "ai_final_decision":
+            elif task_name == "final_decision":
                 summary.update({
-                    "confidence": analysis_result.get("ai_confidence", 0),
-                    "decision": analysis_result.get("final_decision", "wait"),
-                    "action": analysis_result.get("position_action", "wait"),
-                    "should_trade": analysis_result.get("should_trade", False),
-                    "execution_success": analysis_result.get("execution_success", False),
-                    "recommendation": analysis_result.get("reasoning", "분석 중")
+                    "confidence": analysis_result.get("decision_confidence", 0),
+                    "decision": analysis_result.get("final_decision", "Hold"),
+                    "action": analysis_result.get("recommended_action", {}).get("action_type", "Hold"),
+                    "recommendation": analysis_result.get("decision_reasoning", "분석 중")[:100] + "..."
                 })
             
             # 공통 키 포인트 추출
-            if "key_insights" in analysis_result:
-                summary["key_points"] = analysis_result["key_insights"][:3]  # 최대 3개
-            elif "analysis_summary" in analysis_result:
-                summary["key_points"] = [analysis_result["analysis_summary"]]
+            if "analysis_summary" in analysis_result:
+                summary["key_points"] = [analysis_result["analysis_summary"][:200] + "..."]
                 
         except Exception as e:
             logger.error(f"요약 정보 추출 오류: {e}")

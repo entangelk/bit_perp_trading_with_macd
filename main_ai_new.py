@@ -118,18 +118,37 @@ async def execute_ai_order(symbol, final_decision_result, config):
         # AI 권장 설정 또는 기본 설정 사용
         usdt_amount = config['usdt_amount']
         leverage = config['leverage']
-        stop_loss = recommended_action.get('mandatory_stop_loss') or config['stop_loss']
-        take_profit = recommended_action.get('mandatory_take_profit') or config['take_profit']
-        
-        # 가격 기반 TP/SL을 pips로 변환 (필요시)
-        if isinstance(stop_loss, float) and stop_loss > 100:
-            stop_loss_pips = abs(current_price - stop_loss) / current_price * 10000
-            stop_loss = min(800, max(200, int(stop_loss_pips)))
-        
-        if isinstance(take_profit, float) and take_profit > 100:
-            take_profit_pips = abs(take_profit - current_price) / current_price * 10000
-            take_profit = min(800, max(200, int(take_profit_pips)))
-        
+
+        if side == 'Buy':
+            sl_price = current_price - config['stop_loss']  
+            tp_price = current_price + config['take_profit']
+        else:  # Sell
+            sl_price = current_price + config['stop_loss']  
+            tp_price = current_price - config['take_profit']
+
+
+        # 🔧 수정: 문자열을 float로 변환 후 처리
+        ai_stop_loss = recommended_action.get('mandatory_stop_loss')
+        ai_take_profit = recommended_action.get('mandatory_take_profit')
+
+        # None이 아니고 'N/A'도 아닌 경우에만 사용
+        if ai_stop_loss and ai_stop_loss != 'N/A':
+            try:
+                stop_loss = float(ai_stop_loss)
+            except (ValueError, TypeError):
+                stop_loss = sl_price
+        else:
+            stop_loss = sl_price
+
+        if ai_take_profit and ai_take_profit != 'N/A':
+            try:
+                take_profit = float(ai_take_profit)
+            except (ValueError, TypeError):
+                take_profit = tp_price
+        else:
+            take_profit = tp_price
+
+      
         logger.info(f"AI 주문 실행: {final_decision} -> {position} (신뢰도: {confidence}%)")
         logger.info(f"주문 상세: 가격={current_price}, SL={stop_loss}, TP={take_profit}")
         

@@ -647,9 +647,11 @@ class SerialDataScheduler:
                         continue
                     
                     if abs(size) > 0:
+                        # side 필드를 직접 사용해야 함
+                        api_side = pos.get('side', '')
                         position_info.update({
                             'has_position': True,
-                            'side': 'long' if size > 0 else 'short',
+                            'side': 'long' if api_side == 'Buy' else 'short',
                             'size': abs(size),
                             'entry_price': entry_price,
                             'unrealized_pnl': unrealized_pnl

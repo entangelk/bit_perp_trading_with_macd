@@ -344,16 +344,10 @@ def set_tp_sl(symbol, stop_loss, take_profit, current_price, side):
     sync_time()
     try:
         # TP 및 SL 가격 계산
-        tp_price = None
-        sl_price = None
+        tp_price = take_profit
+        sl_price = stop_loss
 
-        if side == 'Buy':
-            sl_price = current_price - stop_loss  
-            tp_price = current_price + take_profit
-        else:  # Sell
-            sl_price = current_price + stop_loss  
-            tp_price = current_price - take_profit
-            
+           
         print(f"현재 가격: {current_price}")
         print(f"계산된 sl_price: {sl_price}")
         print(f"계산된 tp_price: {tp_price}")
