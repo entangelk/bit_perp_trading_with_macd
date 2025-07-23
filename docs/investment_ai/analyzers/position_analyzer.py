@@ -187,12 +187,12 @@ class PositionAnalyzer:
     async def analyze_with_ai(self, position_data: Dict) -> Dict:
         """AI 모델을 사용하여 포지션 분석"""
         # 필요할 때만 모델 초기화
-        if self.client is None:
-            self.client, self.model_name = self.get_model()
+        #if self.client is None:
+        #    self.client, self.model_name = self.get_model()
         
-        if self.client is None:
-            logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
-            return self.rule_based_analysis(position_data)
+        #if self.client is None:
+        #    logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
+        #    return self.rule_based_analysis(position_data)
         
         try:
             # 펀딩 정보 추가

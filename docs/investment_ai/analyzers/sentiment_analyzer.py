@@ -399,13 +399,13 @@ class SentimentAnalyzer:
         from ..data_scheduler import mark_ai_api_success, mark_ai_api_failure
         
         # 필요할 때만 모델 초기화
-        if self.client is None:
-            self.client, self.model_name = self.get_model()
+        #if self.client is None:
+        #    self.client, self.model_name = self.get_model()
         
-        if self.client is None:
-            logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
-            mark_ai_api_failure()
-            return self.rule_based_analysis(sentiment_data)
+        #if self.client is None:
+        #    logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
+        #    mark_ai_api_failure()
+        #    return self.rule_based_analysis(sentiment_data)
         
         try:
             # 프롬프트 구성
