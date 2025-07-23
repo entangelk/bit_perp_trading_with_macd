@@ -213,87 +213,73 @@
                                 </span>
                             </div>
 
-                            {% if analysis.success %}
-                            <!-- 성공한 분석의 요약 정보 -->
-                            <div class="space-y-2">
-                                <div class="flex items-center space-x-4 text-sm">
-                                    {% if analysis.summary %}
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">신뢰도:</span>
-                                        <span class="ml-1 font-medium 
-                                            {% if analysis.summary.confidence >= 80 %}text-green-600
-                                            {% elif analysis.summary.confidence >= 60 %}text-yellow-600
-                                            {% else %}text-red-600{% endif %}">
-                                            {{ analysis.summary.confidence }}%
-                                        </span>
-                                    </div>
-                                    {% else %}
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">상태:</span>
-                                        <span class="ml-1 font-medium text-green-600">분석 성공</span>
-                                    </div>
-                                    {% endif %}
-                                    {% if analysis.summary %}
-                                    {% if analysis.task_name == 'ai_sentiment_analysis' %}
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">감정 상태:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.state }}</span>
-                                    </div>
-                                    {% elif analysis.task_name == 'ai_technical_analysis' %}
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">트렌드:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.trend }}</span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">신호:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.signal }}</span>
-                                    </div>
-                                    {% elif analysis.task_name == 'final_decision' %} <!-- ✅ 수정 -->
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">최종 결정:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.decision }}</span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">액션:</span>
-                                        <span class="ml-1 font-medium 
-                                            {% if analysis.summary.action in ['open_long', 'open_short'] %}text-blue-600
-                                            {% elif analysis.summary.action == 'close_position' %}text-orange-600
-                                            {% else %}text-gray-600{% endif %}">
-                                            {{ analysis.summary.action }}
-                                        </span>
-                                    </div>
-                                    {% if analysis.summary.should_trade %}
-                                    <div class="flex items-center">
-                                        <span class="text-gray-600">거래 실행:</span>
-                                        <span
-                                            class="ml-1 font-medium {% if analysis.summary.execution_success %}text-green-600{% else %}text-red-600{% endif %}">
-                                            {% if analysis.summary.execution_success %}성공{% else %}실패{% endif %}
-                                        </span>
-                                    </div>
-                                    {% endif %}
-                                    {% endif %}
-                                </div>
-
-                                {% if analysis.summary and analysis.summary.recommendation %}
-                                <div class="text-sm text-gray-700">
-                                    <span class="font-medium">권장사항:</span> {{ analysis.summary.recommendation }}
-                                </div>
-                                {% endif %}
-
-                                {% if analysis.summary and analysis.summary.key_points %}
-                                <div class="text-sm">
-                                    <span class="font-medium text-gray-700">주요 포인트:</span>
-                                    <ul class="mt-1 list-disc list-inside text-gray-600 space-y-1">
-                                        {% for point in analysis.summary.key_points %}
-                                        <li>{{ point }}</li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% else %}
-                            <!-- 실패한 분석 -->
-                            <div class="space-y-2">
+{% if analysis.success %}
+<!-- 성공한 분석의 요약 정보 -->
+<div class="space-y-2">
+    <div class="flex items-center space-x-4 text-sm">
+        {% if analysis.summary %}
+        <div class="flex items-center">
+            <span class="text-gray-600">신뢰도:</span>
+            <span class="ml-1 font-medium 
+                {% if analysis.summary.confidence >= 80 %}text-green-600
+                {% elif analysis.summary.confidence >= 60 %}text-yellow-600
+                {% else %}text-red-600{% endif %}">
+                {{ analysis.summary.confidence }}%
+            </span>
+        </div>
+        
+        {% if analysis.task_name == 'ai_sentiment_analysis' %}
+        <div class="flex items-center">
+            <span class="text-gray-600">감정 상태:</span>
+            <span class="ml-1 font-medium">{{ analysis.summary.sentiment_state }}</span>
+        </div>
+        {% elif analysis.task_name == 'ai_technical_analysis' %}
+        <div class="flex items-center">
+            <span class="text-gray-600">트렌드:</span>
+            <span class="ml-1 font-medium">{{ analysis.summary.trend }}</span>
+        </div>
+        <div class="flex items-center">
+            <span class="text-gray-600">신호:</span>
+            <span class="ml-1 font-medium">{{ analysis.summary.signal }}</span>
+        </div>
+        {% elif analysis.task_name == 'final_decision' %}
+        <div class="flex items-center">
+            <span class="text-gray-600">최종 결정:</span>
+            <span class="ml-1 font-medium">{{ analysis.summary.decision }}</span>
+        </div>
+        <div class="flex items-center">
+            <span class="text-gray-600">액션:</span>
+            <span class="ml-1 font-medium">{{ analysis.summary.action }}</span>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="flex items-center">
+            <span class="text-gray-600">상태:</span>
+            <span class="ml-1 font-medium text-green-600">분석 성공</span>
+        </div>
+        {% endif %}
+    </div>
+    
+    {% if analysis.summary and analysis.summary.recommendation %}
+    <div class="text-sm text-gray-700">
+        <span class="font-medium">권장사항:</span> {{ analysis.summary.recommendation }}
+    </div>
+    {% endif %}
+    
+    {% if analysis.summary and analysis.summary.key_points %}
+    <div class="text-sm">
+        <span class="font-medium text-gray-700">주요 포인트:</span>
+        <ul class="mt-1 list-disc list-inside text-gray-600 space-y-1">
+            {% for point in analysis.summary.key_points %}
+            <li>{{ point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<!-- 실패한 분석 -->
+<div class="space-y-2">
                                 {% if analysis.failure_info %}
                                 <div class="text-sm">
                                     <div class="flex items-center space-x-2 mb-1">
@@ -332,7 +318,7 @@
                             </div>
                             {% endif %}
                         </div>
-
+                        {% endif %}
                         <!-- 액션 버튼 -->
                         <div class="ml-4">
                             <a href="/ai-analysis/detail?task_name={{ analysis.task_name }}&timestamp={{ analysis.created_at.isoformat() }}"
