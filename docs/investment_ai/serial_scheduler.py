@@ -389,7 +389,7 @@ class SerialDataScheduler:
         logger.warning(f"사용 가능한 데이터 없음: {task_name}")
         return None
     
-    def get_all_analysis_for_decision(self) -> Dict:
+    async def get_all_analysis_for_decision(self) -> Dict:
         """최종 결정용 모든 분석 결과 반환 - 포지션 조건부 처리 추가"""
         try:
             logger.info("🔍 DEBUG: get_all_analysis_for_decision 시작")
@@ -470,17 +470,29 @@ class SerialDataScheduler:
                     import inspect
                     if inspect.iscoroutinefunction(analyze_position_status):
                         logger.info("🔍 DEBUG: position_analyzer가 비동기 함수임 - await로 호출")
-                        # 비동기 함수를 await로 호출
-                        import asyncio
+                        # 비동기 함수를 await로 호출 (동기 함수에서 안전하게 처리)
                         try:
-                            # 현재 이벤트 루프가 있는지 확인
-                            loop = asyncio.get_running_loop()
-                            # 이미 실행 중인 루프에서는 create_task 사용
-                            task = asyncio.create_task(analyze_position_status())
-                            position_analysis = await task
+                            # asyncio.run을 사용해서 비동기 함수 실행
+                            import asyncio
+                            if asyncio.get_running_loop():
+                                # 이미 실행 중인 루프가 있으면 새 태스크로 실행
+                                position_analysis = await analyze_position_status()
+                            else:
+                                # 실행 중인 루프가 없으면 새로 만들어서 실행
+                                position_analysis = asyncio.run(analyze_position_status())
                         except RuntimeError:
-                            # 실행 중인 루프가 없으면 새로 실행
-                            position_analysis = await analyze_position_status()
+                            # 실행 중인 루프에서 새 루프를 만들 수 없는 경우 기본값
+                            logger.warning("🔍 DEBUG: 실행 중인 루프에서 position_analyzer 호출 불가 - 기본값 사용")
+                            position_analysis = {
+                                'success': True,
+                                'result': {
+                                    'recommended_action': 'Wait',
+                                    'position_status': 'Running Loop Conflict',
+                                    'risk_level': 'None',
+                                    'confidence': 50
+                                },
+                                'note': 'Event loop conflict - using default'
+                            }
                     else:
                         position_analysis = analyze_position_status()
                         
@@ -883,7 +895,7 @@ class SerialDataScheduler:
         """최종 결정 - 코루틴 에러 수정"""
         try:
             # 🔧 수정: 동기적으로 분석 결과 수집
-            all_analysis_results = self.get_all_analysis_for_decision()
+            all_analysis_results = await self.get_all_analysis_for_decision()
             
             if not all_analysis_results:
                 logger.warning("분석 결과가 없어 최종 결정 불가")
