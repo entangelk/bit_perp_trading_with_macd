@@ -22,7 +22,7 @@ class SerialTask:
     max_errors: int = 5
     is_running: bool = False
     dependencies: List[str] = None  # 의존성 작업들
-    cache_duration_minutes: int = 60  # 기본 1시간 캐시
+    cache_duration_minutes: int = 10080  # 기본 7일 캐시 (10080분)
 
 class SerialDataScheduler:
     """직렬 카운팅 기반 스케줄러 - 분석기 호출 + MongoDB 저장"""
