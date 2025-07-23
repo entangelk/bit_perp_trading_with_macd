@@ -523,7 +523,9 @@ async def main():
                 
                 # 🔧 최종 결정 실행
                 logger.info("최종 투자 결정 실행 중...")
-                all_analysis_results = await get_all_analysis_for_decision()
+                from docs.investment_ai.serial_scheduler import get_serial_scheduler
+                scheduler = get_serial_scheduler()
+                final_decision_result = scheduler.get_final_decision_result()
                 
                 if not all_analysis_results:
                     logger.warning("분석 결과가 없어 최종 결정 스킵")

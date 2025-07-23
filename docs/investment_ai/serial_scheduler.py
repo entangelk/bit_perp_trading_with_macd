@@ -466,16 +466,21 @@ class SerialDataScheduler:
                     logger.info("🔍 DEBUG: 포지션 있음 - 실제 position_analysis 실행")
                     from docs.investment_ai.analyzers.position_analyzer import analyze_position_status
                     
-                    # analyze_position_status 함수 호출 (동기 함수로 가정)
+                    # analyze_position_status 함수 호출 - 비동기 함수 처리
                     import inspect
                     if inspect.iscoroutinefunction(analyze_position_status):
-                        logger.warning("🔍 DEBUG: position_analyzer가 비동기 함수임 - 동기적으로 호출할 수 없음")
-                        # 비동기 함수는 직렬 스케줄러에서 직접 호출 불가
-                        position_analysis = {
-                            'success': False,
-                            'error': 'position_analyzer는 비동기 함수로 직렬 스케줄러에서 호출 불가',
-                            'skip_reason': 'async_function_in_sync_context'
-                        }
+                        logger.info("🔍 DEBUG: position_analyzer가 비동기 함수임 - await로 호출")
+                        # 비동기 함수를 await로 호출
+                        import asyncio
+                        try:
+                            # 현재 이벤트 루프가 있는지 확인
+                            loop = asyncio.get_running_loop()
+                            # 이미 실행 중인 루프에서는 create_task 사용
+                            task = asyncio.create_task(analyze_position_status())
+                            position_analysis = await task
+                        except RuntimeError:
+                            # 실행 중인 루프가 없으면 새로 실행
+                            position_analysis = await analyze_position_status()
                     else:
                         position_analysis = analyze_position_status()
                         
