@@ -249,8 +249,8 @@ class TechnicalAnalyzer:
     async def analyze_with_ai(self, indicators_data: Dict) -> Dict:
         """AI 모델을 사용하여 기술적 지표 분석"""
         # 필요할 때만 모델 초기화
-        #if self.client is None:
-        #    self.client, self.model_name = self.get_model()
+        if self.client is None:
+            self.client, self.model_name = self.get_model()
         
         #if self.client is None:
         #    logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")

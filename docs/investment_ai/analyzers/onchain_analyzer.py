@@ -835,8 +835,8 @@ class OnchainAnalyzer:
     
     async def analyze_with_ai(self, onchain_data: Dict) -> Dict:
         """AI 모델을 사용하여 온체인 데이터 종합 분석"""
-        #if self.client is None:
-        #    self.client, self.model_name = self.get_model()
+        if self.client is None:
+            self.client, self.model_name = self.get_model()
         
         #if self.client is None:
         #    logger.warning("AI 모델이 없어 규칙 기반 분석으로 대체합니다.")
