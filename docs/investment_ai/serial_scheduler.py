@@ -859,19 +859,45 @@ class SerialDataScheduler:
             return None
     
     async def _update_chart_data(self):
-        """차트 데이터 업데이트 (15분 캔들)"""
+        """차트 데이터 업데이트 - 초기/평상시 구분"""
         try:
-            from docs.get_chart import chart_update_one
-            result, server_time, execution_time = chart_update_one('15m', 'BTCUSDT')
-            return {
-                'success': result is not None,
-                'server_time': server_time,
-                'execution_time': execution_time,
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            }
+            # 🔧 초기 실행 여부 확인 (사이클 1이거나 캐시된 데이터가 없으면 초기)
+            is_initial_run = (self.global_cycle_count <= 1) or (self.get_cached_data("chart_update") is None)
+            
+            if is_initial_run:
+                # 초기 실행: 전체 차트 데이터 수집
+                logger.info("🔄 초기 차트 데이터 전체 수집 시작")
+                from docs.get_chart import chart_update
+                result = chart_update('15m', 'BTCUSDT')
+                
+                return {
+                    'success': result is not None,
+                    'mode': 'full_update',
+                    'message': '전체 차트 데이터 수집 완료',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+            else:
+                # 평상시: 최신 15분봉만 업데이트
+                logger.info("🔄 차트 데이터 최신봉 업데이트")
+                from docs.get_chart import chart_update_one
+                result, server_time, execution_time = chart_update_one('15m', 'BTCUSDT')
+                
+                return {
+                    'success': result is not None,
+                    'mode': 'incremental_update',
+                    'server_time': server_time,
+                    'execution_time': execution_time,
+                    'message': '최신 차트 데이터 업데이트 완료',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+                
         except Exception as e:
             logger.error(f"차트 데이터 업데이트 오류: {e}")
-            return None
+            return {
+                'success': False,
+                'error': str(e),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
     
     # AI 분석 함수들 (분석기 직접 호출)
     async def _ai_technical_analysis(self):
