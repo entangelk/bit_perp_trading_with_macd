@@ -73,30 +73,33 @@ class SerialDataScheduler:
     def _register_tasks(self):
         """작업들 등록 - 분석기 함수 호출만"""
         
+        # 🔧 수정: 모든 캐시를 7일(10080분)로 설정
+        cache_duration_7days = 10080  # 7일 = 7 * 24 * 60 = 10080분
+        
         # 1단계: 포지션 데이터 (매번 실행, 캐시 없음)
         self.register_task("position_data", self._get_position_data, 1, "position", cache_duration_minutes=0)
         
         # 2단계: 차트 외 AI 분석들 (각 분석기가 데이터 수집 포함)
-        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 2, "analysis", cache_duration_minutes=25)  # 30분마다, 25분 캐시
-        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 24, "analysis", cache_duration_minutes=300)  # 6시간마다, 5시간 캐시
-        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 4, "analysis", cache_duration_minutes=50)  # 1시간마다, 50분 캐시
-        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 8, "analysis", cache_duration_minutes=100)  # 2시간마다, 100분 캐시
+        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 30분마다, 7일 캐시
+        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 24, "analysis", cache_duration_minutes=cache_duration_7days)  # 6시간마다, 7일 캐시
+        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 4, "analysis", cache_duration_minutes=cache_duration_7days)  # 1시간마다, 7일 캐시
+        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 8, "analysis", cache_duration_minutes=cache_duration_7days)  # 2시간마다, 7일 캐시
         
         # 3단계: 차트 데이터 업데이트 (매번 실행)
-        self.register_task("chart_update", self._update_chart_data, 1, "chart", cache_duration_minutes=5)
+        self.register_task("chart_update", self._update_chart_data, 1, "chart", cache_duration_minutes=cache_duration_7days)
         
         # 4단계: 기술적 분석 (차트 데이터 의존)
         self.register_task("ai_technical_analysis", self._ai_technical_analysis, 1, "technical",
-                          dependencies=["chart_update"], cache_duration_minutes=10)
+                          dependencies=["chart_update"], cache_duration_minutes=cache_duration_7days)
         
         # 5단계: 최종 결정 (모든 분석 의존)
         self.register_task("final_decision", self._final_decision, 1, "final",
                           dependencies=["ai_technical_analysis", "ai_sentiment_analysis", 
                                       "ai_macro_analysis", "ai_onchain_analysis", 
                                       "ai_institutional_analysis", "position_data"],
-                          cache_duration_minutes=5)
+                          cache_duration_minutes=cache_duration_7days)
         
-        logger.info(f"작업 등록 완료: {len(self.tasks)}개")
+        logger.info(f"작업 등록 완료: {len(self.tasks)}개 (모든 캐시 7일 유지)")
         
         # 단계별 작업 수 로깅
         for stage in self.execution_stages:
@@ -895,7 +898,7 @@ class SerialDataScheduler:
         """최종 결정 - 코루틴 에러 수정"""
         try:
             # 🔧 수정: 동기적으로 분석 결과 수집
-            all_analysis_results = await self.get_all_analysis_for_decision()
+            all_analysis_results = self.get_all_analysis_for_decision()
             
             if not all_analysis_results:
                 logger.warning("분석 결과가 없어 최종 결정 불가")
