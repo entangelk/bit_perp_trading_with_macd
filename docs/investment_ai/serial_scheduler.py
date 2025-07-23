@@ -184,15 +184,24 @@ class SerialDataScheduler:
             return None
 
     def _update_cache(self, task: SerialTask, data: any):
-        """MongoDB에 캐시 데이터 저장"""
-        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+        """MongoDB에 캐시 데이터 저장 - 디버깅 로그 강화"""
+        if task.cache_duration_minutes == 0:
+            logger.debug(f"캐시 비활성화: {task.name} (cache_duration=0)")
+            return
+            
+        if self.cache_collection is None:
+            logger.error(f"MongoDB 연결 없음: {task.name} 저장 실패")
             return
         
         try:
             expire_at = datetime.now(timezone.utc) + timedelta(minutes=task.cache_duration_minutes)
             
+            # 저장할 데이터 크기 확인
+            data_size = len(str(data)) if data else 0
+            logger.info(f"MongoDB 저장 시도: {task.name} (데이터 크기: {data_size}bytes, 만료: {task.cache_duration_minutes}분)")
+            
             # upsert를 사용하여 기존 데이터 업데이트 또는 새로 삽입
-            self.cache_collection.replace_one(
+            result = self.cache_collection.replace_one(
                 {"task_name": task.name},
                 {
                     "task_name": task.name,
@@ -202,9 +211,24 @@ class SerialDataScheduler:
                 },
                 upsert=True
             )
-            logger.debug(f"MongoDB 캐시 업데이트: {task.name}")
+            
+            # 저장 결과 확인
+            if result.upserted_id:
+                logger.info(f"✅ MongoDB 새 문서 생성: {task.name} (ID: {result.upserted_id})")
+            elif result.modified_count > 0:
+                logger.info(f"✅ MongoDB 기존 문서 업데이트: {task.name}")
+            elif result.matched_count > 0:
+                logger.info(f"✅ MongoDB 문서 동일함: {task.name} (변경사항 없음)")
+            else:
+                logger.warning(f"⚠️ MongoDB 저장 결과 이상: {task.name} (matched={result.matched_count}, modified={result.modified_count})")
+                
         except Exception as e:
-            logger.error(f"캐시 업데이트 오류: {e}")
+            logger.error(f"❌ MongoDB 저장 실패: {task.name} - {type(e).__name__}: {e}")
+            # 추가 디버깅 정보
+            logger.error(f"   데이터 타입: {type(data)}, MongoDB 연결: {self.cache_collection is not None}")
+            if hasattr(e, 'details'):
+                logger.error(f"   오류 상세: {e.details}")
+
     
     async def run_task(self, task: SerialTask, stage_name: str, task_index: int, total_tasks: int) -> bool:
         """개별 작업 실행 - MongoDB 저장 기능 추가"""
@@ -221,7 +245,8 @@ class SerialDataScheduler:
                 task.last_result = result
                 task.error_count = 0  # 성공 시 에러 카운트 리셋
                 
-                # 🔧 핵심 추가: MongoDB 저장
+                # 🔧 핵심 추가: MongoDB 저장 (result가 None이 아닐 때만)
+                logger.info(f"작업 결과 저장 시도: {task.name} (결과 타입: {type(result)})")
                 self._update_cache(task, result)
                 
                 # 결과 요약 로깅
@@ -230,7 +255,7 @@ class SerialDataScheduler:
                 return True
             else:
                 task.error_count += 1
-                logger.warning(f"    ❌ {task.name} 실패 (결과 없음)")
+                logger.warning(f"    ❌ {task.name} 실패 (결과가 None) - MongoDB 저장하지 않음")
                 return False
                 
         except asyncio.TimeoutError:
