@@ -1,18 +1,20 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>AI 분석 결과 - 트레이딩 봇</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
         <!-- 헤더 -->
         <div class="mb-6">
             <h1 class="text-3xl font-bold text-gray-800 mb-2">AI 분석 결과</h1>
             <nav class="text-sm text-gray-600">
-                <a href="/" class="hover:text-blue-600">홈</a> &gt; 
+                <a href="/" class="hover:text-blue-600">홈</a> &gt;
                 <span class="text-gray-800">AI 분석 결과</span>
             </nav>
         </div>
@@ -23,7 +25,9 @@
                 <div class="flex items-center">
                     <div class="p-2 bg-blue-100 rounded-lg">
                         <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                            </path>
                         </svg>
                     </div>
                     <div class="ml-4">
@@ -37,7 +41,8 @@
                 <div class="flex items-center">
                     <div class="p-2 bg-green-100 rounded-lg">
                         <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
                         </svg>
                     </div>
                     <div class="ml-4">
@@ -51,7 +56,8 @@
                 <div class="flex items-center">
                     <div class="p-2 bg-red-100 rounded-lg">
                         <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </div>
                     <div class="ml-4">
@@ -65,7 +71,8 @@
                 <div class="flex items-center">
                     <div class="p-2 bg-purple-100 rounded-lg">
                         <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
                         </svg>
                     </div>
                     <div class="ml-4">
@@ -86,7 +93,8 @@
                     <div class="space-y-1 text-sm">
                         <div class="flex justify-between">
                             <span class="text-gray-600">성공률:</span>
-                            <span class="font-medium {% if stats.success_rate >= 80 %}text-green-600{% elif stats.success_rate >= 60 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            <span
+                                class="font-medium {% if stats.success_rate >= 80 %}text-green-600{% elif stats.success_rate >= 60 %}text-yellow-600{% else %}text-red-600{% endif %}">
                                 {{ "%.1f"|format(stats.success_rate) }}%
                             </span>
                         </div>
@@ -97,7 +105,7 @@
                         <div class="flex justify-between">
                             <span class="text-gray-600">성공/실패:</span>
                             <span class="font-medium">
-                                <span class="text-green-600">{{ stats.success }}</span> / 
+                                <span class="text-green-600">{{ stats.success }}</span> /
                                 <span class="text-red-600">{{ stats.failure }}</span>
                             </span>
                         </div>
@@ -113,10 +121,12 @@
             <form method="get" id="filter-form" class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">분석기</label>
-                    <select name="analyzer" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select name="analyzer"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">전체</option>
                         {% for analyzer in analyzers %}
-                        <option value="{{ analyzer.value }}" {% if analyzer.value == current_analyzer %}selected{% endif %}>
+                        <option value="{{ analyzer.value }}" {% if analyzer.value==current_analyzer %}selected{% endif
+                            %}>
                             {{ analyzer.name }}
                         </option>
                         {% endfor %}
@@ -125,49 +135,52 @@
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">조회 기간 (시간)</label>
-                    <select name="hours" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="1" {% if hours == 1 %}selected{% endif %}>1시간</option>
-                        <option value="6" {% if hours == 6 %}selected{% endif %}>6시간</option>
-                        <option value="24" {% if hours == 24 %}selected{% endif %}>24시간</option>
-                        <option value="72" {% if hours == 72 %}selected{% endif %}>3일</option>
-                        <option value="168" {% if hours == 168 %}selected{% endif %}>7일</option>
+                    <select name="hours"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="1" {% if hours==1 %}selected{% endif %}>1시간</option>
+                        <option value="6" {% if hours==6 %}selected{% endif %}>6시간</option>
+                        <option value="24" {% if hours==24 %}selected{% endif %}>24시간</option>
+                        <option value="72" {% if hours==72 %}selected{% endif %}>3일</option>
+                        <option value="168" {% if hours==168 %}selected{% endif %}>7일</option>
                     </select>
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">최대 결과 수</label>
-                    <select name="limit" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="25" {% if limit == 25 %}selected{% endif %}>25개</option>
-                        <option value="50" {% if limit == 50 %}selected{% endif %}>50개</option>
-                        <option value="100" {% if limit == 100 %}selected{% endif %}>100개</option>
-                        <option value="200" {% if limit == 200 %}selected{% endif %}>200개</option>
+                    <select name="limit"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="25" {% if limit==25 %}selected{% endif %}>25개</option>
+                        <option value="50" {% if limit==50 %}selected{% endif %}>50개</option>
+                        <option value="100" {% if limit==100 %}selected{% endif %}>100개</option>
+                        <option value="200" {% if limit==200 %}selected{% endif %}>200개</option>
                     </select>
                 </div>
 
                 <div class="flex items-end">
-                    <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button type="submit"
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         필터 적용
                     </button>
                 </div>
             </form>
-            
+
             <!-- 추가 필터 (성공/실패) -->
             <div class="mt-4 pt-4 border-t border-gray-200">
                 <div class="flex items-center justify-between">
                     <div class="flex space-x-4">
-                        <button onclick="filterByStatus('all')" 
-                                class="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 status-filter active font-bold"
-                                data-status="all">
+                        <button onclick="filterByStatus('all')"
+                            class="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 status-filter active font-bold"
+                            data-status="all">
                             전체
                         </button>
-                        <button onclick="filterByStatus('success')" 
-                                class="px-3 py-1 text-sm rounded-md bg-green-100 text-green-700 hover:bg-green-200 status-filter"
-                                data-status="success">
+                        <button onclick="filterByStatus('success')"
+                            class="px-3 py-1 text-sm rounded-md bg-green-100 text-green-700 hover:bg-green-200 status-filter"
+                            data-status="success">
                             성공만
                         </button>
-                        <button onclick="filterByStatus('failed')" 
-                                class="px-3 py-1 text-sm rounded-md bg-red-100 text-red-700 hover:bg-red-200 status-filter"
-                                data-status="failed">
+                        <button onclick="filterByStatus('failed')"
+                            class="px-3 py-1 text-sm rounded-md bg-red-100 text-red-700 hover:bg-red-200 status-filter"
+                            data-status="failed">
                             실패만
                         </button>
                     </div>
@@ -189,7 +202,8 @@
                         <!-- 분석 정보 -->
                         <div class="flex-1">
                             <div class="flex items-center space-x-2 mb-2">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                <span
+                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
                                     {% if analysis.success %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
                                     {% if analysis.success %}성공{% else %}실패{% endif %}
                                 </span>
@@ -199,10 +213,11 @@
                                 </span>
                             </div>
 
-                            {% if analysis.success and analysis.summary %}
+                            {% if analysis.success %}
                             <!-- 성공한 분석의 요약 정보 -->
                             <div class="space-y-2">
                                 <div class="flex items-center space-x-4 text-sm">
+                                    {% if analysis.summary %}
                                     <div class="flex items-center">
                                         <span class="text-gray-600">신뢰도:</span>
                                         <span class="ml-1 font-medium 
@@ -212,7 +227,13 @@
                                             {{ analysis.summary.confidence }}%
                                         </span>
                                     </div>
-                                    
+                                    {% else %}
+                                    <div class="flex items-center">
+                                        <span class="text-gray-600">상태:</span>
+                                        <span class="ml-1 font-medium text-green-600">분석 성공</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if analysis.summary %}
                                     {% if analysis.task_name == 'ai_sentiment_analysis' %}
                                     <div class="flex items-center">
                                         <span class="text-gray-600">감정 상태:</span>
@@ -227,7 +248,7 @@
                                         <span class="text-gray-600">신호:</span>
                                         <span class="ml-1 font-medium">{{ analysis.summary.signal }}</span>
                                     </div>
-                                    {% elif analysis.task_name == 'ai_final_decision' %}
+                                    {% elif analysis.task_name == 'final_decision' %} <!-- ✅ 수정 -->
                                     <div class="flex items-center">
                                         <span class="text-gray-600">최종 결정:</span>
                                         <span class="ml-1 font-medium">{{ analysis.summary.decision }}</span>
@@ -244,19 +265,22 @@
                                     {% if analysis.summary.should_trade %}
                                     <div class="flex items-center">
                                         <span class="text-gray-600">거래 실행:</span>
-                                        <span class="ml-1 font-medium {% if analysis.summary.execution_success %}text-green-600{% else %}text-red-600{% endif %}">
+                                        <span
+                                            class="ml-1 font-medium {% if analysis.summary.execution_success %}text-green-600{% else %}text-red-600{% endif %}">
                                             {% if analysis.summary.execution_success %}성공{% else %}실패{% endif %}
                                         </span>
                                     </div>
                                     {% endif %}
                                     {% endif %}
                                 </div>
-                                
+
+                                {% if analysis.summary and analysis.summary.recommendation %}
                                 <div class="text-sm text-gray-700">
                                     <span class="font-medium">권장사항:</span> {{ analysis.summary.recommendation }}
                                 </div>
-                                
-                                {% if analysis.summary.key_points %}
+                                {% endif %}
+
+                                {% if analysis.summary and analysis.summary.key_points %}
                                 <div class="text-sm">
                                     <span class="font-medium text-gray-700">주요 포인트:</span>
                                     <ul class="mt-1 list-disc list-inside text-gray-600 space-y-1">
@@ -276,19 +300,22 @@
                                         <span class="text-red-600 font-medium">실패 유형:</span>
                                         <span class="text-gray-700">{{ analysis.failure_info.user_message }}</span>
                                     </div>
-                                    
+
                                     {% if analysis.failure_info.error_count > 0 %}
                                     <div class="flex items-center space-x-2 mb-1">
                                         <span class="text-gray-600">실패 횟수:</span>
-                                        <span class="font-medium text-red-600">{{ analysis.failure_info.error_count }}/{{ analysis.failure_info.max_errors }}</span>
+                                        <span class="font-medium text-red-600">{{ analysis.failure_info.error_count
+                                            }}/{{ analysis.failure_info.max_errors }}</span>
                                         {% if analysis.failure_info.retry_available %}
-                                        <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">재시도 가능</span>
+                                        <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">재시도
+                                            가능</span>
                                         {% else %}
-                                        <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">분석기 비활성화</span>
+                                        <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">분석기
+                                            비활성화</span>
                                         {% endif %}
                                     </div>
                                     {% endif %}
-                                    
+
                                     <div class="text-xs text-gray-500 mt-1">
                                         상세 오류: {{ analysis.failure_info.error_message }}
                                     </div>
@@ -308,8 +335,8 @@
 
                         <!-- 액션 버튼 -->
                         <div class="ml-4">
-                            <a href="/ai-analysis/detail?task_name={{ analysis.task_name }}&timestamp={{ analysis.created_at.isoformat() }}" 
-                               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <a href="/ai-analysis/detail?task_name={{ analysis.task_name }}&timestamp={{ analysis.created_at.isoformat() }}"
+                                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                 상세보기
                             </a>
                         </div>
@@ -319,8 +346,11 @@
             </div>
             {% else %}
             <div class="text-center py-12">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    aria-hidden="true">
+                    <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
                 <h3 class="mt-2 text-sm font-medium text-gray-900">분석 결과 없음</h3>
                 <p class="mt-1 text-sm text-gray-500">선택한 조건에 해당하는 AI 분석 결과가 없습니다.</p>
@@ -330,10 +360,12 @@
 
         <!-- 자동 새로고침 -->
         <div class="mt-6 text-center">
-            <button id="refresh-btn" onclick="window.location.reload()" 
-                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <button id="refresh-btn" onclick="window.location.reload()"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                    </path>
                 </svg>
                 새로고침
             </button>
@@ -348,13 +380,13 @@
                 btn.classList.remove('active', 'font-bold');
             });
             document.querySelector(`[data-status="${status}"]`).classList.add('active', 'font-bold');
-            
+
             // 분석 결과 필터링
             const analysisItems = document.querySelectorAll('[data-analysis-item]');
             analysisItems.forEach(item => {
                 const isSuccess = item.dataset.success === 'true';
                 let show = false;
-                
+
                 if (status === 'all') {
                     show = true;
                 } else if (status === 'success' && isSuccess) {
@@ -362,14 +394,14 @@
                 } else if (status === 'failed' && !isSuccess) {
                     show = true;
                 }
-                
+
                 item.style.display = show ? 'block' : 'none';
             });
-            
+
             // 결과 카운트 업데이트
             updateResultCount();
         }
-        
+
         function updateResultCount() {
             const visibleItems = document.querySelectorAll('[data-analysis-item]:not([style*="display: none"])');
             const countElement = document.querySelector('.result-count');
@@ -377,14 +409,14 @@
                 countElement.textContent = `분석 결과 (${visibleItems.length}개)`;
             }
         }
-        
+
         // 폼 필드 변경 시 자동 제출 기능 (선택사항)
         function enableAutoSubmit() {
             const form = document.getElementById('filter-form');
             const selects = form.querySelectorAll('select');
-            
+
             selects.forEach(select => {
-                select.addEventListener('change', function() {
+                select.addEventListener('change', function () {
                     // 변경 후 짧은 지연 후 제출 (사용자가 여러 선택을 할 수 있도록)
                     setTimeout(() => {
                         form.submit();
@@ -392,21 +424,21 @@
                 });
             });
         }
-        
+
         // 자동 새로고침 (5분마다) - 에러 처리 포함
         let autoRefreshInterval;
         let refreshFailCount = 0;
         const maxFailCount = 3;
-        
+
         function startAutoRefresh() {
-            autoRefreshInterval = setInterval(function() {
+            autoRefreshInterval = setInterval(function () {
                 // 연속 실패가 많으면 새로고침 중단
                 if (refreshFailCount >= maxFailCount) {
                     console.warn('자동 새로고침 중단: 연속 실패 횟수 초과');
                     clearInterval(autoRefreshInterval);
                     return;
                 }
-                
+
                 try {
                     window.location.reload();
                 } catch (error) {
@@ -415,15 +447,15 @@
                 }
             }, 300000); // 5분 = 300,000ms
         }
-        
+
         // 페이지 로드 완료 후 초기화
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             startAutoRefresh();
             // enableAutoSubmit(); // 필요시 주석 해제
         });
-        
+
         // 페이지 가시성 변경 시 새로고침 제어
-        document.addEventListener('visibilitychange', function() {
+        document.addEventListener('visibilitychange', function () {
             if (document.hidden) {
                 // 페이지가 숨겨지면 자동 새로고침 중지
                 if (autoRefreshInterval) {
@@ -437,4 +469,5 @@
         });
     </script>
 </body>
+
 </html>

@@ -268,7 +268,9 @@ class AIAnalysisViewer:
                 for doc in cursor:
                     task_total += 1
                     analysis_data = doc.get("data", {})
-                    if analysis_data.get("analysis_result", {}).get("success", False):
+                    
+                    # 🔧 수정: 올바른 success 체크
+                    if analysis_data.get("success", False):  # analysis_result 제거!
                         task_success += 1
                 
                 stats["by_analyzer"][task_name] = {
