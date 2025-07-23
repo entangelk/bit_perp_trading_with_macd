@@ -660,9 +660,6 @@ class SerialDataScheduler:
                     if cache_doc:
                         has_cache = True
                         if cache_doc.get("created_at"):
-<<<<<<< HEAD
-                            cache_age = datetime.now(timezone.utc) - cache_doc["created_at"]
-=======
                             created_at = cache_doc["created_at"]
                             
                             # timezone 정보 확인 및 변환
@@ -671,7 +668,6 @@ class SerialDataScheduler:
                                 created_at = created_at.replace(tzinfo=timezone.utc)
                             
                             cache_age = datetime.now(timezone.utc) - created_at
->>>>>>> 5aef2fa (update)
                             cache_age_minutes = cache_age.total_seconds() / 60
                 except Exception as e:
                     logger.error(f"캐시 상태 확인 오류: {e}")
