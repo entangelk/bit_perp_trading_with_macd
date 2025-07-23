@@ -29,7 +29,7 @@ class AIAnalysisViewer:
             "ai_macro_analysis",
             "ai_onchain_analysis",
             "ai_institutional_analysis",
-            "ai_final_decision"
+            "final_decision"
         ]
     
     def get_task_display_name(self, task_name: str) -> str:
@@ -40,7 +40,7 @@ class AIAnalysisViewer:
             "ai_macro_analysis": "거시경제 분석", 
             "ai_onchain_analysis": "온체인 분석",
             "ai_institutional_analysis": "기관투자 분석",
-            "ai_final_decision": "최종 AI 투자 결정"
+            "final_decision": "최종 AI 투자 결정"
         }
         return name_mapping.get(task_name, task_name)
     
