@@ -71,7 +71,7 @@ class AIAnalysisViewer:
                     analysis_data = doc.get("data", {})
 
                     has_success = analysis_data.get("success", False)
-                    has_result = "result" in analysis_data and bool(analysis_data.get("result"))
+                    has_result = "result" in analysis_data and analysis_data["result"] is not None
 
                     # 기본 정보
                     result = {
