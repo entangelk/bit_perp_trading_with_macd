@@ -21,7 +21,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # 기존 시스템 함수들
 from docs.get_chart import chart_update, chart_update_one
 from docs.get_current import fetch_investment_status
-from docs.making_order import set_leverage, create_order_with_tp_sl, close_position, get_position_amount
+from docs.making_order import set_leverage, create_order_with_tp_sl, close_position, get_position_amount, set_tp_sl
 from docs.current_price import get_current_price
 from docs.utility.load_data import load_data
 from docs.utility.trade_logger import TradeLogger
@@ -462,6 +462,63 @@ def extract_position_info(position_data):
             'error': str(e)
         }
 
+async def update_existing_position_tp_sl(symbol, final_decision_result, config):
+    """기존 포지션의 TP/SL만 업데이트하는 함수 - 매 사이클마다 적용"""
+    try:
+        # final_decision_result에서 성공 여부 확인
+        if not final_decision_result.get('success', False):
+            logger.warning(f"AI 분석 실패로 TP/SL 업데이트 안함: {final_decision_result.get('error', 'Unknown')}")
+            return False
+        
+        result = final_decision_result.get('result', {})
+        recommended_action = result.get('recommended_action', {})
+        
+        # AI 권장 TP/SL 값 추출 (기존 메인 코드와 동일한 방식)
+        ai_stop_loss = recommended_action.get('mandatory_stop_loss')
+        ai_take_profit = recommended_action.get('mandatory_take_profit')
+        
+        # None이거나 'N/A'인 경우 업데이트하지 않음
+        if not ai_stop_loss or ai_stop_loss == 'N/A':
+            logger.info("AI에서 제공한 stop_loss 값이 없어 업데이트 스킵")
+            return False
+            
+        if not ai_take_profit or ai_take_profit == 'N/A':
+            logger.info("AI에서 제공한 take_profit 값이 없어 업데이트 스킵")
+            return False
+        
+        # 문자열을 float로 변환 (기존 메인 코드 방식)
+        try:
+            stop_loss_price = float(ai_stop_loss)
+            take_profit_price = float(ai_take_profit)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"TP/SL 값 변환 실패: stop_loss={ai_stop_loss}, take_profit={ai_take_profit}, error={e}")
+            return False
+        
+        # 현재 포지션 정보 가져오기
+        amount, side, avgPrice, pnl = get_position_amount(symbol)
+        
+        # 포지션이 없으면 업데이트하지 않음
+        if not side or not avgPrice:
+            logger.info("현재 포지션이 없어 TP/SL 업데이트 스킵")
+            return False
+        
+        logger.info(f"기존 포지션 TP/SL 업데이트 시작: {side} 포지션, 진입가={avgPrice}")
+        logger.info(f"새로운 설정값: SL={stop_loss_price}, TP={take_profit_price}")
+        
+        # TP/SL 설정 적용
+        tp_sl_result = set_tp_sl(symbol, stop_loss_price, take_profit_price, avgPrice, side)
+        
+        if tp_sl_result:
+            logger.info(f"기존 포지션 TP/SL 업데이트 성공: {tp_sl_result}")
+            return True
+        else:
+            logger.warning("기존 포지션 TP/SL 업데이트 실패")
+            return False
+        
+    except Exception as e:
+        logger.error(f"기존 포지션 TP/SL 업데이트 중 오류: {e}", exc_info=True)
+        return False
+
 
 async def main():
     """AI 기반 메인 트레이딩 루프 - 직렬 스케줄러 버전 (순환 import 해결)"""
@@ -601,6 +658,26 @@ async def main():
                 
                 logger.info(f"현재 포지션: {current_position['side']} {current_position['size']}")
                 
+                # 🔧 새로 추가: 기존 포지션이 있으면 TP/SL 업데이트
+                if current_position['has_position']:
+                    logger.info("기존 포지션 발견 - TP/SL 업데이트 시도")
+                    tp_sl_updated = await update_existing_position_tp_sl(config['symbol'], final_decision_result, config)
+                    
+                    if tp_sl_updated:
+                        logger.info("✅ 기존 포지션 TP/SL 업데이트 완료")
+                        try:
+                            trade_logger.log_snapshot(
+                                server_time=datetime.now(timezone.utc),
+                                tag='tp_sl_update',
+                                position=current_position['side'].capitalize()
+                            )
+                        except Exception as e:
+                            logger.warning(f"TP/SL 업데이트 로그 기록 실패: {e}")
+                    else:
+                        logger.info("TP/SL 업데이트 스킵 또는 실패")
+                else:
+                    logger.info("현재 포지션 없음 - TP/SL 업데이트 스킵")
+
                 # AI 결정을 거래 액션으로 변환
                 action = get_action_from_decision(final_decision, current_position)
                 logger.info(f"거래 액션: {action}")
