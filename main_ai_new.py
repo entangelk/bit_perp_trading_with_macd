@@ -440,11 +440,11 @@ def extract_position_info(position_data):
                 except (ValueError, TypeError) as e:
                     logger.warning(f"포지션 수치 변환 실패: {e}")
                     continue
-                
+                side = pos.get('side','none')
                 if abs(size) > 0:
                     position_info.update({
                         'has_position': True,
-                        'side': 'long' if size > 0 else 'short',
+                        'side': 'long' if side == 'Buy' else 'short',
                         'size': abs(size),
                         'entry_price': entry_price,
                         'unrealized_pnl': unrealized_pnl
@@ -588,10 +588,11 @@ async def main():
                         if positions_data:
                             position = positions_data[0]
                             size = float(position.get('size', position.get('contracts', 0)))
+                            side = position.get('side','none')
                             if abs(size) > 0:
                                 current_position.update({
                                     'has_position': True,
-                                    'side': 'long' if size > 0 else 'short',
+                                    'side': 'long' if side == 'Buy' else 'short',
                                     'size': abs(size),
                                     'entry_price': float(position.get('avgPrice', position.get('entryPrice', 0)))
                                 })
