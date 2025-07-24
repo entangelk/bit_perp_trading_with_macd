@@ -69,14 +69,17 @@ class AIAnalysisViewer:
                 try:
                     # 분석 결과 추출
                     analysis_data = doc.get("data", {})
-                    
+
+                    has_success = analysis_data.get("success", False)
+                    has_result = "result" in analysis_data and analysis_data["result"]
+
                     # 기본 정보
                     result = {
                         "task_name": doc.get("task_name"),
                         "display_name": self.get_task_display_name(doc.get("task_name", "")),
                         "created_at": doc.get("created_at"),
                         "expire_at": doc.get("expire_at"),
-                        "success": analysis_data.get("success", False),  # ✅ 여기서 바로 설정
+                        "success": has_success and has_result,  # 둘 다 있어야 성공
                         "analysis_result": analysis_data,                # ✅ 전체 데이터 저장
                         "raw_data": analysis_data
                     }

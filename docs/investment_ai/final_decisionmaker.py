@@ -291,9 +291,10 @@ class FinalDecisionMaker:
             if btc_position:
                 size = float(btc_position.get('size', btc_position.get('contracts', 0)))
                 if abs(size) > 0:
+                    api_side = btc_position.get('side', '')
                     current_position.update({
                         'has_position': True,
-                        'side': 'long' if size > 0 else 'short',
+                        'side': 'long' if api_side == 'Buy' else 'short',
                         'size': abs(size),
                         'entry_price': float(btc_position.get('avgPrice', btc_position.get('entryPrice', 0))),
                         'unrealized_pnl': float(btc_position.get('unrealizedPnl', 0)),
