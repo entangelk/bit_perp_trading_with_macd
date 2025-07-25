@@ -657,9 +657,12 @@ async def main():
                         logger.error(f"포지션 정보 파싱 오류: {e}")
                 
                 logger.info(f"현재 포지션: {current_position['side']} {current_position['size']}")
+
+                # AI 결정을 거래 액션으로 변환
+                action = get_action_from_decision(final_decision, current_position)
                 
                 # 🔧 새로 추가: 기존 포지션이 있으면 TP/SL 업데이트
-                if current_position['has_position']:
+                if current_position['has_position'] and action not in ['reverse_to_long', 'reverse_to_short', 'Reverse to Long','Reverse to Short']:
                     logger.info("기존 포지션 발견 - TP/SL 업데이트 시도")
                     tp_sl_updated = await update_existing_position_tp_sl(config['symbol'], final_decision_result, config)
                     
@@ -678,19 +681,18 @@ async def main():
                 else:
                     logger.info("현재 포지션 없음 - TP/SL 업데이트 스킵")
 
-                # AI 결정을 거래 액션으로 변환
-                action = get_action_from_decision(final_decision, current_position)
+
                 logger.info(f"거래 액션: {action}")
                 
                 # 거래 실행
-                if action == 'wait' or action == 'hold_position':
+                if action in ['wait','Wait','hold_position','Hold Current']:
                     logger.info("거래 대기 또는 포지션 유지")
                     
-                elif action == 'close_position':
+                elif action in ['close_position','Close Position']:
                     logger.info("포지션 종료")
                     close_position(symbol=config['symbol'])
                     
-                elif action in ['reverse_to_long', 'reverse_to_short']:
+                elif action in ['reverse_to_long', 'reverse_to_short', 'Reverse to Long','Reverse to Short']:
                     logger.info(f"포지션 반전: {action}")
                     close_position(symbol=config['symbol'])
                     time.sleep(1)  # 종료 후 잠시 대기
@@ -707,7 +709,7 @@ async def main():
                         except Exception as e:
                             logger.warning(f"거래 로그 기록 실패: {e}")
                     
-                elif action in ['open_long', 'open_short', 'add_long', 'add_short']:
+                elif action in ['open_long', 'open_short', 'add_long', 'add_short','Open Long','Open Short']:
                     logger.info(f"포지션 진입/추가: {action}")
                     order_success = await execute_ai_order(config['symbol'], final_decision_result, config)
                     
