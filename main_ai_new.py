@@ -200,7 +200,7 @@ def get_action_from_decision(final_decision, current_position):
         if final_decision in ['Strong Buy', 'Buy']:
             if not has_position:
                 return 'open_long'
-            elif position_side == 'short':
+            elif final_decision == 'Reverse' and position_side in ['short','Short','Sell']:
                 return 'reverse_to_long'
             else:
                 return 'add_long'
@@ -208,7 +208,7 @@ def get_action_from_decision(final_decision, current_position):
         elif final_decision in ['Strong Sell', 'Sell']:
             if not has_position:
                 return 'open_short'
-            elif position_side == 'long':
+            elif final_decision == 'Reverse' and position_side in ['long', 'Long', 'Buy']:
                 return 'reverse_to_short'
             else:
                 return 'add_short'
