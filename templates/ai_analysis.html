@@ -244,31 +244,37 @@
                                     </div>
                                     {% elif analysis.task_name == 'final_decision' %}
                                     <div class="flex items-center">
-                                        <span class="text-gray-600">최종 결정:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.decision }}</span>
+                                       <span class="text-gray-600">최종 결정:</span>
+                                       <span class="ml-1 font-medium">{{ analysis.summary.decision }}</span>
                                     </div>
                                     <div class="flex items-center">
-                                        <span class="text-gray-600">액션:</span>
-                                        <span class="ml-1 font-medium">{{ analysis.summary.action }}</span>
+                                       <span class="text-gray-600">액션:</span>
+                                       <span class="ml-1 font-medium">{{ analysis.summary.action }}</span>
                                     </div>
                                     <div class="flex items-center">
-                                        <span class="text-gray-600">상태:</span>
-                                        {% if analysis.summary.needs_human_review %}
-                                            <span class="ml-1 font-medium text-red-600">사람 검토 필요 - 주문 중지</span>
-                                        {% else %}
-                                            <span class="ml-1 font-medium text-green-600">분석 성공</span>
-                                        {% endif %}
+                                       <span class="text-gray-600">상태:</span>
+                                       {% if analysis.summary.needs_human_review %}
+                                           <span class="ml-1 font-medium text-red-600">사람 검토 필요 - 주문 중지</span>
+                                       {% else %}
+                                           <span class="ml-1 font-medium text-green-600">분석 성공</span>
+                                       {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    {% else %}
+                                    <div class="flex items-center">
+                                       <span class="text-gray-600">상태:</span>
+                                       <span class="ml-1 font-medium text-green-600">분석 성공</span>
                                     </div>
                                     {% endif %}
                                     </div>
                                     {% if analysis.summary.needs_human_review and analysis.summary.human_review_reason %}
                                     <div class="text-sm text-gray-700">
-                                        <span class="font-medium">검토 사유:</span> {{ analysis.summary.human_review_reason }}
+                                       <span class="font-medium">검토 사유:</span> {{ analysis.summary.human_review_reason }}
                                     </div>
                                     {% endif %}
                                     {% if analysis.summary and analysis.summary.recommendation %}
                                     <div class="text-sm text-gray-700">
-                                        <span class="font-medium">권장사항:</span> {{ analysis.summary.recommendation }}
+                                       <span class="font-medium">권장사항:</span> {{ analysis.summary.recommendation }}
                                     </div>
                                     {% endif %}
 
