@@ -101,4 +101,7 @@ def fetch_investment_status():
 
 if __name__ == "__main__":
     balance, positions_json, ledger = fetch_investment_status()
+    sync_time()
+    positions = bybit.fetch_positions()
+    print(positions)
     pass
