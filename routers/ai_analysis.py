@@ -185,7 +185,9 @@ class AIAnalysisViewer:
                     "confidence": analysis_result.get("decision_confidence", 0),
                     "decision": analysis_result.get("final_decision", "Hold"),
                     "action": analysis_result.get("recommended_action", {}).get("action_type", "Hold"),
-                    "recommendation": analysis_result.get("decision_reasoning", "분석 중")[:100] + "..."
+                    "recommendation": analysis_result.get("decision_reasoning", "분석 중")[:100] + "...",
+                    "needs_human_review" : analysis_result.get("needs_human_review", False),
+                    "human_review_reason" : analysis_result.get("human_review_reason", "분석 중")[:100] + "..."
                 })
             
             # 공통 키 포인트 추출
