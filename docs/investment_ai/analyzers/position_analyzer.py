@@ -53,94 +53,133 @@ class PositionAnalyzer:
             return None, None
     
     def parse_position_data(self, balance, positions_json, ledger) -> Dict:
-        """포지션 데이터를 분석용으로 파싱"""
-        try:
-            # 기본 정보 추출
-            total_equity = float(balance['info']['result']['list'][0]['totalEquity'])
-            available_balance = float(balance['info']['result']['list'][0]['totalAvailableBalance'])
-            total_unrealized_pnl = float(balance['info']['result']['list'][0]['totalPerpUPL'])
-            
-            # 포지션 정보 파싱
-            positions = json.loads(positions_json) if positions_json else []
-            current_positions = []
-            
-            for pos in positions:
-                if float(pos['contracts']) > 0:
-                    position_info = {
-                        'symbol': pos['symbol'],
-                        'side': pos['side'],  # 'Buy' or 'Sell'
-                        'size': float(pos['contracts']),
-                        'entry_price': float(pos['entryPrice']),
-                        'mark_price': float(pos['markPrice']),
-                        'unrealized_pnl': float(pos['unrealizedPnl']),
-                        'leverage': float(pos['leverage']),
-                        'liquidation_price': pos.get('liquidationPrice', 0)
-                    }
-                    
-                    # 수익률 계산
-                    if position_info['side'] == 'Buy':
-                        pnl_ratio = ((position_info['mark_price'] - position_info['entry_price']) / position_info['entry_price']) * 100
-                    else:  # Sell
-                        pnl_ratio = ((position_info['entry_price'] - position_info['mark_price']) / position_info['entry_price']) * 100
-                    
-                    position_info['pnl_ratio'] = pnl_ratio
-                    
-                    # 청산가까지 거리 계산
-                    if position_info['liquidation_price'] and position_info['liquidation_price'] > 0:
+            """포지션 데이터를 분석용으로 파싱 - SL/TP 정보 추가"""
+            try:
+                # 기본 정보 추출
+                total_equity = float(balance['info']['result']['list'][0]['totalEquity'])
+                available_balance = float(balance['info']['result']['list'][0]['totalAvailableBalance'])
+                total_unrealized_pnl = float(balance['info']['result']['list'][0]['totalPerpUPL'])
+                
+                # 포지션 정보 파싱
+                positions = json.loads(positions_json) if positions_json else []
+                current_positions = []
+                
+                for pos in positions:
+                    if float(pos['contracts']) > 0:
+                        position_info = {
+                            'symbol': pos['symbol'],
+                            'side': pos['side'],  # 'Buy' or 'Sell'
+                            'size': float(pos['contracts']),
+                            'entry_price': float(pos['entryPrice']),
+                            'mark_price': float(pos['markPrice']),
+                            'unrealized_pnl': float(pos['unrealizedPnl']),
+                            'leverage': float(pos['leverage']),
+                            'liquidation_price': pos.get('liquidationPrice', 0),
+                            # 🔧 새로 추가: SL/TP 정보
+                            'stop_loss_price': float(pos.get('stopLossPrice', 0)) if pos.get('stopLossPrice') and pos.get('stopLossPrice') != '' else None,
+                            'take_profit_price': float(pos.get('takeProfitPrice', 0)) if pos.get('takeProfitPrice') and pos.get('takeProfitPrice') != '' else None,
+                            'has_stop_loss': pos.get('stopLossPrice') is not None and pos.get('stopLossPrice') != '' and float(pos.get('stopLossPrice', 0)) > 0,
+                            'has_take_profit': pos.get('takeProfitPrice') is not None and pos.get('takeProfitPrice') != '' and float(pos.get('takeProfitPrice', 0)) > 0
+                        }
+                        
+                        # 수익률 계산
                         if position_info['side'] == 'Buy':
-                            liquidation_distance = ((position_info['mark_price'] - float(position_info['liquidation_price'])) / position_info['mark_price']) * 100
+                            pnl_ratio = ((position_info['mark_price'] - position_info['entry_price']) / position_info['entry_price']) * 100
                         else:  # Sell
-                            liquidation_distance = ((float(position_info['liquidation_price']) - position_info['mark_price']) / position_info['mark_price']) * 100
-                        position_info['liquidation_distance'] = liquidation_distance
-                    else:
-                        position_info['liquidation_distance'] = 100  # 청산가 정보 없으면 안전하다고 가정
-                    
-                    current_positions.append(position_info)
-            
-            # 최근 거래 내역 파싱 (최근 5개)
-            recent_trades = []
-            for trade in ledger[:5]:
-                if trade.get('type') == 'trade':
-                    trade_info = {
-                        'symbol': trade['info'].get('symbol', ''),
-                        'side': trade['info'].get('side', ''),
-                        'price': float(trade['info'].get('tradePrice', 0)),
-                        'quantity': float(trade['info'].get('qty', 0)),
-                        'fee': float(trade['info'].get('fee', 0)),
-                        'timestamp': trade.get('datetime', '')
+                            pnl_ratio = ((position_info['entry_price'] - position_info['mark_price']) / position_info['entry_price']) * 100
+                        
+                        position_info['pnl_ratio'] = pnl_ratio
+                        
+                        # 청산가까지 거리 계산
+                        if position_info['liquidation_price'] and position_info['liquidation_price'] > 0:
+                            if position_info['side'] == 'Buy':
+                                liquidation_distance = ((position_info['mark_price'] - float(position_info['liquidation_price'])) / position_info['mark_price']) * 100
+                            else:  # Sell
+                                liquidation_distance = ((float(position_info['liquidation_price']) - position_info['mark_price']) / position_info['mark_price']) * 100
+                            position_info['liquidation_distance'] = liquidation_distance
+                        else:
+                            position_info['liquidation_distance'] = 100  # 청산가 정보 없으면 안전하다고 가정
+                        
+                        # 🔧 새로 추가: SL/TP까지 거리 계산
+                        if position_info['stop_loss_price']:
+                            if position_info['side'] == 'Buy':
+                                sl_distance = ((position_info['mark_price'] - position_info['stop_loss_price']) / position_info['mark_price']) * 100
+                            else:  # Sell
+                                sl_distance = ((position_info['stop_loss_price'] - position_info['mark_price']) / position_info['mark_price']) * 100
+                            position_info['stop_loss_distance'] = sl_distance
+                        else:
+                            position_info['stop_loss_distance'] = None
+                        
+                        if position_info['take_profit_price']:
+                            if position_info['side'] == 'Buy':
+                                tp_distance = ((position_info['take_profit_price'] - position_info['mark_price']) / position_info['mark_price']) * 100
+                            else:  # Sell
+                                tp_distance = ((position_info['mark_price'] - position_info['take_profit_price']) / position_info['mark_price']) * 100
+                            position_info['take_profit_distance'] = tp_distance
+                        else:
+                            position_info['take_profit_distance'] = None
+                        
+                        current_positions.append(position_info)
+                
+                # 최근 거래 내역 파싱 (최근 5개)
+                recent_trades = []
+                for trade in ledger[:5]:
+                    if trade.get('type') == 'trade':
+                        trade_info = {
+                            'symbol': trade['info'].get('symbol', ''),
+                            'side': trade['info'].get('side', ''),
+                            'price': float(trade['info'].get('tradePrice', 0)),
+                            'quantity': float(trade['info'].get('qty', 0)),
+                            'fee': float(trade['info'].get('fee', 0)),
+                            'timestamp': trade.get('datetime', '')
+                        }
+                        recent_trades.append(trade_info)
+                
+                # 포지션 상태 요약
+                if not current_positions:
+                    position_status = "None"
+                elif len(current_positions) == 1:
+                    position_status = current_positions[0]['side']  # 'Buy' or 'Sell'
+                else:
+                    position_status = "Multiple"
+                
+                # 🔧 새로 추가: 전체 SL/TP 설정 상태 요약
+                total_positions = len(current_positions)
+                positions_with_sl = sum(1 for pos in current_positions if pos['has_stop_loss'])
+                positions_with_tp = sum(1 for pos in current_positions if pos['has_take_profit'])
+                
+                return {
+                    'position_status': position_status,
+                    'total_equity': total_equity,
+                    'available_balance': available_balance,
+                    'unrealized_pnl': total_unrealized_pnl,
+                    'current_positions': current_positions,
+                    'recent_trades': recent_trades,
+                    'position_count': len(current_positions),
+                    # 🔧 새로 추가: SL/TP 설정 상태 요약
+                    'sl_tp_summary': {
+                        'total_positions': total_positions,
+                        'positions_with_stop_loss': positions_with_sl,
+                        'positions_with_take_profit': positions_with_tp,
+                        'sl_coverage_ratio': (positions_with_sl / total_positions * 100) if total_positions > 0 else 0,
+                        'tp_coverage_ratio': (positions_with_tp / total_positions * 100) if total_positions > 0 else 0,
+                        'risk_protection_status': 'Complete' if positions_with_sl == total_positions and positions_with_tp == total_positions else 'Incomplete'
                     }
-                    recent_trades.append(trade_info)
-            
-            # 포지션 상태 요약
-            if not current_positions:
-                position_status = "None"
-            elif len(current_positions) == 1:
-                position_status = current_positions[0]['side']  # 'Buy' or 'Sell'
-            else:
-                position_status = "Multiple"
-            
-            return {
-                'position_status': position_status,
-                'total_equity': total_equity,
-                'available_balance': available_balance,
-                'unrealized_pnl': total_unrealized_pnl,
-                'current_positions': current_positions,
-                'recent_trades': recent_trades,
-                'position_count': len(current_positions)
-            }
-            
-        except Exception as e:
-            logger.error(f"포지션 데이터 파싱 중 오류: {e}")
-            return {
-                'position_status': 'Error',
-                'total_equity': 0,
-                'available_balance': 0,
-                'unrealized_pnl': 0,
-                'current_positions': [],
-                'recent_trades': [],
-                'position_count': 0,
-                'error': str(e)
-            }
+                }
+                
+            except Exception as e:
+                logger.error(f"포지션 데이터 파싱 중 오류: {e}")
+                return {
+                    'position_status': 'Error',
+                    'total_equity': 0,
+                    'available_balance': 0,
+                    'unrealized_pnl': 0,
+                    'current_positions': [],
+                    'recent_trades': [],
+                    'position_count': 0,
+                    'sl_tp_summary': {'risk_protection_status': 'Error'},
+                    'error': str(e)
+                }
     
     def get_funding_info(self) -> Dict:
         """펀딩피 관련 정보 수집"""

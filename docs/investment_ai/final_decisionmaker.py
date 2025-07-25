@@ -248,71 +248,128 @@ class FinalDecisionMaker:
             }
 
     def _extract_current_position_from_data(self, position_data: Dict) -> Dict:
-        """포지션 데이터에서 현재 포지션 상태 추출"""
-        try:
-            current_position = {
-                'has_position': False,
-                'side': 'none',
-                'size': 0,
-                'entry_price': 0,
-                'unrealized_pnl': 0,
-                'margin_ratio': 0,
-                'total_equity': 0,
-                'available_balance': 0
-            }
-            
-            # 잔고 정보 추출
-            balance = position_data.get('balance', {})
-            if isinstance(balance, dict) and 'USDT' in balance:
-                usdt_balance = balance['USDT']
-                current_position.update({
-                    'total_equity': float(usdt_balance.get('total', 0)),
-                    'available_balance': float(usdt_balance.get('free', 0))
-                })
-            
-            # positions 필드에서 BTC 포지션 찾기
-            positions = position_data.get('positions', [])
-            if isinstance(positions, str):
-                import json
-                try:
-                    positions = json.loads(positions)
-                except:
-                    positions = []
-            
-            btc_position = None
-            if isinstance(positions, list):
-                for pos in positions:
-                    if isinstance(pos, dict):
-                        symbol = pos.get('symbol', '').upper()
-                        if 'BTC' in symbol:
-                            btc_position = pos
-                            break
-            
-            if btc_position:
-                size = float(btc_position.get('size', btc_position.get('contracts', 0)))
-                if abs(size) > 0:
-                    api_side = btc_position.get('side', '')
+            """포지션 데이터에서 현재 포지션 상태 추출 - SL/TP 정보 추가"""
+            try:
+                current_position = {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0,
+                    'unrealized_pnl': 0,
+                    'margin_ratio': 0,
+                    'total_equity': 0,
+                    'available_balance': 0,
+                    # 🔧 새로 추가: SL/TP 정보
+                    'stop_loss_price': None,
+                    'take_profit_price': None,
+                    'has_stop_loss': False,
+                    'has_take_profit': False,
+                    'stop_loss_distance': None,
+                    'take_profit_distance': None
+                }
+                
+                # 잔고 정보 추출
+                balance = position_data.get('balance', {})
+                if isinstance(balance, dict) and 'USDT' in balance:
+                    usdt_balance = balance['USDT']
                     current_position.update({
-                        'has_position': True,
-                        'side': 'long' if api_side == 'Buy' else 'short',
-                        'size': abs(size),
-                        'entry_price': float(btc_position.get('avgPrice', btc_position.get('entryPrice', 0))),
-                        'unrealized_pnl': float(btc_position.get('unrealizedPnl', 0)),
-                        'margin_ratio': float(btc_position.get('marginRatio', 0))
+                        'total_equity': float(usdt_balance.get('total', 0)),
+                        'available_balance': float(usdt_balance.get('free', 0))
                     })
-            
-            # logger.debug(f"포지션 상태 추출 완료: {current_position['side']} {current_position['size']}")
-            return current_position
-            
-        except Exception as e:
-            logger.error(f"포지션 상태 추출 오류: {e}")
-            return {
-                'has_position': False,
-                'side': 'none',
-                'size': 0,
-                'entry_price': 0,
-                'error': str(e)
-            }
+                
+                # positions 필드에서 BTC 포지션 찾기
+                positions = position_data.get('positions', [])
+                if isinstance(positions, str):
+                    import json
+                    try:
+                        positions = json.loads(positions)
+                    except:
+                        positions = []
+                
+                btc_position = None
+                if isinstance(positions, list):
+                    for pos in positions:
+                        if isinstance(pos, dict):
+                            symbol = pos.get('symbol', '').upper()
+                            if 'BTC' in symbol:
+                                btc_position = pos
+                                break
+                
+                if btc_position:
+                    size = float(btc_position.get('size', btc_position.get('contracts', 0)))
+                    if abs(size) > 0:
+                        api_side = btc_position.get('side', '')
+                        entry_price = float(btc_position.get('avgPrice', btc_position.get('entryPrice', 0)))
+                        mark_price = float(btc_position.get('markPrice', entry_price))
+                        
+                        # 🔧 새로 추가: SL/TP 정보 추출
+                        stop_loss_price = None
+                        take_profit_price = None
+                        has_stop_loss = False
+                        has_take_profit = False
+                        
+                        # API 응답에서 SL/TP 가격 추출
+                        if btc_position.get('stopLossPrice') and float(btc_position.get('stopLossPrice', 0)) > 0:
+                            stop_loss_price = float(btc_position['stopLossPrice'])
+                            has_stop_loss = True
+                        
+                        if btc_position.get('takeProfitPrice') and float(btc_position.get('takeProfitPrice', 0)) > 0:
+                            take_profit_price = float(btc_position['takeProfitPrice'])
+                            has_take_profit = True
+                        
+                        # 🔧 새로 추가: SL/TP까지 거리 계산
+                        stop_loss_distance = None
+                        take_profit_distance = None
+                        
+                        if stop_loss_price and mark_price > 0:
+                            if api_side == 'Buy':  # 롱 포지션
+                                stop_loss_distance = ((mark_price - stop_loss_price) / mark_price) * 100
+                            else:  # 숏 포지션
+                                stop_loss_distance = ((stop_loss_price - mark_price) / mark_price) * 100
+                        
+                        if take_profit_price and mark_price > 0:
+                            if api_side == 'Buy':  # 롱 포지션
+                                take_profit_distance = ((take_profit_price - mark_price) / mark_price) * 100
+                            else:  # 숏 포지션
+                                take_profit_distance = ((mark_price - take_profit_price) / mark_price) * 100
+                        
+                        current_position.update({
+                            'has_position': True,
+                            'side': 'long' if api_side == 'Buy' else 'short',
+                            'size': abs(size),
+                            'entry_price': entry_price,
+                            'unrealized_pnl': float(btc_position.get('unrealizedPnl', 0)),
+                            'margin_ratio': float(btc_position.get('marginRatio', 0)),
+                            # 🔧 새로 추가: SL/TP 정보
+                            'stop_loss_price': stop_loss_price,
+                            'take_profit_price': take_profit_price,
+                            'has_stop_loss': has_stop_loss,
+                            'has_take_profit': has_take_profit,
+                            'stop_loss_distance': round(stop_loss_distance, 2) if stop_loss_distance is not None else None,
+                            'take_profit_distance': round(take_profit_distance, 2) if take_profit_distance is not None else None
+                        })
+                
+                # logger.debug(f"포지션 상태 추출 완료: {current_position['side']} {current_position['size']}")
+                # logger.debug(f"SL/TP 정보: SL={current_position['stop_loss_price']}, TP={current_position['take_profit_price']}")
+                
+                return current_position
+                
+            except Exception as e:
+                logger.error(f"포지션 상태 추출 오류: {e}")
+                return {
+                    'has_position': False,
+                    'side': 'none',
+                    'size': 0,
+                    'entry_price': 0,
+                    'error': str(e),
+                    # 🔧 오류 시에도 SL/TP 기본값 포함
+                    'stop_loss_price': None,
+                    'take_profit_price': None,
+                    'has_stop_loss': False,
+                    'has_take_profit': False,
+                    'stop_loss_distance': None,
+                    'take_profit_distance': None
+                }
 
 
 
