@@ -169,10 +169,15 @@ class SerialDataScheduler:
         
         try:
             # MongoDB에서 캐시 데이터 조회
-            cache_doc = self.cache_collection.find_one({
+            cache_doc = self.cache_collection.find({
                 "task_name": task_name,
                 "expire_at": {"$gt": datetime.now(timezone.utc)}
-            }), sort=[("created_at", -1)])  # 최신순 정렬 추가
+            }).sort([("created_at", -1)]).limit(1)
+
+            if cursor.count() > 0:
+                cache_doc = cursor[0]
+            else:
+                cache_doc = None
             
             if cache_doc:
                 logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")
