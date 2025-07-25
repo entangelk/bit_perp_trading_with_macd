@@ -31,7 +31,32 @@ class AIAnalysisViewer:
             "ai_institutional_analysis",
             "final_decision"
         ]
-    
+
+    def sort_by_latest_first(self, analyses: List[Dict]) -> List[Dict]:
+        """분석기별 최신 데이터를 맨 위로 이동"""
+        if not analyses:
+            return analyses
+        
+        # 각 분석기별 최신 데이터 찾기
+        latest_by_task = {}
+        other_analyses = []
+        
+        for analysis in analyses:
+            task_name = analysis.get('task_name')
+            if task_name not in latest_by_task:
+                # 첫 번째로 발견된 것이 최신 (이미 시간순 역순 정렬되어 있음)
+                latest_by_task[task_name] = analysis
+            else:
+                # 최신이 아닌 나머지들
+                other_analyses.append(analysis)
+        
+        # 최신 데이터들을 맨 위로, 나머지는 시간순으로 유지
+        latest_analyses = list(latest_by_task.values())
+        # 최신 데이터들도 시간순 정렬
+        latest_analyses.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+        
+        return latest_analyses + other_analyses
+
     def get_task_display_name(self, task_name: str) -> str:
         """작업명을 표시용 이름으로 변환"""
         name_mapping = {
@@ -97,7 +122,7 @@ class AIAnalysisViewer:
                     logger.error(f"분석 결과 파싱 오류: {e}")
                     continue
             
-            return results
+            return self.sort_by_latest_first(results)
             
         except Exception as e:
             logger.error(f"AI 분석 결과 조회 오류: {e}")

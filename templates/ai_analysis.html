@@ -208,8 +208,8 @@
                                     {% if analysis.success %}성공{% else %}실패{% endif %}
                                 </span>
                                 <h3 class="text-lg font-medium text-gray-900">{{ analysis.display_name }}</h3>
-                                <span class="text-sm text-gray-500">
-                                    {{ analysis.created_at.strftime('%Y-%m-%d %H:%M:%S') }} KST
+                                <span class="text-sm text-gray-500 time-display" data-utc-time="{{ analysis.created_at.isoformat() }}">
+                                    로딩 중...
                                 </span>
                             </div>
 
@@ -359,6 +359,37 @@
     </div>
 
     <script>
+        // UTC to KST 변환 함수
+        function convertUTCtoKST() {
+            document.querySelectorAll('[data-utc-time]').forEach(element => {
+                try {
+                    const utcTime = new Date(element.dataset.utcTime);
+                    
+                    // UTC 시간이 유효한지 확인
+                    if (isNaN(utcTime.getTime())) {
+                        element.textContent = '시간 오류';
+                        return;
+                    }
+                    
+                    // UTC+9 (KST) 변환
+                    const kstTime = new Date(utcTime.getTime() + (9 * 60 * 60 * 1000));
+                    
+                    // YYYY-MM-DD HH:MM:SS 형식으로 포맷
+                    const formatted = kstTime.getFullYear() + '-' + 
+                                     String(kstTime.getMonth() + 1).padStart(2, '0') + '-' + 
+                                     String(kstTime.getDate()).padStart(2, '0') + ' ' +
+                                     String(kstTime.getHours()).padStart(2, '0') + ':' + 
+                                     String(kstTime.getMinutes()).padStart(2, '0') + ':' + 
+                                     String(kstTime.getSeconds()).padStart(2, '0');
+                    
+                    element.textContent = formatted + ' KST';
+                } catch (error) {
+                    console.error('시간 변환 오류:', error);
+                    element.textContent = '시간 변환 실패';
+                }
+            });
+        }
+
         // 성공/실패 필터링 함수
         function filterByStatus(status) {
             // 버튼 상태 업데이트
@@ -436,6 +467,10 @@
 
         // 페이지 로드 완료 후 초기화
         document.addEventListener('DOMContentLoaded', function () {
+            // UTC to KST 시간 변환 먼저 실행
+            convertUTCtoKST();
+            
+            // 자동 새로고침 시작
             startAutoRefresh();
             // enableAutoSubmit(); // 필요시 주석 해제
         });
@@ -451,6 +486,8 @@
                 // 페이지가 다시 보이면 자동 새로고침 재시작
                 refreshFailCount = 0; // 실패 카운트 리셋
                 startAutoRefresh();
+                // 페이지가 다시 보일 때 시간 재변환
+                convertUTCtoKST();
             }
         });
     </script>
