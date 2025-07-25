@@ -172,7 +172,7 @@ class SerialDataScheduler:
             cache_doc = self.cache_collection.find_one({
                 "task_name": task_name,
                 "expire_at": {"$gt": datetime.now(timezone.utc)}
-            })
+            }), sort=[("created_at", -1)])  # 최신순 정렬 추가
             
             if cache_doc:
                 logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")
@@ -200,17 +200,13 @@ class SerialDataScheduler:
             data_size = len(str(data)) if data else 0
             logger.info(f"MongoDB 저장 시도: {task.name} (데이터 크기: {data_size}bytes, 만료: {task.cache_duration_minutes}분)")
             
-            # upsert를 사용하여 기존 데이터 업데이트 또는 새로 삽입
-            result = self.cache_collection.replace_one(
-                {"task_name": task.name},
-                {
-                    "task_name": task.name,
-                    "data": data,
-                    "created_at": datetime.now(timezone.utc),
-                    "expire_at": expire_at
-                },
-                upsert=True
-            )
+            # 새 문서로 삽입 (덮어쓰지 않음)
+            result = self.cache_collection.insert_one({
+                "task_name": task.name,
+                "data": data,
+                "created_at": datetime.now(timezone.utc),
+                "expire_at": expire_at
+            })
             
             # 저장 결과 확인
             if result.upserted_id:
