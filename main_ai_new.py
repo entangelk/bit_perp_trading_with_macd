@@ -176,8 +176,8 @@ async def execute_ai_order(symbol, final_decision_result, config):
             usdt_amount=usdt_amount,
             leverage=leverage,
             current_price=current_price,
-            stop_loss=stop_loss,
-            take_profit=take_profit
+            stop_loss=sl_price,
+            take_profit=tp_price
         )
         
         if order_response:
