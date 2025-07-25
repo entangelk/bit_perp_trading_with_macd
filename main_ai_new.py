@@ -221,6 +221,25 @@ def get_action_from_decision(final_decision, current_position):
     except Exception:
         return 'wait'
 
+def normalize_position_side(side_value):
+    """
+    포지션 방향을 안전하게 정규화하는 함수
+    API 응답의 다양한 형태를 모두 처리
+    """
+    if not side_value:
+        return 'none'
+    
+    side_str = str(side_value).lower().strip()
+    
+    # Long 포지션 케이스들
+    if side_str in ['buy', 'long', 'bid', '1']:
+        return 'long'
+    # Short 포지션 케이스들  
+    elif side_str in ['sell', 'short', 'ask', '-1']:
+        return 'short'
+    else:
+        return 'none'
+
 async def get_all_analysis_for_decision():
     """최종 결정용 분석 데이터 수집 - 포지션 조건부 처리 추가"""
     try:
@@ -375,8 +394,27 @@ async def get_all_analysis_for_decision():
         logger.error(f"🔍 DEBUG: 분석 데이터 수집 전체 오류: {e}")
         return {}
 
+def normalize_position_side(side_value):
+    """
+    포지션 방향을 안전하게 정규화하는 헬퍼 함수
+    API 응답의 다양한 형태를 모두 처리
+    """
+    if not side_value:
+        return 'none'
+    
+    side_str = str(side_value).lower().strip()
+    
+    # Long 포지션 케이스들
+    if side_str in ['buy', 'long', 'bid', '1']:
+        return 'long'
+    # Short 포지션 케이스들  
+    elif side_str in ['sell', 'short', 'ask', '-1']:
+        return 'short'
+    else:
+        return 'none'
+
 def extract_position_info(position_data):
-    """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화"""
+    """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화 (기존 함수명 유지)"""
     try:
         # 기본값
         position_info = {
@@ -440,11 +478,15 @@ def extract_position_info(position_data):
                 except (ValueError, TypeError) as e:
                     logger.warning(f"포지션 수치 변환 실패: {e}")
                     continue
-                side = pos.get('side','none')
+                
+                # 🔧 핵심 수정: 안전한 포지션 방향 처리
+                side_raw = pos.get('side', 'none')
+                position_side = normalize_position_side(side_raw)
+                
                 if abs(size) > 0:
                     position_info.update({
                         'has_position': True,
-                        'side': 'long' if side == 'Buy' else 'short',
+                        'side': position_side,  # ✅ 정규화된 값 사용
                         'size': abs(size),
                         'entry_price': entry_price,
                         'unrealized_pnl': unrealized_pnl
@@ -645,11 +687,15 @@ async def main():
                         if positions_data:
                             position = positions_data[0]
                             size = float(position.get('size', position.get('contracts', 0)))
-                            side = position.get('side','none')
+
+                            # 🔧 핵심 수정: 안전한 포지션 방향 처리
+                            side_raw = position.get('side','none')
+                            position_side = normalize_position_side(side_raw)  # ✅ 정규화 함수 사용
+
                             if abs(size) > 0:
                                 current_position.update({
                                     'has_position': True,
-                                    'side': 'long' if side == 'Buy' else 'short',
+                                    'side': position_side,  # ✅ 정규화된 값 사용
                                     'size': abs(size),
                                     'entry_price': float(position.get('avgPrice', position.get('entryPrice', 0)))
                                 })
