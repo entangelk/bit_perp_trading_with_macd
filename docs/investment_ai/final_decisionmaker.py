@@ -26,11 +26,11 @@ class FinalDecisionMaker:
         
         # 분석별 기본 가중치 (상황에 따라 동적 조정)
         self.default_weights = {
-            'position_analysis': 25,      # 현재 포지션 상태 (최우선)
-            'technical_analysis': 20,     # 기술적 분석 (단기 신호)
-            'sentiment_analysis': 15,     # 시장 심리 (시장 분위기)
-            'macro_analysis': 15,         # 거시경제 (중장기 환경)
-            'onchain_analysis': 15,       # 온체인 데이터 (펀더멘털)
+            'position_analysis': 20,      # 현재 포지션 상태 (최우선)
+            'technical_analysis': 30,     # 기술적 분석 (단기 신호)
+            'sentiment_analysis': 30,     # 시장 심리 (시장 분위기)
+            'macro_analysis': 5,         # 거시경제 (중장기 환경)
+            'onchain_analysis': 5,       # 온체인 데이터 (펀더멘털)
             'institutional_analysis': 10  # 기관 투자 흐름 (장기 트렌드)
         }
         
