@@ -556,11 +556,13 @@ if __name__ == "__main__":
     take_profit = 400
     stop_loss = 400
     current_price = 104644.90
+    sl_price = 118128.9
+    tp_price = 116438.4
     # set_leverage(symbol, leverage)
     # get_server_time()
     # close_position(symbol)
-    amount,side,avgPrice,pnl = get_position_amount(symbol)
-    # set_tp_sl(symbol, stop_loss, take_profit, current_price, side)
+    # amount,side,avgPrice,pnl = get_position_amount(symbol)
+    set_tp_sl(symbol, sl_price, tp_price, current_price, side)
     # from current_price import get_current_price
     # current_price = get_current_price(symbol=symbol)
     # create_order_with_tp_sl(symbol, side, usdt_amount, leverage,current_price,stop_loss,take_profit)

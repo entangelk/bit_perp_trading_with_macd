@@ -157,27 +157,17 @@ class SerialDataScheduler:
         return True, "ready"
 
     def get_cached_data(self, task_name: str) -> Optional[any]:
-        """MongoDB에서 캐시된 데이터 반환"""
-        if task_name not in self.tasks:
-            return None
-        
-        task = self.tasks[task_name]
-        
-        # 캐시 사용 안하는 경우
-        if task.cache_duration_minutes == 0 or self.cache_collection is None:
-            return None
-        
         try:
-            # MongoDB에서 캐시 데이터 조회
-            cache_doc = self.cache_collection.find({
+            # ✅ 수정: 올바른 MongoDB 쿼리
+            cursor = self.cache_collection.find({
                 "task_name": task_name,
                 "expire_at": {"$gt": datetime.now(timezone.utc)}
             }).sort([("created_at", -1)]).limit(1)
-
-            if cursor.count() > 0:
-                cache_doc = cursor[0]
-            else:
-                cache_doc = None
+            
+            cache_doc = None
+            for doc in cursor:  # cursor에서 첫 번째 문서 가져오기
+                cache_doc = doc
+                break
             
             if cache_doc:
                 logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")

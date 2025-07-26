@@ -198,19 +198,26 @@ def get_action_from_decision(final_decision, current_position):
         has_position = current_position.get('has_position', False)
         position_side = current_position.get('side', 'none')
         
+        # ✅ 추가: Reverse 처리
+        if final_decision == 'Reverse':
+            if has_position:
+                if position_side in ['short', 'Short', 'Sell']:
+                    return 'reverse_to_long'
+                elif position_side in ['long', 'Long', 'Buy']:
+                    return 'reverse_to_short'
+            else:
+                return 'wait'  # 포지션 없으면 대기
+
+
         if final_decision in ['Strong Buy', 'Buy']:
             if not has_position:
                 return 'open_long'
-            elif final_decision == 'Reverse' and position_side in ['short','Short','Sell']:
-                return 'reverse_to_long'
             else:
                 return 'add_long'
                 
         elif final_decision in ['Strong Sell', 'Sell']:
             if not has_position:
                 return 'open_short'
-            elif final_decision == 'Reverse' and position_side in ['long', 'Long', 'Buy']:
-                return 'reverse_to_short'
             else:
                 return 'add_short'
                 

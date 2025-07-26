@@ -683,7 +683,7 @@ CONFIG = {
                 "position_size": "포지션 크기 (총 자산 대비 %)",
                 "leverage": "권장 레버리지 (진입시에만)",
                 "mandatory_stop_loss": "필수 스톱로스 가격 (반드시 숫자로만)",
-                "mandatory_take_profit": "필수 테이크프로핏 가격 (반드시 숫자로만)"
+                "mandatory_take_profit": "필수 테이크프로핏 가격 (반드시 숫자자로만)"
             }},
             "reverse_analysis": {{
                 "reverse_considered": true/false,
