@@ -157,25 +157,41 @@ class SerialDataScheduler:
         return True, "ready"
 
     def get_cached_data(self, task_name: str) -> Optional[any]:
-        try:
-            # ✅ 수정: 올바른 MongoDB 쿼리
-            cursor = self.cache_collection.find({
-                "task_name": task_name,
-                "expire_at": {"$gt": datetime.now(timezone.utc)}
-            }).sort([("created_at", -1)]).limit(1)
-            
-            cache_doc = None
-            for doc in cursor:  # cursor에서 첫 번째 문서 가져오기
-                cache_doc = doc
-                break
-            
-            if cache_doc:
-                logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name}")
-                return cache_doc.get("data")
-            
+        """MongoDB에서 캐시된 데이터 반환 - 버그 수정"""
+        if task_name not in self.tasks:
             return None
+        
+        task = self.tasks[task_name]
+        
+        # 캐시 사용 안하는 경우
+        if task.cache_duration_minutes == 0 or self.cache_collection is None:
+            return None
+        
+        try:
+            # ✅ 수정: aggregate를 사용해서 가장 확실하게 최신 문서 하나만 가져오기
+            pipeline = [
+                {
+                    "$match": {
+                        "task_name": task_name,
+                        "expire_at": {"$gt": datetime.now(timezone.utc)}
+                    }
+                },
+                {"$sort": {"created_at": -1}},  # 최신순 정렬
+                {"$limit": 1}                   # 하나만 가져오기
+            ]
+            
+            result = list(self.cache_collection.aggregate(pipeline))
+            
+            if result:
+                cache_doc = result[0]
+                logger.debug(f"MongoDB 캐시된 데이터 사용: {task_name} (created: {cache_doc.get('created_at')})")
+                return cache_doc.get("data")
+            else:
+                logger.debug(f"MongoDB 캐시 데이터 없음: {task_name}")
+                return None
+            
         except Exception as e:
-            logger.error(f"캐시 데이터 조회 오류: {e}")
+            logger.error(f"캐시 데이터 조회 오류 ({task_name}): {e}")
             return None
 
     def _update_cache(self, task: SerialTask, data: any):
