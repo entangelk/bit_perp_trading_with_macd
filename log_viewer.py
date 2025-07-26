@@ -114,8 +114,8 @@ def check_process_status(script_name):
 from docs.utility.trade_analyzer import TradeAnalyzer
 from docs.investment_ai.data_scheduler import get_data_status, get_recovery_status, get_ai_api_status_summary, test_ai_api_connection
 
-# 15분 차트 데이터를 사용하도록 초기화
-analyzer = TradeAnalyzer(collection_name="chart_15m")
+# 차트 아날라이저 초기화
+analyzer = TradeAnalyzer()
 
 
 @app.get("/", response_class=HTMLResponse)

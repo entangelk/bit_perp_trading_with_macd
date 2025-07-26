@@ -18,7 +18,7 @@ class TradeAnalyzer:
         self.logs_file = self.logs_dir / "snapshots_daily.json"
         
         # 시간 간격 설정 (15분 = 900초)
-        self.time_threshold = time_threshold  # 15분 간격에 맞춘 임계값
+        self.time_threshold = time_threshold  # 자동 분분 간격에 맞춘 임계값
         
     def get_chart_data(self, hours=24):
         """MongoDB에서 차트 데이터 가져오기"""
