@@ -16,6 +16,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from docs.investment_ai.config import CONFIG, API_KEY, MODEL_PRIORITY
 from docs.investment_ai.indicators.technical_indicators import calculate_technical_indicators, get_latest_indicators
 
+# 🔧 새로 추가: 동적 timeframe 설정을 위한 import
+from main_ai_new import TRADING_CONFIG, TIME_VALUES
+
 # 로깅 설정
 logger = logging.getLogger("technical_analyzer")
 
@@ -26,23 +29,34 @@ class TechnicalAnalyzer:
         # AI 모델 초기화 제거 - 실제 호출 시에만 초기화
         self.client = None
         self.model_name = None
+        
+        # 🔧 새로 추가: 동적 timeframe 설정
+        self.get_timevalue = TRADING_CONFIG.get('set_timevalue', '15m')
+        self.int_timevalue = TIME_VALUES.get(self.get_timevalue, 15)  # 기본값은 15분
+        logger.info(f"동적 timeframe 설정: {self.get_timevalue} ({self.int_timevalue}분)")
     
     # 수정 후 코드
 
-    def get_chart_data(self, symbol='BTCUSDT', timeframe='15m', limit=300):
-        """차트 데이터 수집 (15분봉 300개, 미완성 캔들 제외)"""
+    def get_chart_data(self, symbol='BTCUSDT', timeframe=None, limit=300):
+        """차트 데이터 수집 (동적 timeframe 사용, 미완성 캔들 제외)"""
         try:
+            # 🔧 수정: timeframe이 None이면 TRADING_CONFIG에서 가져오기
+            if timeframe is None:
+                timeframe = self.get_timevalue
+            
             from pymongo import MongoClient
             
             mongoClient = MongoClient("mongodb://mongodb:27017")
             database = mongoClient["bitcoin"]
             
+            # 🔧 수정: 동적 컬렉션 이름 생성
             chart_collections = {
                 '1m': 'chart_1m',
                 '3m': 'chart_3m', 
                 '5m': 'chart_5m',
                 '15m': 'chart_15m',
-                '1h': 'chart_1h',
+                '60m': 'chart_60m',  # 새로 추가
+                '1h': 'chart_60m',   # 1h는 60m과 동일
                 '30d': 'chart_30d'
             }
             
@@ -132,7 +146,7 @@ class TechnicalAnalyzer:
             return df, {}
     
     def extract_key_indicators(self, df, config_info):
-        """AI 분석용 핵심 지표 추출 - 새로운 구조 사용"""
+        """AI 분석용 핵심 지표 추출 - 새로운 구조 사용 + 동적 시간 계산"""
         try:
             # 새로운 get_latest_indicators 함수 사용
             latest_indicators = get_latest_indicators(df)
@@ -140,12 +154,19 @@ class TechnicalAnalyzer:
             if not latest_indicators:
                 raise ValueError("지표 추출 실패")
             
-            # 24시간 변동률 계산 (15분봉 기준 96개 = 24시간)
+            # 🔧 수정: 동적 24시간 변동률 계산
             current_price = latest_indicators['basic']['current_price']
             price_change_24h = 0
-            if len(df) >= 96:
-                price_24h_ago = float(df.iloc[-96]['close'])
+            
+            # 24시간에 해당하는 캔들 개수를 동적으로 계산
+            candles_per_24h = int(24 * 60 / self.int_timevalue)  # 24시간 * 60분 / timeframe분
+            
+            if len(df) >= candles_per_24h:
+                price_24h_ago = float(df.iloc[-candles_per_24h]['close'])
                 price_change_24h = ((current_price - price_24h_ago) / price_24h_ago * 100)
+                logger.info(f"24시간 변동률 계산: {candles_per_24h}개 캔들 사용 ({self.get_timevalue})")
+            else:
+                logger.warning(f"24시간 데이터 부족: {len(df)}개 < {candles_per_24h}개 필요")
             
             # AI가 이해하기 쉬운 형태로 재구성
             analysis_data = {
@@ -153,6 +174,11 @@ class TechnicalAnalyzer:
                 'price_change_24h': round(price_change_24h, 2),
                 'volume': latest_indicators['basic']['volume'],
                 'timestamp': latest_indicators['basic']['timestamp'],
+                'timeframe_info': {  # 🔧 새로 추가: timeframe 정보
+                    'timeframe': self.get_timevalue,
+                    'minutes_per_candle': self.int_timevalue,
+                    'candles_per_24h': candles_per_24h
+                },
                 
                 # 추세 분석
                 'trend_indicators': {
@@ -282,6 +308,7 @@ class TechnicalAnalyzer:
                     'analysis_type': 'ai_based',
                     'data_timestamp': datetime.now(timezone.utc).isoformat(),
                     'model_used': self.model_name,
+                    'timeframe_used': self.get_timevalue,  # 🔧 새로 추가
                     'raw_data': indicators_data
                 }
                 
@@ -412,6 +439,7 @@ class TechnicalAnalyzer:
                 'analysis_type': 'rule_based',
                 'data_timestamp': datetime.now(timezone.utc).isoformat(),
                 'model_used': 'rule_based_fallback',
+                'timeframe_used': self.get_timevalue,  # 🔧 새로 추가
                 'signal_score': signal_score,
                 'total_signals': total_signals,
                 'raw_data': indicators_data
@@ -428,10 +456,14 @@ class TechnicalAnalyzer:
                 "analysis_summary": f"기술적 분석 중 오류 발생: {str(e)}"
             }
     
-    async def analyze_technical_indicators(self, symbol='BTCUSDT', timeframe='15m', limit=300) -> Dict:
-        """기술적 지표 분석 메인 함수"""
+    async def analyze_technical_indicators(self, symbol='BTCUSDT', timeframe=None, limit=300) -> Dict:
+        """기술적 지표 분석 메인 함수 (동적 timeframe 사용)"""
         try:
-            logger.info("기술적 지표 분석 시작")
+            # 🔧 수정: timeframe이 None이면 TRADING_CONFIG에서 가져오기
+            if timeframe is None:
+                timeframe = self.get_timevalue
+                
+            logger.info(f"기술적 지표 분석 시작 - timeframe: {timeframe}")
             
             # 1. 차트 데이터 수집
             df = self.get_chart_data(symbol, timeframe, limit)
@@ -458,7 +490,7 @@ class TechnicalAnalyzer:
             # 4. AI 분석 수행
             analysis_result = await self.analyze_with_ai(indicators_data)
             
-            logger.info("기술적 지표 분석 완료")
+            logger.info(f"기술적 지표 분석 완료 - timeframe: {timeframe}")
             
             return {
                 "success": True,
@@ -474,9 +506,9 @@ class TechnicalAnalyzer:
                 "analysis_type": "technical_analysis"
             }
 
-# 외부에서 사용할 함수
-async def analyze_technical_indicators(symbol='BTCUSDT', timeframe='15m', limit=300) -> Dict:
-    """기술적 지표를 분석하는 함수"""
+# 외부에서 사용할 함수 (🔧 수정: 기본값을 None으로 변경)
+async def analyze_technical_indicators(symbol='BTCUSDT', timeframe=None, limit=300) -> Dict:
+    """기술적 지표를 분석하는 함수 (동적 timeframe 사용)"""
     analyzer = TechnicalAnalyzer()
     return await analyzer.analyze_technical_indicators(symbol, timeframe, limit)
 
