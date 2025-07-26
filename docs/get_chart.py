@@ -26,7 +26,8 @@ collections_config = {
     'chart_1m': {'size': 200 * 1500, 'max': 1500},  # 실시간 모니터링용
     'chart_3m': {'size': 200 * 2100, 'max': 2100},  # 7일치 보장
     'chart_5m': {'size': 200 * 2100, 'max': 2100},  # 7일치 보장
-    'chart_15m': {'size': 200 * 1000, 'max': 1000}  # 7일치 충분
+    'chart_15m': {'size': 200 * 1000, 'max': 1000},  # 7일치 충분
+    'chart_60m': {'size': 200 * 1000, 'max': 1000}   # 60분 차트 추가
 }
 # 컬렉션 초기화
 for collection_name, config in collections_config.items():
@@ -45,6 +46,7 @@ chart_collection_1m = database['chart_1m']
 chart_collection_3m = database['chart_3m']
 chart_collection_5m = database['chart_5m']
 chart_collection_15m = database['chart_15m']
+chart_collection_60m = database['chart_60m']
 
 # Bybit 거래소 객체 생성 (recvWindow 값 조정)
 bybit = ccxt.bybit({
@@ -150,9 +152,13 @@ def chart_update(update,symbol):
         fetch_and_store_ohlcv(chart_collection_15m, '15m', symbol, limit=1000, minutes_per_unit=15, time_description="15분봉")
         return chart_collection_15m.find_one(sort=[("timestamp", -1)]), server_time
 
+    elif update == '60m':
+        # 60분봉 (최근 1000틱 데이터 저장 및 업데이트)
+        fetch_and_store_ohlcv(chart_collection_60m, '1h', symbol, limit=1000, minutes_per_unit=60, time_description="60분봉")
+        return chart_collection_60m.find_one(sort=[("timestamp", -1)]), server_time
+
     else:
         raise ValueError(f"Invalid update value: {update}")
-
 
 def fetch_latest_ohlcv_and_update_db(symbol, timeframe, collection, max_check_time=240, check_interval=60):
     start_time = time.time()
@@ -223,7 +229,9 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
             collection = chart_collection_5m
         elif update == '15m':
             collection = chart_collection_15m
-            
+        elif update == '60m':
+            collection = chart_collection_60m        
+                
         if collection is None:
             raise ValueError(f"Invalid update value: {update}")
         

@@ -27,7 +27,7 @@ class SerialTask:
 class SerialDataScheduler:
     """직렬 카운팅 기반 스케줄러 - 분석기 호출 + MongoDB 저장"""
     
-    def __init__(self, main_cycle_minutes: int = 15):
+    def __init__(self, main_cycle_minutes: int = 60):  # 15분 → 60분으로 변경
         self.main_cycle_minutes = main_cycle_minutes
         self.tasks: Dict[str, SerialTask] = {}
         self.global_cycle_count = 0
@@ -39,7 +39,7 @@ class SerialDataScheduler:
         self.execution_stages = [
             'position',      # 1단계: 포지션 데이터 (실시간)
             'analysis',      # 2단계: 차트 외 분석들 (각자 데이터 수집 포함)
-            'chart',         # 3단계: 15분 캔들 차트 업데이트
+            'chart',         # 3단계: 60분 캔들 차트 업데이트  # 주석 수정
             'technical',     # 4단계: 기술적 분석 (차트 데이터 의존)
             'final'          # 5단계: 최종 결정
         ]
@@ -79,25 +79,25 @@ class SerialDataScheduler:
         # 1단계: 포지션 데이터 (매번 실행, 캐시 없음)
         self.register_task("position_data", self._get_position_data, 1, "position", cache_duration_minutes=0)
         
-        # 2단계: 차트 외 AI 분석들 (각 분석기가 데이터 수집 포함)
-        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 30분마다, 7일 캐시
-        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 24, "analysis", cache_duration_minutes=cache_duration_7days)  # 6시간마다, 7일 캐시
-        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 4, "analysis", cache_duration_minutes=cache_duration_7days)  # 1시간마다, 7일 캐시
-        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 8, "analysis", cache_duration_minutes=cache_duration_7days)  # 2시간마다, 7일 캐시
+        # 2단계: 차트 외 AI 분석들 (각 분석기가 데이터 수집 포함) - 실행 주기 수정
+        self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 1, "analysis", cache_duration_minutes=cache_duration_7days)  # 2→1로 변경: 1시간마다
+        self.register_task("ai_macro_analysis", self._ai_macro_analysis, 6, "analysis", cache_duration_minutes=cache_duration_7days)  # 24→6으로 변경: 6시간마다
+        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 4→2로 변경: 2시간마다
+        self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 8→2로 변경: 2시간마다
         
         # 3단계: 차트 데이터 업데이트 (매번 실행)
         self.register_task("chart_update", self._update_chart_data, 1, "chart", cache_duration_minutes=cache_duration_7days)
         
         # 4단계: 기술적 분석 (차트 데이터 의존)
         self.register_task("ai_technical_analysis", self._ai_technical_analysis, 1, "technical",
-                          dependencies=["chart_update"], cache_duration_minutes=cache_duration_7days)
+                        dependencies=["chart_update"], cache_duration_minutes=cache_duration_7days)
         
         # 5단계: 최종 결정 (모든 분석 의존)
         self.register_task("final_decision", self._final_decision, 1, "final",
-                          dependencies=["ai_technical_analysis", "ai_sentiment_analysis", 
-                                      "ai_macro_analysis", "ai_onchain_analysis", 
-                                      "ai_institutional_analysis", "position_data"],
-                          cache_duration_minutes=cache_duration_7days)
+                        dependencies=["ai_technical_analysis", "ai_sentiment_analysis", 
+                                    "ai_macro_analysis", "ai_onchain_analysis", 
+                                    "ai_institutional_analysis", "position_data"],
+                        cache_duration_minutes=cache_duration_7days)
         
         logger.info(f"작업 등록 완료: {len(self.tasks)}개 (모든 캐시 7일 유지)")
         
@@ -871,7 +871,7 @@ class SerialDataScheduler:
                 # 초기 실행: 전체 차트 데이터 수집
                 logger.info("🔄 초기 차트 데이터 전체 수집 시작")
                 from docs.get_chart import chart_update
-                result = chart_update('15m', 'BTCUSDT')
+                result = chart_update('60m', 'BTCUSDT')  # 15m → 60m으로 변경
                 
                 return {
                     'success': result is not None,
@@ -880,10 +880,10 @@ class SerialDataScheduler:
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
             else:
-                # 평상시: 최신 15분봉만 업데이트
+                # 평상시: 최신 60분봉만 업데이트
                 logger.info("🔄 차트 데이터 최신봉 업데이트")
                 from docs.get_chart import chart_update_one
-                result, server_time, execution_time = chart_update_one('15m', 'BTCUSDT')
+                result, server_time, execution_time = chart_update_one('60m', 'BTCUSDT')  # 15m → 60m으로 변경
                 
                 return {
                     'success': result is not None,
@@ -907,7 +907,7 @@ class SerialDataScheduler:
         """기술적 분석"""
         try:
             from docs.investment_ai.analyzers.technical_analyzer import analyze_technical_indicators
-            return await analyze_technical_indicators('BTCUSDT', '15m', 300)
+            return await analyze_technical_indicators('BTCUSDT', '60m', 300)  # 15m → 60m으로 변경
         except Exception as e:
             logger.error(f"기술적 분석 오류: {e}")
             return None

@@ -3,9 +3,14 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from pymongo import MongoClient
 from pathlib import Path
+from main_ai_new import TRADING_CONFIG, TIME_VALUES
+
+get_timevalue = TRADING_CONFIG.get('set_timevalue', '15m')
+int_timevalue = TIME_VALUES.get(get_timevalue, 15)  # 기본값은 15분
+collection_name =  f"chart_{get_timevalue}" if not get_timevalue.startswith("chart_") else get_timevalue
 
 class TradeAnalyzer:
-    def __init__(self, mongo_uri="mongodb://mongodb:27017", db_name="bitcoin", collection_name="chart_15m", logs_dir="logs"):
+    def __init__(self, mongo_uri="mongodb://mongodb:27017", db_name="bitcoin", collection_name=collection_name,time_threshold=int_timevalue*60, logs_dir="logs"):
         self.client = MongoClient(mongo_uri)
         self.db = self.client[db_name]
         self.collection = self.db[collection_name]
@@ -13,7 +18,7 @@ class TradeAnalyzer:
         self.logs_file = self.logs_dir / "snapshots_daily.json"
         
         # 시간 간격 설정 (15분 = 900초)
-        self.time_threshold = 900  # 15분 간격에 맞춘 임계값
+        self.time_threshold = time_threshold  # 15분 간격에 맞춘 임계값
         
     def get_chart_data(self, hours=24):
         """MongoDB에서 차트 데이터 가져오기"""

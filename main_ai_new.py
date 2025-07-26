@@ -34,21 +34,22 @@ from docs.investment_ai.data_scheduler import (
 # 🔧 추가: 최종 결정 직접 import (순환 import 방지)
 from docs.investment_ai.final_decisionmaker import make_final_investment_decision
 
-# 설정값 (15분 간격)
+# 설정값 (60분 간격)
 TRADING_CONFIG = {
     'symbol': 'BTCUSDT',
     'leverage': 5,
     'usdt_amount': 0.3,
-    'set_timevalue': '15m',
-    'take_profit': 800,
-    'stop_loss': 800
+    'set_timevalue': '60m',
+    'take_profit': 1000,
+    'stop_loss': 1000
 }
 
 TIME_VALUES = {
     '1m': 1,
     '3m': 3,
     '5m': 5,
-    '15m': 15
+    '15m': 15,
+    '60m': 60
 }
 
 # API 키
@@ -271,19 +272,19 @@ async def get_all_analysis_for_decision():
         
         for result_key, get_func in analyses:
             try:
-                logger.info(f"🔍 DEBUG: {result_key} 수집 시작")
+                # logger.info(f"🔍 DEBUG: {result_key} 수집 시작")
                 result = await get_func()
                 
-                logger.info(f"🔍 DEBUG: {result_key} 결과 타입: {type(result)}")
-                logger.info(f"🔍 DEBUG: {result_key} 결과가 None: {result is None}")
+                # logger.info(f"🔍 DEBUG: {result_key} 결과 타입: {type(result)}")
+                # logger.info(f"🔍 DEBUG: {result_key} 결과가 None: {result is None}")
                 
-                if result and isinstance(result, dict):
-                    logger.info(f"🔍 DEBUG: {result_key} 키들: {list(result.keys())}")
-                    if 'success' in result:
-                        logger.info(f"🔍 DEBUG: {result_key} success: {result.get('success')}")
+                # if result and isinstance(result, dict):
+                    # logger.info(f"🔍 DEBUG: {result_key} 키들: {list(result.keys())}")
+                    # if 'success' in result:
+                        # logger.info(f"🔍 DEBUG: {result_key} success: {result.get('success')}")
                 
                 results[result_key] = result if result else {'success': False, 'error': f'{result_key} 결과 없음'}
-                logger.info(f"🔍 DEBUG: {result_key} 수집 완료")
+                # logger.info(f"🔍 DEBUG: {result_key} 수집 완료")
             except Exception as e:
                 logger.error(f"🔍 DEBUG: {result_key} 수집 실패: {e}")
                 results[result_key] = {'success': False, 'error': str(e)}
@@ -293,12 +294,12 @@ async def get_all_analysis_for_decision():
         try:
             position_data = await get_position_data()
             
-            logger.info(f"🔍 DEBUG: position_data 타입: {type(position_data)}")
-            logger.info(f"🔍 DEBUG: position_data가 None: {position_data is None}")
+            # logger.info(f"🔍 DEBUG: position_data 타입: {type(position_data)}")
+            # logger.info(f"🔍 DEBUG: position_data가 None: {position_data is None}")
             
             if position_data:
-                if isinstance(position_data, dict):
-                    logger.info(f"🔍 DEBUG: position_data 키들: {list(position_data.keys())}")
+                # if isinstance(position_data, dict):
+                    # logger.info(f"🔍 DEBUG: position_data 키들: {list(position_data.keys())}")
                 current_position_info = extract_position_info(position_data)
                 results['current_position'] = current_position_info
                 logger.info("🔍 DEBUG: 포지션 데이터 추출 완료")
@@ -326,7 +327,7 @@ async def get_all_analysis_for_decision():
         logger.info("🔍 DEBUG: 포지션 분석 수집 시작")
         try:
             has_position = current_position_info.get('has_position', False)
-            logger.info(f"🔍 DEBUG: 포지션 상태 확인 - has_position: {has_position}")
+            # logger.info(f"🔍 DEBUG: 포지션 상태 확인 - has_position: {has_position}")
             
             if has_position:
                 # 포지션이 있을 때만 실제 분석 실행
@@ -340,13 +341,13 @@ async def get_all_analysis_for_decision():
                 else:
                     position_analysis = analyze_position_status()
                 
-                logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과 타입: {type(position_analysis)}")
-                logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과가 None: {position_analysis is None}")
+                # logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과 타입: {type(position_analysis)}")
+                # logger.info(f"🔍 DEBUG: 실제 포지션 분석 결과가 None: {position_analysis is None}")
                 
-                if position_analysis and isinstance(position_analysis, dict):
-                    logger.info(f"🔍 DEBUG: 실제 포지션 분석 키들: {list(position_analysis.keys())}")
-                    if 'success' in position_analysis:
-                        logger.info(f"🔍 DEBUG: 실제 포지션 분석 success: {position_analysis.get('success')}")
+                # if position_analysis and isinstance(position_analysis, dict):
+                    # logger.info(f"🔍 DEBUG: 실제 포지션 분석 키들: {list(position_analysis.keys())}")
+                    # if 'success' in position_analysis:
+                        # logger.info(f"🔍 DEBUG: 실제 포지션 분석 success: {position_analysis.get('success')}")
                 
                 results['position_analysis'] = position_analysis if position_analysis else {
                     'success': False, 'error': '포지션 분석 실패'
@@ -381,13 +382,13 @@ async def get_all_analysis_for_decision():
                           if isinstance(result, dict) and result.get('success', False))
         total_count = len(results)
         
-        logger.info(f"🔍 DEBUG: 최종 수집 결과 - 성공: {success_count}/{total_count}")
-        logger.info(f"🔍 DEBUG: 최종 결과 키들: {list(results.keys())}")
+        # logger.info(f"🔍 DEBUG: 최종 수집 결과 - 성공: {success_count}/{total_count}")
+        # logger.info(f"🔍 DEBUG: 최종 결과 키들: {list(results.keys())}")
         
         # 각 결과의 success 상태 로깅
-        for key, value in results.items():
-            if isinstance(value, dict) and 'success' in value:
-                logger.info(f"🔍 DEBUG: 최종 {key} success: {value.get('success')}")
+        # for key, value in results.items():
+            # if isinstance(value, dict) and 'success' in value:
+                # logger.info(f"🔍 DEBUG: 최종 {key} success: {value.get('success')}")
         
         return results
     except Exception as e:
@@ -712,18 +713,18 @@ async def main():
                     logger.info("기존 포지션 발견 - TP/SL 업데이트 시도")
                     tp_sl_updated = await update_existing_position_tp_sl(config['symbol'], final_decision_result, config)
                     
-                    if tp_sl_updated:
-                        logger.info("✅ 기존 포지션 TP/SL 업데이트 완료")
-                        try:
-                            trade_logger.log_snapshot(
-                                server_time=datetime.now(timezone.utc),
-                                tag='tp_sl_update',
-                                position=current_position['side'].capitalize()
-                            )
-                        except Exception as e:
-                            logger.warning(f"TP/SL 업데이트 로그 기록 실패: {e}")
-                    else:
-                        logger.info("TP/SL 업데이트 스킵 또는 실패")
+                    # if tp_sl_updated:
+                    #     logger.info("✅ 기존 포지션 TP/SL 업데이트 완료")
+                    #     try:
+                    #         trade_logger.log_snapshot(
+                    #             server_time=datetime.now(timezone.utc),
+                    #             tag='tp_sl_update',
+                    #             position=current_position['side'].capitalize()
+                    #         )
+                    #     except Exception as e:
+                    #         logger.warning(f"TP/SL 업데이트 로그 기록 실패: {e}")
+                    # else:
+                    #     logger.info("TP/SL 업데이트 스킵 또는 실패")
                 else:
                     logger.info("현재 포지션 없음 - TP/SL 업데이트 스킵")
 
