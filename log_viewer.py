@@ -10,11 +10,12 @@ import psutil
 from datetime import datetime
 import uvicorn
 from pathlib import Path
+from docs.utility.logger.access_logger import SecurityLoggingMiddleware
 from routers.trading_stats import router as trading_stats_router
 from routers.ai_analysis import router as ai_analysis_router
 import time
 import json
-
+import logging
 
 class HostValidationMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, allowed_hosts):
@@ -49,6 +50,8 @@ ALLOWED_HOSTS = [
 # 기존 FastAPI 앱에 미들웨어 추가
 app.add_middleware(HostValidationMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
+# 보안 로깅 미들웨어 추가
+app.add_middleware(SecurityLoggingMiddleware)
 
 app.include_router(trading_stats_router)
 app.include_router(ai_analysis_router)

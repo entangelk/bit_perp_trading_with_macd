@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import pandas as pd
 from datetime import datetime
-from logger import logger
+from docs.utility.logger.logger import logger
 import sys
 import os
 # 프로젝트 루트 디렉토리 추가

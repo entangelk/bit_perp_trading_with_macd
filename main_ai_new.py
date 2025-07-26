@@ -13,7 +13,7 @@ import json
 import sys
 import os
 import asyncio
-from logger import logger
+from docs.utility.logger.logger import logger
 
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))

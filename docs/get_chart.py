@@ -9,7 +9,7 @@ import os
 # trading_bot 디렉토리를 Python 경로에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from logger import logger
+from docs.utility.logger.logger import logger
 
 # 환경 변수 로드
 load_dotenv()
