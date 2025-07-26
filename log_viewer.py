@@ -11,6 +11,7 @@ from pathlib import Path
 from routers.trading_stats import router as trading_stats_router
 from routers.ai_analysis import router as ai_analysis_router
 import time
+import json
 
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
 app.include_router(trading_stats_router)
@@ -333,8 +334,5 @@ async def view_log(request: Request, log_type: str, lines: int = 100, error_only
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"로그 파일 읽기 오류: {str(e)}")
     
-
-    # FastAPI 라우터에 추가할 코드
-import json
 
 
