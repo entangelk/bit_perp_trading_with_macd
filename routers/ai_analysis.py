@@ -181,19 +181,54 @@ class AIAnalysisViewer:
                 })
                 
             elif task_name == "final_decision":
-                logger.error(f"🔍 DEBUG: task_name={task_name}")
-                logger.error(f"🔍 DEBUG: analysis_result type={type(analysis_result)}")
-                logger.error(f"🔍 DEBUG: analysis_result keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else 'NOT_DICT'}")
-                logger.error(f"🔍 DEBUG: decision_confidence raw={analysis_result.get('decision_confidence', 'NOT_FOUND')}")
-                summary.update({
-                    "confidence": analysis_result.get("decision_confidence", 0),
-                    "decision": analysis_result.get("final_decision", "Hold"),
-                    "action": analysis_result.get("recommended_action", {}).get("action_type", "Hold"),
-                    "recommendation": analysis_result.get("decision_reasoning", "분석 중")[:100] + "...",
-                    "needs_human_review" : analysis_result.get("needs_human_review", False),
-                    "human_review_reason" : analysis_result.get("human_review_reason", "분석 중")[:100] + "..."
-                })
-            
+                try:
+                    logger.error(f"🔍 DEBUG: Starting final_decision extraction")
+                    
+                    # 각 단계별로 체크
+                    confidence = analysis_result.get("decision_confidence", 0)
+                    logger.error(f"🔍 DEBUG: confidence = {confidence}")
+                    
+                    decision = analysis_result.get("final_decision", "Hold")
+                    logger.error(f"🔍 DEBUG: decision = {decision}")
+                    
+                    recommended_action = analysis_result.get("recommended_action", {})
+                    logger.error(f"🔍 DEBUG: recommended_action type = {type(recommended_action)}")
+                    logger.error(f"🔍 DEBUG: recommended_action = {recommended_action}")
+                    
+                    if recommended_action:
+                        action = recommended_action.get("action_type", "Hold")
+                        logger.error(f"🔍 DEBUG: action = {action}")
+                    else:
+                        action = "Hold"
+                        logger.error(f"🔍 DEBUG: action = Hold (default)")
+                    
+                    decision_reasoning = analysis_result.get("decision_reasoning", "분석 중")
+                    logger.error(f"🔍 DEBUG: decision_reasoning type = {type(decision_reasoning)}")
+                    
+                    if decision_reasoning:
+                        recommendation = decision_reasoning[:100] + "..."
+                        logger.error(f"🔍 DEBUG: recommendation slicing success")
+                    else:
+                        recommendation = "분석 중"
+                        logger.error(f"🔍 DEBUG: recommendation = 분석 중 (default)")
+                    
+                    summary.update({
+                        "confidence": confidence,
+                        "decision": decision,
+                        "action": action,
+                        "recommendation": recommendation,
+                        "needs_human_review": analysis_result.get("needs_human_review", False),
+                        "human_review_reason": analysis_result.get("human_review_reason", "분석 중")[:100] + "..."
+                    })
+                    
+                    logger.error(f"🔍 DEBUG: final_decision extraction completed successfully")
+                    
+                except Exception as e:
+                    logger.error(f"🔍 DEBUG: Exception in final_decision: {e}")
+                    logger.error(f"🔍 DEBUG: Exception type: {type(e)}")
+                    import traceback
+                    logger.error(f"🔍 DEBUG: Traceback: {traceback.format_exc()}")
+                    
             # 공통 키 포인트 추출
             if "analysis_summary" in analysis_result:
                 summary["key_points"] = [analysis_result["analysis_summary"][:200] + "..."]
