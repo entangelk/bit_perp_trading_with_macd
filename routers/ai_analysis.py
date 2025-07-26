@@ -181,6 +181,10 @@ class AIAnalysisViewer:
                 })
                 
             elif task_name == "final_decision":
+                logger.error(f"🔍 DEBUG: task_name={task_name}")
+                logger.error(f"🔍 DEBUG: analysis_result type={type(analysis_result)}")
+                logger.error(f"🔍 DEBUG: analysis_result keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else 'NOT_DICT'}")
+                logger.error(f"🔍 DEBUG: decision_confidence raw={analysis_result.get('decision_confidence', 'NOT_FOUND')}")
                 summary.update({
                     "confidence": analysis_result.get("decision_confidence", 0),
                     "decision": analysis_result.get("final_decision", "Hold"),
