@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import os
@@ -13,7 +15,41 @@ from routers.ai_analysis import router as ai_analysis_router
 import time
 import json
 
+
+class HostValidationMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, allowed_hosts):
+        super().__init__(app)
+        self.allowed_hosts = allowed_hosts
+    
+    async def dispatch(self, request: Request, call_next):
+        # Host 헤더 가져오기
+        host = request.headers.get("host", "")
+        
+        # 허용된 호스트인지 확인
+        if host not in self.allowed_hosts:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Access denied"}
+            )
+        
+        # 허용된 호스트면 정상 처리
+        response = await call_next(request)
+        return response
+
+
 app = FastAPI(title="트레이딩 봇 로그 뷰어")
+
+
+# 허용할 도메인 리스트
+ALLOWED_HOSTS = [
+    "entangelk.o-r.kr",
+    "www.entangelk.o-r.kr"  # www 버전도 허용하고 싶다면
+]
+
+# 기존 FastAPI 앱에 미들웨어 추가
+app.add_middleware(HostValidationMiddleware, allowed_hosts=ALLOWED_HOSTS)
+
+
 app.include_router(trading_stats_router)
 app.include_router(ai_analysis_router)
 
