@@ -82,7 +82,7 @@ class SerialDataScheduler:
         # 2단계: 차트 외 AI 분석들 (각 분석기가 데이터 수집 포함) - 실행 주기 수정
         self.register_task("ai_sentiment_analysis", self._ai_sentiment_analysis, 1, "analysis", cache_duration_minutes=cache_duration_7days)  # 2→1로 변경: 1시간마다
         self.register_task("ai_macro_analysis", self._ai_macro_analysis, 6, "analysis", cache_duration_minutes=cache_duration_7days)  # 24→6으로 변경: 6시간마다
-        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 4→2로 변경: 2시간마다
+        self.register_task("ai_onchain_analysis", self._ai_onchain_analysis, 1, "analysis", cache_duration_minutes=cache_duration_7days)  # 4→1로 변경: 1시간마다
         self.register_task("ai_institutional_analysis", self._ai_institutional_analysis, 2, "analysis", cache_duration_minutes=cache_duration_7days)  # 8→2로 변경: 2시간마다
         
         # 3단계: 차트 데이터 업데이트 (매번 실행)
