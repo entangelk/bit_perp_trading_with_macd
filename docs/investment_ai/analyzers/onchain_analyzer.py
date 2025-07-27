@@ -64,6 +64,7 @@ class OnchainAnalyzer:
                 'base_url': 'https://api.blockchain.info',
                 'endpoints': {
                     'stats': '/stats',
+                    'charts_hash_rate': '/charts/hash-rate',
                     'pools': '/pools',
                     'unconfirmed': '/q/unconfirmedcount',
                     'difficulty': '/q/getdifficulty',
@@ -121,33 +122,63 @@ class OnchainAnalyzer:
             return None, None
     
     def get_blockchain_info_stats(self) -> Dict:
-        """Blockchain.info에서 기본 통계 수집 (캐싱 권장: 1시간)"""
+        """Blockchain.info에서 기본 통계 수집 (개별 엔드포인트 사용)"""
         try:
-            url = f"{self.data_sources['blockchain_info']['base_url']}/stats"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+            base_url = self.data_sources['blockchain_info']['base_url']
             
-            data = response.json()
+            # 1. 난이도 - 별도 엔드포인트 (2주마다 변경)
+            difficulty_url = f"{base_url}/q/getdifficulty"
+            difficulty_response = requests.get(difficulty_url, timeout=10)
+            difficulty = float(difficulty_response.text) if difficulty_response.status_code == 200 else 127620086886391
+            
+            # 2. 총 BTC 공급량
+            totalbc_url = f"{base_url}/q/totalbc"
+            totalbc_response = requests.get(totalbc_url, timeout=10)
+            totalbc = int(totalbc_response.text) if totalbc_response.status_code == 200 else 1989793125000000
+            
+            # 3. 미확인 거래 수
+            unconfirmed_url = f"{base_url}/q/unconfirmedcount"
+            unconfirmed_response = requests.get(unconfirmed_url, timeout=10)
+            unconfirmed_count = int(unconfirmed_response.text) if unconfirmed_response.status_code == 200 else 25000
+            
+            # 4. 시장 데이터는 CoinGecko에서 가져오기 (더 신뢰성 있음)
+            try:
+                cg_url = f"{self.data_sources['coingecko']['base_url']}/simple/price"
+                cg_params = {'ids': 'bitcoin', 'vs_currencies': 'usd', 'include_market_cap': 'true', 'include_24hr_vol': 'true'}
+                cg_response = requests.get(cg_url, params=cg_params, headers=get_coingecko_headers(), timeout=10)
+                cg_data = cg_response.json() if cg_response.status_code == 200 else {}
+                
+                btc_data = cg_data.get('bitcoin', {})
+                market_price_usd = btc_data.get('usd', 118000)
+                market_cap_usd = btc_data.get('usd_market_cap', 0)
+                volume_24h_usd = btc_data.get('usd_24h_vol', 0)
+            except:
+                # CoinGecko 실패시 기본값
+                market_price_usd = 118000
+                market_cap_usd = market_price_usd * (totalbc / 100000000)
+                volume_24h_usd = 20000000000
             
             return {
-                'total_btc_supply': data.get('totalbc', 0) / 100000000,  # Satoshi -> BTC
-                'market_cap_usd': data.get('market_price_usd', 0) * (data.get('totalbc', 0) / 100000000),
-                'hash_rate': data.get('hash_rate', 0),
-                'difficulty': data.get('difficulty', 0),
-                'mempool_size': data.get('n_btc_mined', 0),
-                'total_transactions': data.get('n_tx', 0),
-                'blocks_count': data.get('n_blocks_total', 0),
-                'avg_block_size': data.get('avg_block_size', 0),
-                'minutes_between_blocks': data.get('minutes_between_blocks', 0),
-                'trade_volume_btc': data.get('trade_volume_btc', 0),
-                'trade_volume_usd': data.get('trade_volume_usd', 0),
+                'total_btc_supply': totalbc / 100000000,  # Satoshi -> BTC
+                'market_cap_usd': market_cap_usd,
+                'market_price_usd': market_price_usd,
+                'difficulty': difficulty,
+                'unconfirmed_transactions': unconfirmed_count,
+                'trade_volume_usd': volume_24h_usd,
+                'trade_volume_btc': volume_24h_usd / market_price_usd if market_price_usd > 0 else 0,
                 'timestamp': datetime.now().isoformat(),
-                'source': 'blockchain_info',
-                'cache_ttl': self.cache_ttl['network_metrics']
+                'source': 'blockchain_info_individual_endpoints',
+                'cache_ttl': self.cache_ttl['network_metrics'],
+                'data_sources': {
+                    'difficulty': 'blockchain_info_q_getdifficulty',
+                    'btc_supply': 'blockchain_info_q_totalbc', 
+                    'unconfirmed_txs': 'blockchain_info_q_unconfirmedcount',
+                    'market_data': 'coingecko_simple_price'
+                }
             }
             
         except Exception as e:
-            logger.error(f"Blockchain.info 통계 수집 실패: {e}")
+            logger.error(f"Blockchain.info 개별 통계 수집 실패: {e}")
             self.error_counts['blockchain_stats'] += 1
             return self._get_cached_blockchain_stats()
     
@@ -271,33 +302,102 @@ class OnchainAnalyzer:
             return self._get_cached_holder_behavior()
     
     def get_mining_metrics(self) -> Dict:
-        """채굴 관련 지표 수집 (캐싱 권장: 2시간)"""
+        """채굴 관련 지표 수집 (7일 평균 + 일일 원시값 제공)"""
         try:
-            # Blockchain.info에서 채굴 관련 데이터
-            stats_data = self.get_blockchain_info_stats()
+            base_url = f"{self.data_sources['blockchain_info']['base_url']}/charts/hash-rate"
             
-            hash_rate = stats_data.get('hash_rate', 0)
+            # 1. 7일 평균 해시레이트 (기존)
+            hash_params_7d = {
+                'rollingAverage': '7days',
+                'format': 'json',
+                'timespan': '14days'  # 충분한 데이터 보장
+            }
+            
+            hash_response_7d = requests.get(base_url, params=hash_params_7d, timeout=10)
+            hash_response_7d.raise_for_status()
+            hash_data_7d = hash_response_7d.json()
+            
+            # 2. 일일 원시값 해시레이트 (추가)
+            hash_params_daily = {
+                'format': 'json',
+                'timespan': '3days'  # 최근 3일 원시값
+            }
+            
+            hash_response_daily = requests.get(base_url, params=hash_params_daily, timeout=10)
+            hash_response_daily.raise_for_status()
+            hash_data_daily = hash_response_daily.json()
+            
+            # 3. 7일 평균 해시레이트 추출 (TH/s)
+            if hash_data_7d.get('values') and len(hash_data_7d['values']) > 0:
+                hash_rate_7d_th = hash_data_7d['values'][-1]['y']  # TH/s 단위
+            else:
+                hash_rate_7d_th = 900_000_000  # 기본값 900M TH/s ≈ 900 EH/s
+            
+            # 4. 일일 원시값 해시레이트 추출 (TH/s)
+            if hash_data_daily.get('values') and len(hash_data_daily['values']) > 0:
+                hash_rate_daily_th = hash_data_daily['values'][-1]['y']  # TH/s 단위
+            else:
+                hash_rate_daily_th = hash_rate_7d_th  # 7일 평균값으로 대체
+            
+            # 5. 난이도 (기존 방식)
+            stats_data = self.get_blockchain_info_stats()
             difficulty = stats_data.get('difficulty', 0)
             
-            # 해시레이트 단위 변환 수정 (정확한 변환)
-            # Blockchain.info는 hash/s 단위로 제공, EH/s로 변환
-            hash_rate_eh = hash_rate / 1e18 if hash_rate > 0 else 300  # 1 EH/s = 10^18 H/s
+            # 6. 단위 변환 (TH/s -> EH/s)
+            hash_rate_7d_eh = hash_rate_7d_th / 1_000_000      # 7일 평균 EH/s
+            hash_rate_daily_eh = hash_rate_daily_th / 1_000_000  # 일일 원시값 EH/s
             
-            # 채굴 지표 계산
+            # 7. 계산 로직 - 두 가지 기준 제공
             mining_difficulty_trend = 'Increasing' if difficulty > 50000000000000 else 'Stable'
-            network_security = min(100, max(0, hash_rate_eh / 5 * 100))  # 500 EH/s = 100점 기준
+            
+            # 7일 평균 기준 계산
+            network_security_7d = min(100, max(0, hash_rate_7d_eh / 5 * 100))  # 500 EH/s = 100점
+            hash_rate_trend_7d = 'Strong' if hash_rate_7d_eh > 400 else 'Weak' if hash_rate_7d_eh < 200 else 'Moderate'
+            miner_risk_7d = 'Low' if hash_rate_7d_eh > 300 else 'High'
+            
+            # 일일 원시값 기준 계산
+            network_security_daily = min(100, max(0, hash_rate_daily_eh / 5 * 100))
+            hash_rate_trend_daily = 'Strong' if hash_rate_daily_eh > 400 else 'Weak' if hash_rate_daily_eh < 200 else 'Moderate'
+            miner_risk_daily = 'Low' if hash_rate_daily_eh > 300 else 'High'
             
             return {
-                'hash_rate_eh': round(hash_rate_eh, 2),
-                'hash_rate_raw': hash_rate,  # 원본 데이터도 포함
+                # 7일 평균 데이터 (중장기 트렌드용)
+                'hash_rate_7d_eh': round(hash_rate_7d_eh, 2),
+                'hash_rate_7d_th': round(hash_rate_7d_th, 2),
+                'network_security_7d': round(network_security_7d, 1),
+                'hash_rate_trend_7d': hash_rate_trend_7d,
+                'miner_risk_7d': miner_risk_7d,
+                
+                # 일일 원시값 데이터 (스윙 거래용)
+                'hash_rate_daily_eh': round(hash_rate_daily_eh, 2),
+                'hash_rate_daily_th': round(hash_rate_daily_th, 2),
+                'network_security_daily': round(network_security_daily, 1),
+                'hash_rate_trend_daily': hash_rate_trend_daily,
+                'miner_risk_daily': miner_risk_daily,
+                
+                # 공통 데이터
                 'difficulty': difficulty,
                 'mining_difficulty_trend': mining_difficulty_trend,
-                'network_security_score': round(network_security, 1),
-                'hash_rate_trend': 'Strong' if hash_rate_eh > 400 else 'Weak' if hash_rate_eh < 200 else 'Moderate',
-                'miner_capitulation_risk': 'Low' if hash_rate_eh > 300 else 'High',
+                
+                # 기존 호환성을 위한 필드 (7일 평균 기준)
+                'hash_rate_eh': round(hash_rate_7d_eh, 2),
+                'hash_rate_th': round(hash_rate_7d_th, 2),
+                'network_security_score': round(network_security_7d, 1),
+                'hash_rate_trend': hash_rate_trend_7d,
+                'miner_capitulation_risk': miner_risk_7d,
+                
                 'timestamp': datetime.now().isoformat(),
-                'source': 'blockchain_info',
-                'cache_ttl': self.cache_ttl['mining_metrics']
+                'source': 'blockchain_info_charts_7d_avg_plus_daily',
+                'cache_ttl': self.cache_ttl['mining_metrics'],
+                'data_methodology': {
+                    '7d_average': '중장기 트렌드 분석용 - 안정적, 노이즈 제거',
+                    'daily_raw': '스윙 거래용 - 즉시 반응성, 단기 변동 반영',
+                    'recommended_use': {
+                        'swing_trading': 'daily 필드 사용',
+                        'trend_analysis': '7d 필드 사용',
+                        'comprehensive': '두 데이터 조합 분석'
+                    }
+                }
             }
             
         except Exception as e:
@@ -315,30 +415,29 @@ class OnchainAnalyzer:
             db = client["bitcoin"]
             cache_collection = db["data_cache"]
             
-            # 최근 4시간 이내 데이터 찾기
-            four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=4)
+            # 최근 24시간 이내 데이터 찾기
+            twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
             
             cached_data = cache_collection.find_one({
                 "task_name": "onchain_data",
-                "created_at": {"$gte": four_hours_ago}
+                "created_at": {"$gte": twenty_four_hours_ago}
             }, sort=[("created_at", -1)])
             
             if cached_data and cached_data.get('data'):
                 onchain_data = cached_data['data']
+                
+                # metrics에서 가져오기 (기존 경로 사용)
                 if 'metrics' in onchain_data:
                     metrics = onchain_data['metrics']
                     return {
                         'total_btc_supply': metrics.get('total_btc_supply'),
                         'market_cap_usd': metrics.get('market_cap_usd'),
-                        'hash_rate': metrics.get('hash_rate'),
+                        'market_price_usd': metrics.get('market_price_usd'),
                         'difficulty': metrics.get('difficulty'),
-                        'mempool_size': metrics.get('mempool_size'),
-                        'total_transactions': metrics.get('transaction_count'),
-                        'blocks_count': metrics.get('blocks_count'),
-                        'avg_block_size': metrics.get('avg_block_size'),
-                        'minutes_between_blocks': metrics.get('minutes_between_blocks'),
+                        'unconfirmed_transactions': metrics.get('unconfirmed_transactions'),
                         'trade_volume_btc': metrics.get('trade_volume_btc'),
                         'trade_volume_usd': metrics.get('trade_volume_usd'),
+                        'data_sources': metrics.get('data_sources'),
                         'timestamp': cached_data['created_at'].isoformat(),
                         'source': 'cached_data',
                         'cache_ttl': self.cache_ttl['network_metrics']
@@ -429,7 +528,7 @@ class OnchainAnalyzer:
             return None
     
     def _get_cached_mining_metrics(self) -> Optional[Dict]:
-        """MongoDB에서 과거 채굴 지표 데이터 가져오기"""
+        """MongoDB에서 과거 채굴 지표 데이터 가져오기 (7일평균 + 일일원시값 지원)"""
         try:
             from pymongo import MongoClient
             from datetime import datetime, timezone, timedelta
@@ -448,18 +547,71 @@ class OnchainAnalyzer:
             
             if cached_data and cached_data.get('data', {}).get('mining'):
                 mining_data = cached_data['data']['mining']
-                return {
-                    'hash_rate_eh': mining_data.get('hash_rate_eh'),
-                    'hash_rate_raw': mining_data.get('hash_rate_raw'),
-                    'difficulty': mining_data.get('difficulty'),
-                    'mining_difficulty_trend': mining_data.get('mining_difficulty_trend'),
-                    'network_security_score': mining_data.get('network_security_score'),
-                    'hash_rate_trend': mining_data.get('hash_rate_trend'),
-                    'miner_capitulation_risk': mining_data.get('miner_capitulation_risk'),
-                    'timestamp': cached_data['created_at'].isoformat(),
-                    'source': 'cached_data',
-                    'cache_ttl': self.cache_ttl['mining_metrics']
-                }
+                
+                # 새로운 구조 (7일평균 + 일일원시값)가 있는지 확인
+                if 'hash_rate_7d_eh' in mining_data and 'hash_rate_daily_eh' in mining_data:
+                    return {
+                        # 7일 평균 데이터 (중장기 트렌드용)
+                        'hash_rate_7d_eh': mining_data.get('hash_rate_7d_eh'),
+                        'hash_rate_7d_th': mining_data.get('hash_rate_7d_th'),
+                        'network_security_7d': mining_data.get('network_security_7d'),
+                        'hash_rate_trend_7d': mining_data.get('hash_rate_trend_7d'),
+                        'miner_risk_7d': mining_data.get('miner_risk_7d'),
+                        
+                        # 일일 원시값 데이터 (스윙 거래용)
+                        'hash_rate_daily_eh': mining_data.get('hash_rate_daily_eh'),
+                        'hash_rate_daily_th': mining_data.get('hash_rate_daily_th'),
+                        'network_security_daily': mining_data.get('network_security_daily'),
+                        'hash_rate_trend_daily': mining_data.get('hash_rate_trend_daily'),
+                        'miner_risk_daily': mining_data.get('miner_risk_daily'),
+                        
+                        # 공통 데이터
+                        'difficulty': mining_data.get('difficulty'),
+                        'mining_difficulty_trend': mining_data.get('mining_difficulty_trend'),
+                        
+                        # 기존 호환성 필드
+                        'hash_rate_eh': mining_data.get('hash_rate_eh'),
+                        'hash_rate_th': mining_data.get('hash_rate_th'),
+                        'network_security_score': mining_data.get('network_security_score'),
+                        'hash_rate_trend': mining_data.get('hash_rate_trend'),
+                        'miner_capitulation_risk': mining_data.get('miner_capitulation_risk'),
+                        
+                        'data_methodology': mining_data.get('data_methodology'),
+                        'timestamp': cached_data['created_at'].isoformat(),
+                        'source': 'cached_data',
+                        'cache_ttl': self.cache_ttl['mining_metrics']
+                    }
+                
+                # 기존 구조 (7일평균만) 호환성 유지
+                else:
+                    return {
+                        # 기존 필드들
+                        'hash_rate_eh': mining_data.get('hash_rate_eh'),
+                        'hash_rate_th': mining_data.get('hash_rate_th'),
+                        'difficulty': mining_data.get('difficulty'),
+                        'mining_difficulty_trend': mining_data.get('mining_difficulty_trend'),
+                        'network_security_score': mining_data.get('network_security_score'),
+                        'hash_rate_trend': mining_data.get('hash_rate_trend'),
+                        'miner_capitulation_risk': mining_data.get('miner_capitulation_risk'),
+                        
+                        # 기존 데이터를 새 필드에도 매핑 (호환성)
+                        'hash_rate_7d_eh': mining_data.get('hash_rate_eh'),
+                        'hash_rate_7d_th': mining_data.get('hash_rate_th'),
+                        'network_security_7d': mining_data.get('network_security_score'),
+                        'hash_rate_trend_7d': mining_data.get('hash_rate_trend'),
+                        'miner_risk_7d': mining_data.get('miner_capitulation_risk'),
+                        
+                        # 일일 데이터는 7일 평균값으로 대체 (기본값)
+                        'hash_rate_daily_eh': mining_data.get('hash_rate_eh'),
+                        'hash_rate_daily_th': mining_data.get('hash_rate_th'),
+                        'network_security_daily': mining_data.get('network_security_score'),
+                        'hash_rate_trend_daily': mining_data.get('hash_rate_trend'),
+                        'miner_risk_daily': mining_data.get('miner_capitulation_risk'),
+                        
+                        'timestamp': cached_data['created_at'].isoformat(),
+                        'source': 'cached_data_legacy',
+                        'cache_ttl': self.cache_ttl['mining_metrics']
+                    }
             
             logger.warning("채굴 지표: 캐시된 데이터 없음")
             return None
@@ -467,7 +619,7 @@ class OnchainAnalyzer:
         except Exception as e:
             logger.error(f"캐시된 채굴 데이터 조회 실패: {e}")
             return None
-    
+        
     def collect_onchain_data(self) -> Dict:
         """온체인 데이터 종합 수집"""
         try:
@@ -481,7 +633,7 @@ class OnchainAnalyzer:
             # 1. 네트워크 기본 통계
             try:
                 network_stats = self.get_blockchain_info_stats()
-                onchain_data['network_stats'] = network_stats
+                onchain_data['metrics'] = network_stats
                 if 'error' not in network_stats:
                     success_count += 1
                 logger.info("✅ 네트워크 통계 수집 완료")
@@ -590,15 +742,25 @@ class OnchainAnalyzer:
         return None
     
     def analyze_onchain_signals(self, onchain_data: Dict) -> Dict:
-        """온체인 데이터 신호 분석 (규칙 기반)"""
+        """온체인 데이터 신호 분석 (스윙거래 + 트렌드 분석 지원)"""
         try:
-            # 네트워크 건강도 분석 - 올바른 데이터 접근
+            # 네트워크 건강도 분석 - 7일평균 + 일일원시값 접근
             network_stats = onchain_data.get('network_stats', {})
             mining_data = onchain_data.get('mining', {})
             
-            # 수정된 데이터 접근
-            hash_rate_eh = mining_data.get('hash_rate_eh', 350)  # mining에서 가져오기
-            network_security_score = mining_data.get('network_security_score', 85)
+            # 7일 평균 데이터 (중장기 트렌드용)
+            hash_rate_7d_eh = mining_data.get('hash_rate_7d_eh', mining_data.get('hash_rate_eh', 350))
+            network_security_7d = mining_data.get('network_security_7d', mining_data.get('network_security_score', 85))
+            hash_rate_trend_7d = mining_data.get('hash_rate_trend_7d', mining_data.get('hash_rate_trend', 'Moderate'))
+            miner_risk_7d = mining_data.get('miner_risk_7d', mining_data.get('miner_capitulation_risk', 'Low'))
+            
+            # 일일 원시값 데이터 (스윙거래용)
+            hash_rate_daily_eh = mining_data.get('hash_rate_daily_eh', hash_rate_7d_eh)
+            network_security_daily = mining_data.get('network_security_daily', network_security_7d)
+            hash_rate_trend_daily = mining_data.get('hash_rate_trend_daily', hash_rate_trend_7d)
+            miner_risk_daily = mining_data.get('miner_risk_daily', miner_risk_7d)
+            
+            # 공통 데이터
             difficulty = mining_data.get('difficulty', 70000000000000)
             
             # 메모리풀 혼잡도
@@ -616,124 +778,231 @@ class OnchainAnalyzer:
             active_addresses = addresses.get('estimated_active_addresses', 800000)
             activity_score = addresses.get('address_activity_score', 65)
             
-            # 채굴 지표 - 올바른 접근
-            miner_risk = mining_data.get('miner_capitulation_risk', 'Low')
+            # 종합 점수 계산 (0-100) - 스윙거래와 트렌드 분석 분리
             
-            # 종합 점수 계산 (0-100) - 수정된 로직
-            onchain_score = 0
+            # === 스윙거래용 점수 (일일 원시값 기준) ===
+            swing_score = 0
             
-            # 네트워크 보안 (30점 만점) - 수정된 기준
-            if network_security_score > 80:
-                onchain_score += 30
-            elif network_security_score > 60:
-                onchain_score += 20
-            elif network_security_score > 40:
-                onchain_score += 15
-            elif network_security_score > 20:
-                onchain_score += 10
+            # 네트워크 보안 (30점 만점) - 일일 기준
+            if network_security_daily > 80:
+                swing_score += 30
+            elif network_security_daily > 60:
+                swing_score += 20
+            elif network_security_daily > 40:
+                swing_score += 15
+            elif network_security_daily > 20:
+                swing_score += 10
             else:
-                onchain_score += 5  # 최소 점수
+                swing_score += 5
+            
+            # 채굴자 리스크 (20점 만점) - 일일 기준으로 가중치 증가
+            if miner_risk_daily == 'Low':
+                swing_score += 20
+            elif miner_risk_daily == 'Medium':
+                swing_score += 12
+            else:
+                swing_score += 5
+            
+            # HODL 강도 (20점 만점)
+            if hodl_strength > 80:
+                swing_score += 20
+            elif hodl_strength > 60:
+                swing_score += 15
+            elif hodl_strength > 40:
+                swing_score += 10
+            elif hodl_strength > 20:
+                swing_score += 5
+            else:
+                swing_score += 2
+            
+            # 네트워크 활성도 (15점 만점)
+            if activity_score > 80:
+                swing_score += 15
+            elif activity_score > 60:
+                swing_score += 12
+            elif activity_score > 40:
+                swing_score += 8
+            elif activity_score > 20:
+                swing_score += 4
+            else:
+                swing_score += 2
+            
+            # 메모리풀 상태 (15점 만점) - 스윙거래에 중요
+            if congestion_level == 'Low':
+                swing_score += 15
+            elif congestion_level == 'Medium':
+                swing_score += 10
+            else:
+                swing_score += 5
+            
+            # === 트렌드 분석용 점수 (7일 평균 기준) ===
+            trend_score = 0
+            
+            # 네트워크 보안 (35점 만점) - 트렌드 분석에서 가중치 증가
+            if network_security_7d > 80:
+                trend_score += 35
+            elif network_security_7d > 60:
+                trend_score += 25
+            elif network_security_7d > 40:
+                trend_score += 18
+            elif network_security_7d > 20:
+                trend_score += 12
+            else:
+                trend_score += 6
             
             # HODL 강도 (25점 만점)
             if hodl_strength > 80:
-                onchain_score += 25
+                trend_score += 25
             elif hodl_strength > 60:
-                onchain_score += 18
+                trend_score += 18
             elif hodl_strength > 40:
-                onchain_score += 12
+                trend_score += 12
             elif hodl_strength > 20:
-                onchain_score += 6
+                trend_score += 6
             else:
-                onchain_score += 2
+                trend_score += 2
             
             # 네트워크 활성도 (20점 만점)
             if activity_score > 80:
-                onchain_score += 20
+                trend_score += 20
             elif activity_score > 60:
-                onchain_score += 15
+                trend_score += 15
             elif activity_score > 40:
-                onchain_score += 10
+                trend_score += 10
             elif activity_score > 20:
-                onchain_score += 5
+                trend_score += 5
             else:
-                onchain_score += 2
+                trend_score += 2
             
-            # 메모리풀 상태 (15점 만점)
+            # 메모리풀 상태 (10점 만점) - 트렌드에서는 가중치 감소
             if congestion_level == 'Low':
-                onchain_score += 15
+                trend_score += 10
             elif congestion_level == 'Medium':
-                onchain_score += 10
-            else:  # High
-                onchain_score += 5
+                trend_score += 7
+            else:
+                trend_score += 4
             
             # 채굴자 리스크 (10점 만점)
-            if miner_risk == 'Low':
-                onchain_score += 10
-            elif miner_risk == 'Medium':
-                onchain_score += 7
-            else:  # High
-                onchain_score += 3
+            if miner_risk_7d == 'Low':
+                trend_score += 10
+            elif miner_risk_7d == 'Medium':
+                trend_score += 7
+            else:
+                trend_score += 3
             
             # 신호 강도 분류
-            if onchain_score >= 85:
-                signal_strength = "매우 강함"
-                btc_signal = "Strong Buy"
-            elif onchain_score >= 70:
-                signal_strength = "강함"
-                btc_signal = "Buy"
-            elif onchain_score >= 50:
-                signal_strength = "중립"
-                btc_signal = "Hold"
-            elif onchain_score >= 30:
-                signal_strength = "약함"
-                btc_signal = "Weak Sell"
+            def get_signal_classification(score):
+                if score >= 85:
+                    return "매우 강함", "Strong Buy"
+                elif score >= 70:
+                    return "강함", "Buy"
+                elif score >= 50:
+                    return "중립", "Hold"
+                elif score >= 30:
+                    return "약함", "Weak Sell"
+                else:
+                    return "매우 약함", "Sell"
+            
+            swing_strength, swing_signal = get_signal_classification(swing_score)
+            trend_strength, trend_signal = get_signal_classification(trend_score)
+            
+            # 종합 판단 (스윙 신호 우선, 트렌드로 검증)
+            if swing_signal == trend_signal:
+                final_signal = swing_signal
+                signal_confidence = "High"
+            elif abs(swing_score - trend_score) <= 10:
+                final_signal = swing_signal  # 스윙 우선
+                signal_confidence = "Medium"
             else:
-                signal_strength = "매우 약함"
-                btc_signal = "Sell"
+                final_signal = "Hold"  # 상충시 중립
+                signal_confidence = "Low"
             
             return {
-                'onchain_score': round(onchain_score, 1),
-                'signal_strength': signal_strength,
-                'btc_signal': btc_signal,
-                'network_health': {
-                    'security_level': 'High' if network_security_score > 70 else 'Medium' if network_security_score > 40 else 'Low',
-                    'hash_rate_trend': 'Strong' if hash_rate_eh > 400 else 'Weak' if hash_rate_eh < 200 else 'Moderate',
-                    'hash_rate_eh': hash_rate_eh,  # 실제 값 포함
-                    'miner_sentiment': 'Bullish' if miner_risk == 'Low' else 'Bearish' if miner_risk == 'High' else 'Neutral'
+                # 스윙거래 분석 (일일 원시값 기준)
+                'swing_analysis': {
+                    'score': round(swing_score, 1),
+                    'signal_strength': swing_strength,
+                    'signal': swing_signal,
+                    'hash_rate_eh': hash_rate_daily_eh,
+                    'hash_rate_trend': hash_rate_trend_daily,
+                    'network_security': network_security_daily,
+                    'miner_risk': miner_risk_daily,
+                    'data_basis': 'daily_raw_values'
                 },
+                
+                # 트렌드 분석 (7일 평균 기준)
+                'trend_analysis': {
+                    'score': round(trend_score, 1),
+                    'signal_strength': trend_strength,
+                    'signal': trend_signal,
+                    'hash_rate_eh': hash_rate_7d_eh,
+                    'hash_rate_trend': hash_rate_trend_7d,
+                    'network_security': network_security_7d,
+                    'miner_risk': miner_risk_7d,
+                    'data_basis': '7day_moving_average'
+                },
+                
+                # 종합 판단
+                'final_recommendation': {
+                    'signal': final_signal,
+                    'confidence': signal_confidence,
+                    'swing_score': round(swing_score, 1),
+                    'trend_score': round(trend_score, 1),
+                    'score_difference': round(abs(swing_score - trend_score), 1),
+                    'alignment': 'aligned' if swing_signal == trend_signal else 'divergent'
+                },
+                
+                # 기존 호환성 (스윙 기준)
+                'onchain_score': round(swing_score, 1),
+                'signal_strength': swing_strength,
+                'btc_signal': swing_signal,
+                
+                # 상세 분석
+                'network_health': {
+                    'security_level_7d': 'High' if network_security_7d > 70 else 'Medium' if network_security_7d > 40 else 'Low',
+                    'security_level_daily': 'High' if network_security_daily > 70 else 'Medium' if network_security_daily > 40 else 'Low',
+                    'hash_rate_trend_7d': hash_rate_trend_7d,
+                    'hash_rate_trend_daily': hash_rate_trend_daily,
+                    'hash_rate_7d_eh': hash_rate_7d_eh,
+                    'hash_rate_daily_eh': hash_rate_daily_eh,
+                    'miner_sentiment_7d': 'Bullish' if miner_risk_7d == 'Low' else 'Bearish' if miner_risk_7d == 'High' else 'Neutral',
+                    'miner_sentiment_daily': 'Bullish' if miner_risk_daily == 'Low' else 'Bearish' if miner_risk_daily == 'High' else 'Neutral'
+                },
+                
                 'user_behavior': {
                     'hodl_sentiment': 'Strong' if hodl_strength > 70 else 'Weak' if hodl_strength < 40 else 'Mixed',
                     'selling_pressure_level': selling_pressure,
                     'accumulation_signal': hodl_strength > 60 and selling_pressure in ['Low', 'Medium']
                 },
+                
                 'network_activity': {
                     'activity_level': 'High' if activity_score > 75 else 'Low' if activity_score < 50 else 'Medium',
                     'congestion_status': congestion_level,
                     'transaction_demand': 'High' if unconfirmed_txs > 40000 else 'Low' if unconfirmed_txs < 15000 else 'Medium'
                 },
-                'key_signals': self._identify_key_signals(onchain_data, onchain_score),
-                'risk_factors': self._identify_onchain_risks(onchain_data),
-                'bullish_factors': self._identify_bullish_factors(onchain_data),
+                
+                'key_signals': self._identify_key_signals_enhanced(onchain_data, swing_score, trend_score),
+                'risk_factors': self._identify_onchain_risks_enhanced(onchain_data),
+                'bullish_factors': self._identify_bullish_factors_enhanced(onchain_data),
+                
                 'data_reliability': {
                     'success_rate': onchain_data.get('collection_stats', {}).get('success_rate', 0),
                     'confidence': 'High' if onchain_data.get('collection_stats', {}).get('success_rate', 0) > 80 else 'Medium' if onchain_data.get('collection_stats', {}).get('success_rate', 0) > 50 else 'Low'
                 },
-                'debug_info': {  # 디버깅 정보 추가
-                    'hash_rate_eh': hash_rate_eh,
-                    'network_security_score': network_security_score,
-                    'score_breakdown': {
-                        'security_points': 30 if network_security_score > 80 else 20 if network_security_score > 60 else 15 if network_security_score > 40 else 10 if network_security_score > 20 else 5,
-                        'hodl_points': 25 if hodl_strength > 80 else 18 if hodl_strength > 60 else 12 if hodl_strength > 40 else 6 if hodl_strength > 20 else 2,
-                        'activity_points': 20 if activity_score > 80 else 15 if activity_score > 60 else 10 if activity_score > 40 else 5 if activity_score > 20 else 2,
-                        'mempool_points': 15 if congestion_level == 'Low' else 10 if congestion_level == 'Medium' else 5,
-                        'miner_points': 10 if miner_risk == 'Low' else 7 if miner_risk == 'Medium' else 3
-                    }
+                
+                'methodology_info': {
+                    'swing_trading': 'daily_raw_values_for_immediate_responsiveness',
+                    'trend_analysis': '7day_moving_average_for_stable_trends',
+                    'recommended_use': 'swing_analysis_for_1-2day_trades_trend_analysis_for_position_sizing'
                 }
             }
             
         except Exception as e:
             logger.error(f"온체인 신호 분석 중 오류: {e}")
             return {
+                'swing_analysis': {'score': 50.0, 'signal': 'Hold'},
+                'trend_analysis': {'score': 50.0, 'signal': 'Hold'},
+                'final_recommendation': {'signal': 'Hold', 'confidence': 'Low'},
                 'onchain_score': 50.0,
                 'signal_strength': '중립',
                 'btc_signal': 'Hold',
@@ -741,98 +1010,168 @@ class OnchainAnalyzer:
                 'data_reliability': {'success_rate': 0, 'confidence': 'None'}
             }
 
-    def _identify_key_signals(self, onchain_data: Dict, score: float) -> List[str]:
-        """주요 온체인 신호들 식별"""
+
+    def _identify_key_signals_enhanced(self, onchain_data: Dict, swing_score: float, trend_score: float) -> List[str]:
+        """주요 온체인 신호들 식별 (스윙거래 + 트렌드 분석)"""
         signals = []
         
+        # 데이터 추출
+        mining = onchain_data.get('mining', {})
         holder_behavior = onchain_data.get('holder_behavior', {})
+        addresses = onchain_data.get('addresses', {})
+        mempool = onchain_data.get('mempool', {})
+        
+        # 스윙거래 관련 신호들 (일일 데이터 기준)
+        hash_rate_daily_eh = mining.get('hash_rate_daily_eh', mining.get('hash_rate_eh', 350))
+        hash_rate_7d_eh = mining.get('hash_rate_7d_eh', mining.get('hash_rate_eh', 350))
+        miner_risk_daily = mining.get('miner_risk_daily', mining.get('miner_capitulation_risk', 'Low'))
+        miner_risk_7d = mining.get('miner_risk_7d', mining.get('miner_capitulation_risk', 'Low'))
+        
         hodl_strength = holder_behavior.get('hodl_strength_score', 65)
+        activity_score = addresses.get('address_activity_score', 65)
+        congestion = mempool.get('congestion_level', 'Medium')
+        unconfirmed_txs = mempool.get('unconfirmed_transactions', 25000)
+        
+        # === 스윙거래 신호 (단기 변화 중심) ===
+        if abs(hash_rate_daily_eh - hash_rate_7d_eh) > hash_rate_7d_eh * 0.05:  # 5% 이상 차이
+            direction = "급상승" if hash_rate_daily_eh > hash_rate_7d_eh else "급하락"
+            signals.append(f"🚨 스윙신호: 일일 해시레이트 {direction} ({hash_rate_daily_eh:.1f} vs 7일평균 {hash_rate_7d_eh:.1f} EH/s)")
+        
+        if miner_risk_daily != miner_risk_7d:
+            if miner_risk_daily == 'Low' and miner_risk_7d != 'Low':
+                signals.append("🟢 스윙신호: 채굴자 리스크 일일 개선 - 단기 매수 기회")
+            elif miner_risk_daily == 'High' and miner_risk_7d != 'High':
+                signals.append("🔴 스윙신호: 채굴자 리스크 일일 악화 - 단기 매도 압력")
+        
+        if congestion == 'High' and unconfirmed_txs > 50000:
+            signals.append(f"⚠️ 스윙신호: 네트워크 심각 혼잡 ({unconfirmed_txs:,}건) - 단기 거래 지연 위험")
+        elif congestion == 'Low' and unconfirmed_txs < 15000:
+            signals.append("✅ 스윙신호: 네트워크 원활 - 거래 효율성 양호")
+        
+        # === 트렌드 신호 (안정적 변화 중심) ===
+        if hash_rate_7d_eh > 500:
+            signals.append(f"📈 트렌드신호: 높은 7일평균 해시레이트 ({hash_rate_7d_eh:.1f} EH/s) - 네트워크 보안 강화")
         
         if hodl_strength > 75:
-            signals.append(f"강한 HODL 패턴 ({hodl_strength:.1f}) - 장기 보유 증가")
+            signals.append(f"💎 트렌드신호: 강한 HODL 패턴 ({hodl_strength:.1f}) - 장기 보유 증가")
+        elif hodl_strength < 40:
+            signals.append(f"📉 트렌드신호: 약한 HODL 패턴 ({hodl_strength:.1f}) - 매도 압력 증가")
         
-        mining = onchain_data.get('mining', {})
-        hash_rate_eh = mining.get('hash_rate_eh', 350)
-        if hash_rate_eh > 400:
-            signals.append(f"높은 해시레이트 ({hash_rate_eh:.1f} EH/s) - 네트워크 보안 강화")
-        
-        addresses = onchain_data.get('addresses', {})
-        activity_score = addresses.get('address_activity_score', 65)
         if activity_score > 80:
-            signals.append(f"높은 네트워크 활성도 ({activity_score}) - 사용자 참여 증가")
+            signals.append(f"🚀 트렌드신호: 높은 네트워크 활성도 ({activity_score}) - 사용자 참여 증가")
         
-        mempool = onchain_data.get('mempool', {})
-        congestion = mempool.get('congestion_level', 'Medium')
-        if congestion == 'Low':
-            signals.append("낮은 네트워크 혼잡도 - 거래 효율성 양호")
+        # === 종합 분석 신호 ===
+        score_diff = abs(swing_score - trend_score)
+        if score_diff <= 5:
+            signals.append(f"🎯 강한 신호 일치: 스윙({swing_score:.1f}) ≈ 트렌드({trend_score:.1f}) - 높은 신뢰도")
+        elif score_diff > 20:
+            signals.append(f"⚡ 신호 상충: 스윙({swing_score:.1f}) vs 트렌드({trend_score:.1f}) - 주의 필요")
         
-        if score > 70:
-            signals.append("온체인 지표 종합: 강세 신호 우세")
+        if swing_score > 70 and trend_score > 70:
+            signals.append("🔥 종합 강세: 단기/중기 모든 지표 긍정적")
+        elif swing_score < 40 and trend_score < 40:
+            signals.append("❄️ 종합 약세: 단기/중기 모든 지표 부정적")
         
-        return signals if signals else ["현재 뚜렷한 온체인 신호 없음"]
-    
-    def _identify_onchain_risks(self, onchain_data: Dict) -> List[str]:
-        """온체인 리스크 요인들"""
+        return signals if signals else ["현재 뚜렷한 스윙/트렌드 신호 없음"]
+
+    def _identify_onchain_risks_enhanced(self, onchain_data: Dict) -> List[str]:
+        """온체인 리스크 요인들 (스윙거래 + 트렌드 관점)"""
         risks = []
         
         mining = onchain_data.get('mining', {})
-        miner_risk = mining.get('miner_capitulation_risk', 'Low')
-        if miner_risk == 'High':
-            risks.append("채굴자 항복 위험 - 해시레이트 급락 가능성")
-        
         holder_behavior = onchain_data.get('holder_behavior', {})
-        selling_pressure = holder_behavior.get('selling_pressure', 'Medium')
-        if selling_pressure == 'High':
-            risks.append("높은 매도 압력 - 대량 물량 출회 위험")
-        
         mempool = onchain_data.get('mempool', {})
+        addresses = onchain_data.get('addresses', {})
+        
+        # 스윙거래 리스크 (단기 위험)
+        miner_risk_daily = mining.get('miner_risk_daily', mining.get('miner_capitulation_risk', 'Low'))
+        hash_rate_daily_eh = mining.get('hash_rate_daily_eh', mining.get('hash_rate_eh', 350))
+        hash_rate_7d_eh = mining.get('hash_rate_7d_eh', mining.get('hash_rate_eh', 350))
+        
+        if miner_risk_daily == 'High':
+            risks.append("🚨 스윙리스크: 일일 채굴자 항복 위험 - 즉시 매도 압력 가능")
+        
+        if hash_rate_daily_eh < hash_rate_7d_eh * 0.9:  # 일일값이 7일평균보다 10% 이상 낮음
+            risks.append(f"⚠️ 스윙리스크: 일일 해시레이트 급락 ({hash_rate_daily_eh:.1f} < {hash_rate_7d_eh:.1f} EH/s)")
+        
         unconfirmed = mempool.get('unconfirmed_transactions', 25000)
         if unconfirmed > 50000:
-            risks.append(f"심각한 네트워크 혼잡 ({unconfirmed:,}건) - 거래 지연")
+            risks.append(f"🔴 스윙리스크: 네트워크 심각 혼잡 ({unconfirmed:,}건) - 거래 지연 및 수수료 급등")
         
-        network_stats = onchain_data.get('network_stats', {})
-        hash_rate_eh = mining.get('hash_rate_eh', 350)
-        if hash_rate_eh < 200:
-            risks.append(f"낮은 해시레이트 ({hash_rate_eh:.1f} EH/s) - 네트워크 보안 약화")
+        # 트렌드 리스크 (중장기 위험)
+        miner_risk_7d = mining.get('miner_risk_7d', mining.get('miner_capitulation_risk', 'Low'))
+        if miner_risk_7d == 'High':
+            risks.append("📉 트렌드리스크: 7일평균 채굴자 항복 신호 - 지속적 매도 압력")
         
-        addresses = onchain_data.get('addresses', {})
+        selling_pressure = holder_behavior.get('selling_pressure', 'Medium')
+        if selling_pressure == 'High':
+            risks.append("💰 트렌드리스크: 높은 매도 압력 - 대량 물량 출회 위험")
+        
+        if hash_rate_7d_eh < 300:
+            risks.append(f"🛡️ 트렌드리스크: 낮은 7일평균 해시레이트 ({hash_rate_7d_eh:.1f} EH/s) - 네트워크 보안 약화")
+        
         activity_score = addresses.get('address_activity_score', 65)
         if activity_score < 40:
-            risks.append(f"낮은 네트워크 활성도 ({activity_score}) - 사용자 이탈")
+            risks.append(f"📱 트렌드리스크: 낮은 네트워크 활성도 ({activity_score}) - 사용자 이탈")
         
-        return risks if risks else ["현재 특별한 온체인 리스크 없음"]
-    
-    def _identify_bullish_factors(self, onchain_data: Dict) -> List[str]:
-        """강세 요인들"""
+        # 데이터 신뢰성 리스크
+        success_rate = onchain_data.get('collection_stats', {}).get('success_rate', 0)
+        if success_rate < 60:
+            risks.append(f"📊 데이터리스크: 낮은 수집 성공률 ({success_rate:.1f}%) - 분석 신뢰도 저하")
+        
+        return risks if risks else ["현재 특별한 스윙/트렌드 리스크 없음"]
+
+    def _identify_bullish_factors_enhanced(self, onchain_data: Dict) -> List[str]:
+        """강세 요인들 (스윙거래 + 트렌드 관점)"""
         bullish = []
         
-        holder_behavior = onchain_data.get('holder_behavior', {})
-        accumulation = holder_behavior.get('accumulation_phase', False)
-        if accumulation:
-            bullish.append("축적 단계 진입 - 장기 투자자 매수 증가")
-        
         mining = onchain_data.get('mining', {})
-        security_score = mining.get('network_security_score', 85)
-        if security_score > 90:
-            bullish.append(f"매우 높은 네트워크 보안 ({security_score:.1f}) - 신뢰도 증가")
-        
-        addresses = onchain_data.get('addresses', {})
-        new_addresses_trend = addresses.get('new_addresses_trend', 'Stable')
-        if new_addresses_trend == 'Increasing':
-            bullish.append("신규 주소 증가 - 새로운 사용자 유입")
-        
         holder_behavior = onchain_data.get('holder_behavior', {})
+        addresses = onchain_data.get('addresses', {})
+        mempool = onchain_data.get('mempool', {})
+        
+        # 스윙거래 강세 요인 (단기 기회)
+        hash_rate_daily_eh = mining.get('hash_rate_daily_eh', mining.get('hash_rate_eh', 350))
+        hash_rate_7d_eh = mining.get('hash_rate_7d_eh', mining.get('hash_rate_eh', 350))
+        miner_risk_daily = mining.get('miner_risk_daily', mining.get('miner_capitulation_risk', 'Low'))
+        
+        if hash_rate_daily_eh > hash_rate_7d_eh * 1.05:  # 일일값이 7일평균보다 5% 이상 높음
+            bullish.append(f"🚀 스윙강세: 일일 해시레이트 급상승 ({hash_rate_daily_eh:.1f} > {hash_rate_7d_eh:.1f} EH/s)")
+        
+        if miner_risk_daily == 'Low':
+            bullish.append("💪 스윙강세: 일일 채굴자 신뢰 회복 - 단기 매수 신호")
+        
+        congestion = mempool.get('congestion_level', 'Medium')
+        if congestion == 'Low':
+            bullish.append("⚡ 스윙강세: 네트워크 효율성 우수 - 거래 활성화 기대")
+        
+        # 트렌드 강세 요인 (중장기 기회)
+        security_score_7d = mining.get('network_security_7d', mining.get('network_security_score', 85))
+        if security_score_7d > 90:
+            bullish.append(f"🛡️ 트렌드강세: 매우 높은 7일평균 네트워크 보안 ({security_score_7d:.1f}) - 신뢰도 증가")
+        
         hodl_strength = holder_behavior.get('hodl_strength_score', 65)
         if hodl_strength > 80:
-            bullish.append(f"극강 HODL 심리 ({hodl_strength:.1f}) - 공급 부족 심화")
+            bullish.append(f"💎 트렌드강세: 극강 HODL 심리 ({hodl_strength:.1f}) - 공급 부족 심화")
         
-        network_stats = onchain_data.get('network_stats', {})
-        hash_rate_eh = mining.get('hash_rate_eh', 350)
-        if hash_rate_eh > 450:
-            bullish.append(f"사상 최고 해시레이트 ({hash_rate_eh:.1f} EH/s) - 채굴자 신뢰")
+        accumulation = holder_behavior.get('accumulation_phase', False)
+        if accumulation:
+            bullish.append("📈 트렌드강세: 축적 단계 진입 - 장기 투자자 매수 증가")
         
-        return bullish if bullish else ["현재 특별한 강세 요인 없음"]
-    
+        new_addresses_trend = addresses.get('new_addresses_trend', 'Stable')
+        if new_addresses_trend == 'Increasing':
+            bullish.append("👥 트렌드강세: 신규 주소 증가 - 새로운 사용자 유입")
+        
+        if hash_rate_7d_eh > 600:
+            bullish.append(f"🏆 트렌드강세: 사상급 7일평균 해시레이트 ({hash_rate_7d_eh:.1f} EH/s) - 네트워크 성숙")
+        
+        # 종합 강세 신호
+        activity_score = addresses.get('address_activity_score', 65)
+        if activity_score > 85:
+            bullish.append(f"🌟 종합강세: 탁월한 네트워크 활성도 ({activity_score}) - 생태계 번영")
+        
+        return bullish if bullish else ["현재 특별한 스윙/트렌드 강세 요인 없음"]
+
     async def analyze_with_ai(self, onchain_data: Dict) -> Dict:
         """AI 모델을 사용하여 온체인 데이터 종합 분석"""
         if self.client is None:

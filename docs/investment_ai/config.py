@@ -298,111 +298,182 @@ CONFIG = {
         온체인 데이터:
         {onchain_data}
 
+        ⚠️ 중요한 데이터 특성 정보:
+        - **이중 해시레이트 시스템**: 7일 이동평균 + 일일 원시값 동시 제공
+        * **일일 원시값 (daily)**: 즉시 반응성, 스윙거래 신호 감지용
+        * **7일 평균 (7d)**: 안정적 트렌드, 중장기 분석용
+        - **분석 접근법**: 단기 스윙거래 + 중장기 트렌드 분석의 이중 관점
+        - **업계 표준**: Blockchain.com, HashrateIndex 등 주요 플랫폼의 다층 분석 방식 채택
+        - **신호 검증**: 일일 변동과 평활화 트렌드의 교차 검증으로 신뢰성 확보
+        - **난이도 조정**: 2,016블록(약 2주)마다 자동 조정되는 고정값
+        - **현재 네트워크**: 비트코인 해시레이트는 약 800-1000 EH/s 수준 (2025년 기준)
+
         분석 기준:
-        1. 네트워크 보안 및 해시레이트 트렌드 (채굴자 심리 포함)
-        2. 보유자 행동 패턴 (HODL 강도, 매도 압력, 축적 신호)
-        3. 네트워크 활성도 및 사용량 (주소 활성도, 거래 수요)
-        4. 메모리풀 상태 및 네트워크 효율성
-        5. 온체인 플로우 및 유동성 패턴
+        1. **이중 네트워크 보안 분석** (채굴자 심리 포함)
+        - **일일 해시레이트**: 즉시 채굴자 행동 변화 및 단기 위험 감지
+        - **7일 평균 해시레이트**: 안정적 보안 트렌드 및 중장기 네트워크 건강도
+        - **스윙 vs 트렌드 신호 비교**: 단기 변동성과 중장기 안정성의 교차 분석
+        
+        2. **보유자 행동 패턴** (HODL 강도, 매도 압력, 축적 신호)
+        - 거래량 기반 HODL 강도 측정
+        - 장기 보유 vs 단기 거래 패턴 분석
+        
+        3. **네트워크 활성도 및 사용량** (주소 활성도, 거래 수요)
+        - 추정 활성 주소 수 기반 네트워크 성장 분석
+        - 거래 수요 및 네트워크 이용률 평가
+        
+        4. **메모리풀 상태 및 네트워크 효율성**
+        - 미확인 거래 수를 통한 네트워크 혼잡도 분석
+        - 거래 처리 효율성 및 수수료 압력 평가
+        
+        5. **온체인 플로우 및 유동성 패턴**
+        - 시장 데이터 기반 유동성 흐름 분석
+        - 거래소 활동 및 자금 이동 패턴
 
         중요 고려사항:
-        - 해시레이트는 네트워크 보안의 핵심 지표
+        - **이중 해시레이트 해석**: 일일값과 7일 평균의 차이로 단기 변동성 vs 안정적 트렌드 구분
+        - **스윙거래 신호**: 일일 원시값의 급변을 통한 즉시 반응 기회 포착
+        - **트렌드 확인**: 7일 평균을 통한 노이즈 제거 및 방향성 확인
+        - **신호 일치도**: 스윙과 트렌드 신호의 정렬 여부로 신뢰도 판단
         - HODL 행동은 공급 부족을 나타내는 선행지표
         - 신규 주소 증가는 사용자 기반 확장 의미
         - 메모리풀 혼잡도는 네트워크 수요 반영
         - 채굴자 항복 위험은 매도 압력 증가 신호
-        - API 오류로 hash_rate가 0으로 수집될 수 있습니다. 이 경우, 이 데이터는 분석에 포함하지 말고 그 외의 데이터로만 분석하시오.
-        - hash_rate가 0으로 수집되어 분석에서 제외되었을 경우, 반드시 analysis_summary에 표기하여 최종 결정 AI가 분석할때 참고할 수 있도록 하시오.
 
         다음 형식으로 결과를 제공해주세요:
-        {{
+        {
             "onchain_health_score": 0~100 사이의 온체인 건강도 점수,
             "investment_signal": "Strong Buy/Buy/Hold/Sell/Strong Sell",
-            "network_security_analysis": {{
-                "security_level": "네트워크 보안 수준 평가",
-                "hash_rate_assessment": "해시레이트 트렌드 분석",
-                "miner_sentiment": "채굴자 심리 및 행동 분석",
-                "security_trend": "보안 강화/유지/약화 추세",
-                "capitulation_risk": "채굴자 항복 위험도 평가"
-            }},
-            "holder_sentiment_analysis": {{
-                "hodl_strength": "장기 보유 의지 강도",
+            "dual_signal_analysis": {
+                "swing_signal": {
+                    "score": "일일 원시값 기반 스윙거래 점수 (0-100)",
+                    "signal": "Strong Buy/Buy/Hold/Sell/Strong Sell",
+                    "confidence": "High/Medium/Low",
+                    "key_factors": ["일일 해시레이트 변화, 즉시 채굴자 행동 등"]
+                },
+                "trend_signal": {
+                    "score": "7일 평균 기반 트렌드 분석 점수 (0-100)",
+                    "signal": "Strong Buy/Buy/Hold/Sell/Strong Sell", 
+                    "confidence": "High/Medium/Low",
+                    "key_factors": ["안정적 해시레이트 트렌드, 중장기 보안성 등"]
+                },
+                "signal_alignment": {
+                    "alignment_status": "Aligned/Divergent/Neutral",
+                    "confidence_level": "High/Medium/Low",
+                    "recommended_approach": "스윙 우선/트렌드 우선/신중 관망",
+                    "score_difference": "스윙점수와 트렌드점수 차이"
+                }
+            },
+            "network_security_analysis": {
+                "daily_security_assessment": {
+                    "daily_hash_rate_eh": "일일 원시값 해시레이트 (EH/s)",
+                    "immediate_risk_level": "즉시 위험도 (High/Medium/Low)",
+                    "miner_sentiment_daily": "일일 채굴자 심리",
+                    "short_term_stability": "단기 안정성 평가"
+                },
+                "trend_security_assessment": {
+                    "avg_hash_rate_eh": "7일 평균 해시레이트 (EH/s)", 
+                    "long_term_risk_level": "중장기 위험도 (High/Medium/Low)",
+                    "miner_sentiment_trend": "트렌드 채굴자 심리",
+                    "network_maturity": "네트워크 성숙도 평가"
+                },
+                "comparative_analysis": {
+                    "hash_rate_volatility": "일일값과 7일평균 차이 분석",
+                    "trend_deviation": "단기 이탈 정도",
+                    "stability_score": "전체적 안정성 점수",
+                    "capitulation_risk": "채굴자 항복 위험도 (이중 검증)"
+                }
+            },
+            "holder_sentiment_analysis": {
+                "hodl_strength": "장기 보유 의지 강도 (거래량 역분석 기반)",
                 "selling_pressure": "현재 매도 압력 수준",
                 "accumulation_signal": "기관/개인 축적 신호 여부",
                 "distribution_risk": "대량 물량 출회 위험도",
                 "investor_behavior": "투자자 행동 패턴 분석"
-            }},
-            "network_activity_analysis": {{
-                "user_adoption": "사용자 채택 및 확산 분석",
-                "transaction_demand": "거래 수요 수준 평가",
+            },
+            "network_activity_analysis": {
+                "user_adoption": "사용자 채택 및 확산 분석 (활성 주소 추정치 기반)",
+                "transaction_demand": "거래 수요 수준 평가 (메모리풀 혼잡도 기준)",
                 "network_utilization": "네트워크 활용도 분석",
                 "growth_indicators": "성장 지표 및 트렌드",
                 "efficiency_metrics": "네트워크 효율성 지표"
-            }},
-            "liquidity_flow_analysis": {{
-                "onchain_liquidity": "온체인 유동성 상황",
-                "exchange_flows": "거래소 유입/유출 패턴",
-                "whale_activity": "고래 지갑 활동 분석",
+            },
+            "liquidity_flow_analysis": {
+                "onchain_liquidity": "온체인 유동성 상황 (거래량 데이터 기반)",
+                "exchange_flows": "거래소 유입/유출 패턴 추정",
+                "whale_activity": "고래 지갑 활동 분석 (추정치 기반)",
                 "institutional_flow": "기관 자금 흐름 추정",
                 "retail_participation": "개인 투자자 참여도"
-            }},
+            },
             "key_insights": [
-                "온체인 데이터에서 발견된 주요 인사이트들"
+                "이중 해시레이트 시스템에서 발견된 주요 인사이트들",
+                "스윙거래 기회 및 트렌드 확인 신호들"
             ],
-            "risk_assessment": {{
-                "immediate_risks": ["단기 리스크 요인들"],
-                "medium_term_risks": ["중기 리스크 요인들"],
+            "risk_assessment": {
+                "immediate_risks": ["일일 데이터 기반 단기 리스크 요인들"],
+                "medium_term_risks": ["7일 평균 트렌드 기반 중기 리스크 요인들"],
                 "systemic_risks": ["시스템적 리스크 요인들"],
+                "dual_signal_risks": ["스윙-트렌드 신호 상충 위험"],
                 "risk_mitigation": "리스크 완화 방안"
-            }},
-            "opportunity_analysis": {{
-                "bullish_signals": ["강세 신호들"],
+            },
+            "opportunity_analysis": {
+                "swing_opportunities": ["일일 데이터 기반 단기 거래 기회들"],
+                "trend_opportunities": ["7일 평균 기반 중장기 투자 기회들"],
                 "accumulation_opportunities": ["축적 기회들"],
                 "network_growth_potential": "네트워크 성장 잠재력",
                 "adoption_catalysts": ["채택 확산 촉진 요인들"]
-            }},
-            "market_cycle_position": {{
-                "cycle_phase": "현재 시장 사이클 위치",
+            },
+            "market_cycle_position": {
+                "cycle_phase": "현재 시장 사이클 위치 (이중 해시레이트 기준)",
                 "onchain_maturity": "온체인 지표 성숙도",
                 "trend_sustainability": "현재 트렌드 지속 가능성",
-                "reversal_signals": "추세 반전 신호 여부"
-            }},
-            "comparative_analysis": {{
-                "historical_comparison": "과거 유사 상황과의 비교",
+                "reversal_signals": "추세 반전 신호 여부 (스윙/트렌드 비교)"
+            },
+            "comparative_analysis": {
+                "historical_comparison": "과거 유사 상황과의 비교 (이중 분석 기준)",
                 "relative_strength": "다른 시기 대비 상대적 강도",
-                "anomaly_detection": "이상 징후 탐지 결과",
+                "anomaly_detection": "이상 징후 탐지 결과 (일일 vs 평균)",
                 "pattern_recognition": "인식된 패턴들"
-            }},
-            "actionable_recommendations": {{
-                "short_term_strategy": "단기 전략 권장사항",
-                "medium_term_outlook": "중기 전망 및 대응",
+            },
+            "actionable_recommendations": {
+                "swing_trading_strategy": "단기 스윙거래 전략 (일일 데이터 기반)",
+                "trend_following_strategy": "중장기 트렌드 전략 (7일 평균 기반)",
+                "position_sizing": "포지션 크기 조절 권장사항",
                 "monitoring_points": ["모니터링해야 할 핵심 지표들"],
-                "trigger_levels": {{
-                    "bullish_triggers": ["강세 전환 트리거 수준들"],
-                    "bearish_triggers": ["약세 전환 트리거 수준들"]
-                }}
-            }},
-            "confidence_metrics": {{
-                "data_quality": "데이터 품질 평가",
+                "trigger_levels": {
+                    "swing_triggers": {
+                        "bullish": ["일일 기준 강세 전환 트리거들"],
+                        "bearish": ["일일 기준 약세 전환 트리거들"]
+                    },
+                    "trend_triggers": {
+                        "bullish": ["7일 평균 기준 강세 전환 트리거들"],
+                        "bearish": ["7일 평균 기준 약세 전환 트리거들"]
+                    }
+                }
+            },
+            "confidence_metrics": {
+                "data_quality": "데이터 품질 평가 (이중 시스템 신뢰성 포함)",
                 "analysis_reliability": "분석 신뢰성 수준",
                 "prediction_confidence": 0~100,
-                "uncertainty_factors": ["불확실성 요인들"]
-            }},
-            "timeline_outlook": {{
-                "next_24_hours": "24시간 이내 전망",
-                "next_week": "1주일 이내 전망", 
+                "uncertainty_factors": ["불확실성 요인들"],
+                "signal_consistency": "스윙-트렌드 신호 일관성"
+            },
+            "timeline_outlook": {
+                "next_24_hours": "24시간 이내 전망 (일일 데이터 중심)",
+                "next_week": "1주일 이내 전망 (7일 평균 트렌드 기반)", 
                 "next_month": "1개월 이내 전망",
-                "key_events": ["주목해야 할 이벤트들"]
-            }},
-            "integration_notes": {{
+                "key_events": ["주목해야 할 이벤트들 (난이도 조정 등)"]
+            },
+            "integration_notes": {
                 "macro_correlation": "거시경제 지표와의 상관관계",
                 "technical_alignment": "기술적 분석과의 정합성",
                 "sentiment_consistency": "시장 심리와의 일치도",
-                "cross_validation": "다른 분석과의 교차 검증"
-            }},
+                "cross_validation": "다른 분석과의 교차 검증",
+                "dual_methodology_advantages": "이중 해시레이트 방법론의 장점 및 한계"
+            },
             "confidence": 0~100 사이의 전체 분석 신뢰도,
-            "analysis_summary": "온체인 분석 종합 요약 (핵심 결론 및 투자 방향성)"
-        }}
+            "analysis_summary": "온체인 분석 종합 요약 (이중 해시레이트 시스템 기반 핵심 결론 및 투자 방향성)"
+        }
         """,
 
 
@@ -630,10 +701,36 @@ CONFIG = {
         5. 리스크 대비 수익률 최적화
         6. 현재 포지션 상태에 따른 맞춤 전략
 
+        온체인 분석 해석 가이드:
+
+        **이중 해시레이트 시스템 이해**:
+        - **일일 해시레이트**: 즉시 반응하는 채굴자 행동, 단기 스윙거래 신호
+        - **7일 평균 해시레이트**: 안정적 트렌드, 중장기 방향성 확인
+        - **신호 일치**: 일일 + 7일 평균 모두 같은 방향 = 강한 신호
+        - **신호 상충**: 일일 vs 7일 평균 다른 방향 = 주의 필요
+
+        **핵심 온체인 지표 읽는 법**:
+        - **채굴자 항복 위험**: High = 매도 압력 증가, Low = 안정적 공급
+        - **HODL 강도**: 70+ = 강한 보유 의지, 40- = 매도 압력
+        - **메모리풀 혼잡도**: High = 수요 급증, Low = 거래 효율적
+        - **네트워크 보안 점수**: 80+ = 매우 안전, 40- = 보안 우려
+
+        **스윙거래용 온체인 신호**:
+        - 일일 해시레이트가 7일 평균보다 5% 이상 차이 = 즉시 반응 필요
+        - 채굴자 리스크 일일 변화 = 단기 매도/매수 압력 변화
+        - 메모리풀 50,000건 초과 = 네트워크 혼잡, 거래 지연 위험
+
+        **온체인 신호 우선순위** (스윙거래 관점):
+        1. **일일 해시레이트 급변** (5% 이상) = 즉시 대응
+        2. **채굴자 리스크 변화** = 매도 압력 예측
+        3. **HODL 강도 변화** = 공급/수요 균형 변화
+        4. **메모리풀 상태** = 네트워크 효율성 판단
+
         중요 고려사항:
 
         - 1시간봉 기준 스윙 거래(하루 1-2회)이므로 기술적 분석과 시장 심리가 핵심
         - 거시경제와 온체인 분석은 1-2일 단기적 신호에 중점을 둔 방향성 고려용
+        - **온체인 분석에서는 일일 해시레이트 변화와 스윙 신호에 더 높은 가중치**
         - 장기적 분석과 단기적 분석이 상충할 때는 단기 분석 우선
         - 기관 투자 흐름은 큰 틀에서의 자금 흐름 파악
         - 포지션 분석 결과는 현재 상황에 가장 적합한 정보
@@ -644,6 +741,7 @@ CONFIG = {
 
         - 기술적 분석과 시장심리가 정반대 신호이면서 둘 다 높은 신뢰도일 때
         - 포지션 분석과 기술적 분석이 완전히 상반될 때
+        - **온체인 스윙 신호와 트렌드 신호가 극단적으로 상충할 때** (점수 차이 30+ && 반대 방향)
         - 극단적 변동성 상황 (일시적 급락/급등)
         - 시스템/데이터 오류 감지 시
         - 장기 vs 단기 분석 상충은 단기 우선으로 진행 (심각한 상충이 아닐 시 needs_human_review : false 로 설정)
@@ -654,6 +752,7 @@ CONFIG = {
         - 포지션 크기는 신호 강도와 신뢰도에 비례
         - 레버리지는 5배 고정값임
         - 신호가 약하거나 충돌 시에는 포지션 크기 축소 또는 관망
+        - **온체인 채굴자 리스크 High 시에는 포지션 크기 50% 축소 권장**
 
         TP/SL 설정 기준:
 
@@ -672,6 +771,8 @@ CONFIG = {
         기타 주의사항:
 
         - API 오류로 hash_rate가 0으로 수집될 수 있습니다. 이 경우, 이 데이터는 분석에 포함하지 말고 그 외의 데이터로만 분석하시오.
+        - **온체인 데이터 수집 성공률이 60% 미만일 때는 온체인 분석 가중치를 50% 축소**
+        - **일일 해시레이트와 7일 평균의 차이가 10% 이상일 때는 시장 변동성 증가 주의**
 
         다음 형식으로 결과를 제공해주세요:
         {{
