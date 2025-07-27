@@ -466,12 +466,12 @@
             try {
                 console.log("차트 데이터 처리 중...");
 
-                // 차트 데이터 처리 - 기존 adjustTimestampForKST 함수 재활용
+                // 차트 데이터 처리 - UTC를 KST로 변환 (+9시간)
                 const chartData = data.chart_data.map(item => {
                     const timestamp = normalizeTimestamp(item.timestamp);
-
-                    // 기존 함수 재활용해서 KST로 변환
-                    const kstTimestamp = adjustTimestampForKST(item.timestamp);
+                    
+                    // UTC 시간을 KST로 변환 (+9시간) - adjustTimestampForKST와 반대
+                    const kstTimestamp = new Date(timestamp.getTime() + (9 * 60 * 60 * 1000));
 
                     return {
                         timestamp: kstTimestamp,  // KST로 변환된 시간
@@ -483,7 +483,6 @@
                         volume: Number(item.volume) || 0
                     };
                 }).filter(item => item.timestamp);
-
                 // 차트 데이터 시간 범위 확인
                 if (chartData.length > 0) {
                     const firstTimestamp = chartData[0].timestamp;
