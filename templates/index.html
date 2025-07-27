@@ -446,7 +446,8 @@
             console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (-9시간)`);
             return adjustedDate;
         }
-        // 차트 생성 함수
+
+        // 차트 생성 함수 - 캔들차트 버전
         function createTradingChart(data) {
             console.log("차트 생성 시작");
             const ctx = document.getElementById('tradingChart').getContext('2d');
@@ -512,28 +513,28 @@
                 console.log(`데이터 가격 범위: $${minPrice.toFixed(2)} ~ $${maxPrice.toFixed(2)}`);
                 console.log(`Y축 범위: $${yAxisMin.toFixed(2)} ~ $${yAxisMax.toFixed(2)}`);
 
-                // 라인 차트 데이터셋
-                const lineDataset = {
+                // 캔들스틱 차트 데이터셋
+                const candlestickDataset = {
                     label: '비트코인',
                     data: chartData.map(item => ({
                         x: item.timestamp,
-                        y: item.close,
-                        _open: item.open,
-                        _high: item.high,
-                        _low: item.low,
-                        _close: item.close,
+                        o: item.open,    // open
+                        h: item.high,    // high  
+                        l: item.low,     // low
+                        c: item.close,   // close
                         _volume: item.volume
                     })),
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.1,
-                    pointRadius: 0,
-                    pointHoverRadius: 5,
-                    pointHoverBackgroundColor: 'rgb(75, 192, 192)',
-                    pointHoverBorderColor: 'white',
-                    pointHoverBorderWidth: 2
+                    borderColor: {
+                        up: '#10B981',      // 상승 캔들 - 초록색
+                        down: '#EF4444',    // 하락 캔들 - 빨간색
+                        unchanged: '#6B7280' // 변화없음 - 회색
+                    },
+                    backgroundColor: {
+                        up: '#10B981',      // 상승 캔들 내부
+                        down: '#EF4444',    // 하락 캔들 내부  
+                        unchanged: '#6B7280'
+                    },
+                    borderWidth: 1
                 };
 
                 // 포지션 화살표를 위한 사용자 정의 플러그인
@@ -718,9 +719,9 @@
 
                 // 차트 생성 옵션
                 const chartConfig = {
-                    type: 'line',
+                    type: 'candlestick',
                     data: {
-                        datasets: [lineDataset]
+                        datasets: [candlestickDataset]
                     },
                     options: {
                         animation: false,
@@ -741,15 +742,12 @@
                                 callbacks: {
                                     label: function (context) {
                                         const item = context.raw;
-                                        if (item && item._open !== undefined) {
-                                            return [
-                                                `시가: $${item._open.toFixed(2)}`,
-                                                `고가: $${item._high.toFixed(2)}`,
-                                                `저가: $${item._low.toFixed(2)}`,
-                                                `종가: $${item._close.toFixed(2)}`
-                                            ];
-                                        }
-                                        return context.dataset.label;
+                                        return [
+                                            `시가: $${item.o.toFixed(2)}`,
+                                            `고가: $${item.h.toFixed(2)}`,
+                                            `저가: $${item.l.toFixed(2)}`,
+                                            `종가: $${item.c.toFixed(2)}`
+                                        ];
                                     },
                                     title: function (context) {
                                         if (context[0] && context[0].label) {
