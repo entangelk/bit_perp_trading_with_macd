@@ -219,26 +219,36 @@ def chart_update_one(update, symbol, max_check_time=240, check_interval=60):
                     print(f"로컬 시간으로 대체 (UTC): {server_datetime}")
                     print("주의: 로컬 시간은 바이비트 서버 시간과 약간의 차이가 있을 수 있습니다")
 
+        # 🔧 핵심 수정: timeframe 매핑 추가
+        timeframe_mapping = {
+            '1m': '1m',
+            '3m': '3m', 
+            '5m': '5m',
+            '15m': '15m',
+            '60m': '1h'  # ← 이게 핵심!
+        }
+        
         # collection 매핑
-        collection = None
-        if update == '1m':
-            collection = chart_collection_1m
-        elif update == '3m':
-            collection = chart_collection_3m
-        elif update == '5m':
-            collection = chart_collection_5m
-        elif update == '15m':
-            collection = chart_collection_15m
-        elif update == '60m':
-            collection = chart_collection_60m        
+        collection_mapping = {
+            '1m': chart_collection_1m,
+            '3m': chart_collection_3m,
+            '5m': chart_collection_5m,
+            '15m': chart_collection_15m,
+            '60m': chart_collection_60m        
+        }
+        
+        collection = collection_mapping.get(update)
+        timeframe = timeframe_mapping.get(update)  # ← 올바른 timeframe 사용
                 
-        if collection is None:
+        if collection is None or timeframe is None:
             raise ValueError(f"Invalid update value: {update}")
         
-        # 업데이트 수행
+        print(f"차트 업데이트: {update} -> API timeframe: {timeframe}")  # 디버깅용
+        
+        # 업데이트 수행 - 수정된 timeframe 사용
         fetch_latest_ohlcv_and_update_db(
             symbol=symbol,
-            timeframe=update,
+            timeframe=timeframe,  # ← 매핑된 timeframe 사용
             collection=collection,
             max_check_time=max_check_time,
             check_interval=check_interval
