@@ -434,6 +434,18 @@
                 return null;
             }
         }
+        // 타임스탬프 변환 후 시간대 조정 함수
+        function adjustTimestampForKST(timestamp) {
+            if (!timestamp) return null;
+
+            const date = normalizeTimestamp(timestamp);
+            if (!date) return null;
+
+            // 9시간 전으로 조정 (UTC+9 보정)
+            const adjustedDate = new Date(date.getTime() - (9 * 60 * 60 * 1000));
+            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (-9시간)`);
+            return adjustedDate;
+        }
 
         // 차트 생성 함수 - 캔들차트 버전
         function createTradingChart(data) {
@@ -445,6 +457,7 @@
                 return;
             }
 
+            // 데이터 유효성 검사
             if (!data.chart_data || !Array.isArray(data.chart_data) || data.chart_data.length === 0) {
                 console.error("유효한 차트 데이터가 없습니다");
                 return;
@@ -455,11 +468,10 @@
 
                 // 차트 데이터 처리 - UTC를 KST로 변환 (+9시간)
                 const chartData = data.chart_data.map(item => {
-                    const utcTimestamp = normalizeTimestamp(item.timestamp);
-                    if (!utcTimestamp) return null;
+                    const timestamp = normalizeTimestamp(item.timestamp);
+                    if (!timestamp) return null;
 
-                    // UTC 시간을 KST로 변환 (+9시간)
-                    const kstTimestamp = new Date(utcTimestamp.getTime() + (9 * 60 * 60 * 1000));
+                    const kstTimestamp = new Date(timestamp.getTime() + (9 * 60 * 60 * 1000));
 
                     return {
                         timestamp: kstTimestamp,  // KST로 변환된 시간
@@ -474,7 +486,7 @@
 
                 // 시간 순서대로 정렬
                 chartData.sort((a, b) => a.timestamp - b.timestamp);
-                
+
                 console.log(`데이터 처리 완료: ${chartData.length}개 항목`);
 
                 // 데이터에서 최소/최대 가격 찾기 (Y축 범위 설정을 위해)
@@ -514,11 +526,11 @@
                             data.position_timeline.forEach((item) => {
                                 if (!item.position || !item.timestamp) return;
 
-                                // 타임스탬프를 KST로 변환 (+9시간)
                                 const utcTimestamp = normalizeTimestamp(item.timestamp);
                                 if (!utcTimestamp) return;
-                                const kstTimestamp = new Date(utcTimestamp.getTime() + (9 * 60 * 60 * 1000));
                                 
+                                const kstTimestamp = new Date(utcTimestamp.getTime() + (9 * 60 * 60 * 1000));
+
                                 const isShort = item.position === 'Short';
                                 const color = isShort ? 'rgba(255, 60, 60, 1)' : 'rgba(60, 120, 255, 1)';
                                 const arrowSize = 8;
@@ -566,7 +578,7 @@
                         }
                     }
                 };
-                
+
                 // 포지션 범위 어노테이션 (배경색 영역)
                 const annotations = {};
                 if (data.position_ranges && Array.isArray(data.position_ranges)) {
@@ -574,14 +586,21 @@
                         try {
                             if (!range.position || !range.start || !range.end) return;
 
-                            // 타임스탬프를 KST로 변환 (+9시간)
                             const utcStart = normalizeTimestamp(range.start);
                             const utcEnd = normalizeTimestamp(range.end);
-                            if (!utcStart || !utcEnd) return;
 
+                            if (!utcStart || !utcEnd) {
+                                console.warn(`범위 ${index}의 타임스탬프 변환 실패`, range);
+                                return;
+                            }
+
+                            // ******** 수정된 부분 ********
+                            // 말씀하신 대로, 캔들 데이터와 동일하게 +9시간을 적용하여 시간대를 맞춥니다.
+                            // 기존의 adjustTimestampForKST(-9시간) 함수를 사용하지 않습니다.
                             const startKST = new Date(utcStart.getTime() + (9 * 60 * 60 * 1000));
                             const endKST = new Date(utcEnd.getTime() + (9 * 60 * 60 * 1000));
-                            
+                            // ******** 여기까지 수정 ********
+
                             const isShort = range.position === 'Short';
                             const bgColor = isShort ? 'rgba(255, 60, 60, 0.1)' : 'rgba(60, 120, 255, 0.1)';
                             const borderColor = isShort ? 'rgba(255, 60, 60, 0.3)' : 'rgba(60, 120, 255, 0.3)';
@@ -596,13 +615,12 @@
                                 borderColor: borderColor,
                                 borderWidth: 1
                             };
-                            console.log(`범위 어노테이션 생성 성공: range-${index} (${startKST.toISOString()} ~ ${endKST.toISOString()})`);
                         } catch (e) {
                             console.error('범위 어노테이션 생성 오류:', e, range);
                         }
                     });
                 }
-                
+
                 // 차트 생성 옵션
                 const chartConfig = {
                     type: 'candlestick',
@@ -630,7 +648,7 @@
                                         ];
                                     },
                                     title: function (context) {
-                                        if (context[0] && context[0].label) {
+                                        if (context[0] && context[0].parsed.x) {
                                             const date = new Date(context[0].parsed.x);
                                             return date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace('24:', '00:');
                                         }
@@ -647,10 +665,7 @@
                                 time: {
                                     unit: 'hour',
                                     stepSize: 1,
-                                    displayFormats: {
-                                        hour: 'HH:mm',
-                                        day: 'MM-dd'
-                                    },
+                                    displayFormats: { hour: 'HH:mm', day: 'MM-dd' },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm'
                                 },
                                 title: { display: true, text: '시간 (KST)' },
@@ -701,6 +716,7 @@
                     `<div class="p-4 text-red-600">차트 생성 오류: ${error.message}</div>`;
             }
         }
+    
     </script>
 
 </body>
