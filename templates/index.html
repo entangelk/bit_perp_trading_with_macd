@@ -442,9 +442,9 @@
             const date = normalizeTimestamp(timestamp);
             if (!date) return null;
 
-            // 9시간을 더하도록 수정 (UTC -> KST)
+            // 시간조정 없음 (UTC -> KST)
             const adjustedDate = new Date(date.getTime() + (0 * 60 * 60 * 1000));
-            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (+9시간)`);
+            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (+0시간)`);
             return adjustedDate;
         }
 
