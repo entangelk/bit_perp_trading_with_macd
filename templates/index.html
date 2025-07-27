@@ -536,11 +536,11 @@
                     },
                     borderWidth: 1,
                     // 캔들 너비 설정 추가 - 더 좁게
-                    barPercentage: 0.6,    // 전체 공간 대비 캔들이 차지할 비율 (0.6 = 60%)
-                    categoryPercentage: 0.8, // 카테고리 내에서 캔들이 차지할 비율 (0.8 = 80%)
+                    barPercentage: 0.7,    // 전체 공간 대비 캔들이 차지할 비율 (0.6 = 60%)
+                    categoryPercentage: 0.9, // 카테고리 내에서 캔들이 차지할 비율 (0.8 = 80%)
 
                     // 또는 직접 픽셀 너비 지정 (Chart.js 3.x+)
-                    maxBarThickness: 20    // 최대 캔들 너비를 20픽셀로 제한
+                    maxBarThickness: 25    // 최대 캔들 너비를 20픽셀로 제한
                 };
 
                 // 포지션 화살표를 위한 사용자 정의 플러그인
@@ -778,13 +778,10 @@
                                 type: 'time',
                                 time: {
                                     unit: 'hour',
+                                    stepSize: 2,  // 2시간 간격으로 표시
                                     displayFormats: {
-                                        hour: 'HH:mm'
-                                    },
-                                    parser: function (utcTime) {
-                                        const date = new Date(utcTime);
-                                        date.setHours(date.getHours() + 9);
-                                        return date;
+                                        hour: 'MM-dd HH:mm',  // 월-일 시:분 형식
+                                        day: 'MM-dd'
                                     },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
                                 },
@@ -793,8 +790,18 @@
                                     text: '시간 (KST)'
                                 },
                                 grid: {
-                                    display: false
-                                }
+                                    display: true,  // 그리드 라인 표시
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                },
+                                ticks: {
+                                    display: true,  // 눈금 표시 강제
+                                    maxTicksLimit: 12,  // 최대 12개 눈금
+                                    autoSkip: true,
+                                    source: 'auto'
+                                },
+                                // 캔들차트에서 중요한 설정
+                                offset: false,  // 캔들을 눈금에 정확히 맞춤
+                                bounds: 'data'  // 데이터 범위에 맞춤
                             },
                             y: {
                                 min: yAxisMin,
