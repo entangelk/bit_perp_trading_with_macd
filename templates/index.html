@@ -469,7 +469,7 @@
                 // 차트 데이터 처리 - UTC를 KST로 변환 (+9시간)
                 const chartData = data.chart_data.map(item => {
                     const timestamp = normalizeTimestamp(item.timestamp);
-                    
+
                     // UTC 시간을 KST로 변환 (+9시간) - adjustTimestampForKST와 반대
                     const kstTimestamp = new Date(timestamp.getTime() + (9 * 60 * 60 * 1000));
 
@@ -781,9 +781,9 @@
                                 type: 'time',
                                 time: {
                                     unit: 'hour',
-                                    stepSize: 2,
+                                    stepSize: 1,  // 1시간마다 표시
                                     displayFormats: {
-                                        hour: 'MM-dd HH:mm',
+                                        hour: 'HH:mm',  // 시간만 표시
                                         day: 'MM-dd'
                                     },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
@@ -798,9 +798,30 @@
                                 },
                                 ticks: {
                                     display: true,
-                                    maxTicksLimit: 12,
+                                    maxTicksLimit: 24,  // 24시간 표시 가능하도록
                                     autoSkip: true,
-                                    source: 'auto'
+                                    source: 'auto',
+                                    // 커스텀 라벨 포맷팅 - 2줄로 표시
+                                    callback: function (value, index, values) {
+                                        const date = new Date(value);
+                                        const hour = String(date.getHours()).padStart(2, '0');
+                                        const minute = String(date.getMinutes()).padStart(2, '0');
+                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                        const day = String(date.getDate()).padStart(2, '0');
+
+                                        // 0시일 때는 날짜도 표시
+                                        if (hour === '00') {
+                                            return [`${month}-${day}`, `${hour}:${minute}`];
+                                        } else {
+                                            return [``, `${hour}:${minute}`];  // 빈 줄 + 시간
+                                        }
+                                    },
+                                    // 라벨 스타일링
+                                    font: {
+                                        size: 10
+                                    },
+                                    maxRotation: 0,  // 회전 없음
+                                    minRotation: 0
                                 },
                                 offset: false,
                                 bounds: 'data'
