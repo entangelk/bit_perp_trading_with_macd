@@ -128,8 +128,8 @@ class SerialDataScheduler:
         if task.error_count >= task.max_errors:
             return False, f"disabled({task.error_count} errors)"
         
-        # 🔧 초기 실행시 모든 AI 분석 강제 실행
-        if force_all_analysis and task.name.startswith('ai_'):
+        # 🔧 초기 실행시 모든 분석 및 final_decision 강제 실행
+        if force_all_analysis and (task.name.startswith('ai_') or task.name == 'final_decision'):
             logger.info(f"🔥 초기 실행: {task.name} 강제 실행")
             return True, "forced_initial_execution"
         
@@ -220,14 +220,10 @@ class SerialDataScheduler:
             })
             
             # 저장 결과 확인
-            if result.upserted_id:
-                logger.info(f"✅ MongoDB 새 문서 생성: {task.name} (ID: {result.upserted_id})")
-            elif result.modified_count > 0:
-                logger.info(f"✅ MongoDB 기존 문서 업데이트: {task.name}")
-            elif result.matched_count > 0:
-                logger.info(f"✅ MongoDB 문서 동일함: {task.name} (변경사항 없음)")
+            if result.inserted_id:
+                logger.info(f"✅ MongoDB 새 문서 생성: {task.name} (ID: {result.inserted_id})")
             else:
-                logger.warning(f"⚠️ MongoDB 저장 결과 이상: {task.name} (matched={result.matched_count}, modified={result.modified_count})")
+                logger.warning(f"⚠️ MongoDB 저장 실패: {task.name}")
                 
         except Exception as e:
             logger.error(f"❌ MongoDB 저장 실패: {task.name} - {type(e).__name__}: {e}")
