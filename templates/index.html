@@ -466,13 +466,16 @@
             try {
                 console.log("차트 데이터 처리 중...");
 
-                // 차트 데이터 처리
+                // 차트 데이터 처리 - 기존 adjustTimestampForKST 함수 재활용
                 const chartData = data.chart_data.map(item => {
                     const timestamp = normalizeTimestamp(item.timestamp);
 
+                    // 기존 함수 재활용해서 KST로 변환
+                    const kstTimestamp = adjustTimestampForKST(item.timestamp);
+
                     return {
-                        timestamp: timestamp,
-                        x: timestamp,
+                        timestamp: kstTimestamp,  // KST로 변환된 시간
+                        x: kstTimestamp,
                         open: Number(item.open) || 0,
                         high: Number(item.high) || 0,
                         low: Number(item.low) || 0,
@@ -779,48 +782,29 @@
                                 type: 'time',
                                 time: {
                                     unit: 'hour',
-                                    stepSize: 2,  // 2시간 간격으로 표시
+                                    stepSize: 2,
                                     displayFormats: {
-                                        hour: 'MM-dd HH:mm',  // 월-일 시:분 형식
+                                        hour: 'MM-dd HH:mm',
                                         day: 'MM-dd'
                                     },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
-                                },
-                                adapters: {
-                                    date: {
-                                        zone: 'Asia/Seoul'  // KST 시간대 설정
-                                    }
                                 },
                                 title: {
                                     display: true,
                                     text: '시간 (KST)'
                                 },
                                 grid: {
-                                    display: true,  // 그리드 라인 표시
+                                    display: true,
                                     color: 'rgba(0, 0, 0, 0.1)'
                                 },
                                 ticks: {
-                                    display: true,  // 눈금 표시 강제
-                                    maxTicksLimit: 12,  // 최대 12개 눈금
+                                    display: true,
+                                    maxTicksLimit: 12,
                                     autoSkip: true,
-                                    source: 'auto',
-                                    // KST 시간으로 변환하여 표시
-                                    callback: function (value, index, values) {
-                                        const date = new Date(value);
-                                        // UTC에서 KST로 변환 (+9시간)
-                                        const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
-
-                                        const month = String(kstDate.getUTCMonth() + 1).padStart(2, '0');
-                                        const day = String(kstDate.getUTCDate()).padStart(2, '0');
-                                        const hour = String(kstDate.getUTCHours()).padStart(2, '0');
-                                        const minute = String(kstDate.getUTCMinutes()).padStart(2, '0');
-
-                                        return `${month}-${day} ${hour}:${minute}`;
-                                    }
+                                    source: 'auto'
                                 },
-                                // 캔들차트에서 중요한 설정
-                                offset: false,  // 캔들을 눈금에 정확히 맞춤
-                                bounds: 'data'  // 데이터 범위에 맞춤
+                                offset: false,
+                                bounds: 'data'
                             },
                             y: {
                                 min: yAxisMin,
