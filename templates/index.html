@@ -773,6 +773,7 @@
                                 annotations: annotations  // 포지션 범위만 어노테이션으로 표시
                             }
                         },
+                        // scales 설정에서 x축 부분을 이렇게 수정:
                         scales: {
                             x: {
                                 type: 'time',
@@ -784,6 +785,11 @@
                                         day: 'MM-dd'
                                     },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm (KST)'
+                                },
+                                adapters: {
+                                    date: {
+                                        zone: 'Asia/Seoul'  // KST 시간대 설정
+                                    }
                                 },
                                 title: {
                                     display: true,
@@ -797,7 +803,20 @@
                                     display: true,  // 눈금 표시 강제
                                     maxTicksLimit: 12,  // 최대 12개 눈금
                                     autoSkip: true,
-                                    source: 'auto'
+                                    source: 'auto',
+                                    // KST 시간으로 변환하여 표시
+                                    callback: function (value, index, values) {
+                                        const date = new Date(value);
+                                        // UTC에서 KST로 변환 (+9시간)
+                                        const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+
+                                        const month = String(kstDate.getUTCMonth() + 1).padStart(2, '0');
+                                        const day = String(kstDate.getUTCDate()).padStart(2, '0');
+                                        const hour = String(kstDate.getUTCHours()).padStart(2, '0');
+                                        const minute = String(kstDate.getUTCMinutes()).padStart(2, '0');
+
+                                        return `${month}-${day} ${hour}:${minute}`;
+                                    }
                                 },
                                 // 캔들차트에서 중요한 설정
                                 offset: false,  // 캔들을 눈금에 정확히 맞춤
