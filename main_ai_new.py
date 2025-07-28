@@ -14,6 +14,7 @@ import sys
 import os
 import asyncio
 from docs.utility.logger.logger import logger
+from typing import Dict, List, Optional
 
 # 프로젝트 루트 디렉토리 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
