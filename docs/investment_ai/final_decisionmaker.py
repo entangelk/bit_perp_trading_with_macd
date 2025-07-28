@@ -909,7 +909,51 @@ class FinalDecisionMaker:
                 
         except Exception:
             return 'Weak'
-    
+
+    def _generate_reverse_action(self, current_position: Dict, reverse_decision: Dict, market_data: Dict) -> Dict:
+        """Reverse 결정을 위한 액션 생성 - TP/SL 제외"""
+        try:
+            has_position = current_position.get('has_position', False)
+            position_side = current_position.get('side', 'none')
+            current_price = market_data.get('current_price', 100000)
+            
+            if has_position:
+                # 포지션 반전
+                if position_side == 'long':
+                    new_side = 'short'
+                    action_type = "Reverse to Short"
+                else:  # short
+                    new_side = 'long'
+                    action_type = "Reverse to Long"
+            else:
+                # 이론상 Reverse는 포지션이 있을 때만 나와야 하지만 안전장치
+                action_type = "Wait for Signal"
+                new_side = 'none'
+            
+            return {
+                "action_type": action_type,
+                "target_side": new_side,
+                "entry_price": current_price,
+                "position_size": 15,  # Reverse는 중간 크기로
+                "leverage": 5,
+                # 🔧 핵심 수정: Reverse 시에는 TP/SL을 'N/A'로 설정
+                "mandatory_stop_loss": "N/A",    # TP/SL 설정하지 않음
+                "mandatory_take_profit": "N/A",   # TP/SL 설정하지 않음
+                "execution_priority": "high",
+                "reverse_reason": reverse_decision.get('reason', 'Position reversal required'),
+                "note": "Reverse decision - TP/SL will be set after position reversal"
+            }
+            
+        except Exception as e:
+            logger.error(f"Reverse 액션 생성 오류: {e}")
+            return {
+                "action_type": "Wait for Signal",
+                "mandatory_stop_loss": "N/A",
+                "mandatory_take_profit": "N/A",
+                "error": str(e)
+            }
+
+
     def generate_risk_management(self, final_decision: str, composite_score: float, 
                                 current_position: Dict, market_data: Dict) -> Dict:
         """리스크 관리 권장사항 생성"""
@@ -1111,7 +1155,7 @@ class FinalDecisionMaker:
             }
     
     async def analyze_with_ai(self, integrated_data: Dict) -> Dict:
-        """AI 모델을 사용하여 최종 투자 결정"""
+        """AI 모델을 사용하여 최종 투자 결정 - Reverse 처리 포함"""
         # 필요할 때만 모델 초기화
         if self.client is None:
             self.client, self.model_name = self.get_model()
@@ -1121,8 +1165,8 @@ class FinalDecisionMaker:
             return self.rule_based_final_decision(integrated_data)
         
         try:
-            # 최종 결정 프롬프트 사용
-            prompt = CONFIG["prompts"]["final_decision"].format(
+            # 🔧 Reverse 처리를 위한 프롬프트 강화
+            enhanced_prompt = CONFIG["prompts"]["final_decision"].format(
                 position_analysis=json.dumps(integrated_data.get('position_analysis', {}), ensure_ascii=False, indent=2),
                 sentiment_analysis=json.dumps(integrated_data.get('sentiment_analysis', {}), ensure_ascii=False, indent=2),
                 technical_analysis=json.dumps(integrated_data.get('technical_analysis', {}), ensure_ascii=False, indent=2),
@@ -1132,55 +1176,49 @@ class FinalDecisionMaker:
                 current_position=json.dumps(integrated_data.get('current_position', {}), ensure_ascii=False, indent=2)
             )
             
+            # 🔧 Reverse 관련 지시사항 추가
+            enhanced_prompt += """
+
+    ## 중요: Reverse 결정 지침
+    - 현재 포지션이 있고 강한 반대 신호가 나타날 때 "Reverse" 결정 고려
+    - Reverse 결정시 mandatory_stop_loss와 mandatory_take_profit을 반드시 "N/A"로 설정
+    - Reverse는 기존 포지션 종료 후 반대 방향 진입을 의미함
+    - 가능한 final_decision: "Strong Buy", "Buy", "Hold", "Sell", "Strong Sell", "Reverse"
+    """
+            
             # AI 모델에 질의
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=prompt
+                contents=enhanced_prompt
             )
             
-            # 🔧 수정: AI 응답 처리 강화
+            # AI 응답 처리 (기존 로직과 동일)
             if not response or not hasattr(response, 'text') or not response.text:
                 logger.error("AI 응답이 비어있음")
                 return self.rule_based_final_decision(integrated_data)
             
             result_text = response.text.strip()
-            logger.info(f"🔍 DEBUG: AI 응답 길이: {len(result_text)}")
-            logger.info(f"🔍 DEBUG: AI 응답 첫 100자: {result_text[:100]}")
             
-            # JSON 파싱 시도
+            # JSON 파싱
             try:
-                # 1차: 전체 응답이 JSON인지 확인
                 result_json = json.loads(result_text)
-                logger.info("🔍 DEBUG: 전체 응답이 JSON으로 파싱됨")
             except json.JSONDecodeError:
-                # 2차: JSON 블록 찾기
                 json_match = re.search(r'\{[\s\S]*\}', result_text)
                 if json_match:
                     try:
                         result_json = json.loads(json_match.group(0))
-                        logger.info("🔍 DEBUG: JSON 블록 추출 후 파싱 성공")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"🔍 DEBUG: JSON 블록 파싱 실패: {e}")
-                        logger.error(f"🔍 DEBUG: 추출된 JSON: {json_match.group(0)[:200]}")
+                    except json.JSONDecodeError:
                         return self.rule_based_final_decision(integrated_data)
                 else:
-                    logger.error("🔍 DEBUG: AI 응답에서 JSON을 찾을 수 없음")
-                    logger.error(f"🔍 DEBUG: 전체 응답: {result_text[:500]}")
                     return self.rule_based_final_decision(integrated_data)
             
-            # 🔧 수정: 파싱된 결과 타입 확인
             if not isinstance(result_json, dict):
-                logger.error(f"🔍 DEBUG: 파싱된 결과가 딕셔너리가 아님: {type(result_json)}")
-                logger.error(f"🔍 DEBUG: 파싱된 결과: {result_json}")
                 return self.rule_based_final_decision(integrated_data)
             
-            logger.info(f"🔍 DEBUG: AI 결과 키들: {list(result_json.keys())}")
-            
-            # 🔧 수정: 필수 키 확인 및 기본값 설정
+            # 필수 키 확인 및 기본값 설정
             required_keys = ['final_decision', 'decision_confidence', 'recommended_action']
             for key in required_keys:
                 if key not in result_json:
-                    logger.warning(f"🔍 DEBUG: 필수 키 누락: {key}")
                     if key == 'final_decision':
                         result_json[key] = 'Hold'
                     elif key == 'decision_confidence':
@@ -1188,24 +1226,35 @@ class FinalDecisionMaker:
                     elif key == 'recommended_action':
                         result_json[key] = {'action_type': 'Wait'}
             
+            # 🔧 Reverse 결정 검증
+            final_decision = result_json.get('final_decision', 'Hold')
+            if final_decision == 'Reverse':
+                # Reverse 결정시 mandatory_stop_loss와 mandatory_take_profit이 "N/A"인지 확인
+                recommended_action = result_json.get('recommended_action', {})
+                if recommended_action.get('mandatory_stop_loss') != "N/A":
+                    recommended_action['mandatory_stop_loss'] = "N/A"
+                    logger.info("AI Reverse 결정: mandatory_stop_loss를 N/A로 수정")
+                if recommended_action.get('mandatory_take_profit') != "N/A":
+                    recommended_action['mandatory_take_profit'] = "N/A"
+                    logger.info("AI Reverse 결정: mandatory_take_profit을 N/A로 수정")
+            
             # 분석 메타데이터 추가
             result_json['analysis_metadata'] = {
                 'analysis_type': 'ai_based',
                 'decision_timestamp': datetime.now(timezone.utc).isoformat(),
                 'model_used': self.model_name,
-                'integrated_analyses': list(integrated_data.keys())
+                'integrated_analyses': list(integrated_data.keys()),
+                'reverse_processing_enabled': True
             }
             
-            logger.info(f"🔍 DEBUG: 최종 AI 결과 처리 완료 - {result_json.get('final_decision', 'Unknown')}")
             return result_json
             
         except Exception as e:
             logger.error(f"AI 최종 결정 분석 중 오류: {e}")
-            logger.error(f"🔍 DEBUG: 오류 발생 지점에서 integrated_data 키들: {list(integrated_data.keys()) if isinstance(integrated_data, dict) else 'Not dict'}")
             return self.rule_based_final_decision(integrated_data)
     
     def rule_based_final_decision(self, integrated_data: Dict) -> Dict:
-        """규칙 기반 최종 투자 결정 (AI 모델 없을 때 백업)"""
+        """규칙 기반 최종 투자 결정 - Reverse 로직 통합"""
         try:
             # 1. 분석 결과 검증
             validated_results = self.validate_analysis_results(integrated_data)
@@ -1228,31 +1277,64 @@ class FinalDecisionMaker:
                 'volatility': 'medium'
             }
             
-            # 7. 리스크 관리
-            risk_management = self.generate_risk_management(
-                composite_analysis['final_decision'],
-                composite_analysis['composite_score'],
-                current_position,
-                market_data
+            # 🔧 7. Reverse 결정 판단 (새로 추가)
+            reverse_decision = self._should_reverse_position(
+                composite_analysis, 
+                current_position, 
+                validated_results
             )
             
-            # 8. 신뢰도 조정 (충돌 시 감소)
-            final_confidence = max(0, min(100, 
-                composite_analysis['weighted_confidence'] + conflict_analysis['confidence_adjustment']
-            ))
-            
-            # 9. 최종 결과 구성
-            result = {
-                "final_decision": composite_analysis['final_decision'],
-                "decision_confidence": round(final_confidence, 1),
-                "recommended_action": {
-                    "action_type": self._map_decision_to_action(composite_analysis['final_decision'], current_position),
+            # 🔧 8. Reverse 조건 충족시 결정 변경
+            if reverse_decision['should_reverse']:
+                logger.info(f"Reverse 결정 조건 충족: {reverse_decision['reason']}")
+                
+                # final_decision을 Reverse로 변경
+                final_decision = 'Reverse'
+                
+                # 🔧 Reverse 특화 액션 설정 (TP/SL 제외)
+                recommended_action = self._generate_reverse_action(
+                    current_position, 
+                    reverse_decision,
+                    market_data
+                )
+                
+                # Reverse의 경우 신뢰도 조정
+                final_confidence = max(70, min(90, composite_analysis['weighted_confidence']))
+                
+                # Reverse 전용 리스크 관리
+                risk_management = self._generate_reverse_risk_management(current_position, market_data)
+                
+            else:
+                # 기존 로직 사용
+                final_decision = composite_analysis['final_decision']
+                
+                # 일반 리스크 관리
+                risk_management = self.generate_risk_management(
+                    final_decision,
+                    composite_analysis['composite_score'],
+                    current_position,
+                    market_data
+                )
+                
+                recommended_action = {
+                    "action_type": self._map_decision_to_action(final_decision, current_position),
                     "entry_price": market_data['current_price'],
                     "position_size": risk_management['position_size_percent'],
                     "leverage": risk_management['recommended_leverage'],
                     "mandatory_stop_loss": risk_management['stop_loss_price'],
                     "mandatory_take_profit": risk_management['take_profit_price']
-                },
+                }
+                
+                # 신뢰도 조정 (충돌 시 감소)
+                final_confidence = max(0, min(100, 
+                    composite_analysis['weighted_confidence'] + conflict_analysis['confidence_adjustment']
+                ))
+            
+            # 11. 최종 결과 구성
+            result = {
+                "final_decision": final_decision,
+                "decision_confidence": round(final_confidence, 1),
+                "recommended_action": recommended_action,
                 "analysis_weight": {k: round(v, 1) for k, v in weights.items()},
                 "composite_score": composite_analysis['composite_score'],
                 "signal_distribution": composite_analysis['signal_distribution'],
@@ -1260,19 +1342,19 @@ class FinalDecisionMaker:
                 "risk_assessment": {
                     "overall_risk": self._assess_overall_risk(composite_analysis['composite_score'], final_confidence),
                     "max_loss_potential": risk_management['max_loss_amount'],
-                    "profit_potential": risk_management['take_profit_percentage'],
-                    "risk_reward_ratio": risk_management['risk_reward_ratio']
+                    "profit_potential": risk_management.get('take_profit_percentage', 0),
+                    "risk_reward_ratio": risk_management.get('risk_reward_ratio', 0)
                 },
                 "conflict_analysis": conflict_analysis,
                 "execution_plan": {
-                    "immediate_action": self._generate_immediate_action(composite_analysis['final_decision']),
-                    "sl_tp_mandatory": True if composite_analysis['final_decision'] != 'Hold' else False,
-                    "monitoring_points": risk_management['position_monitoring'],
-                    "exit_conditions": self._generate_exit_conditions(composite_analysis['final_decision'])
+                    "immediate_action": self._generate_immediate_action(final_decision),
+                    "sl_tp_mandatory": True if final_decision not in ['Hold', 'Reverse'] else False,
+                    "monitoring_points": risk_management.get('position_monitoring', []),
+                    "exit_conditions": self._generate_exit_conditions(final_decision)
                 },
                 "market_outlook": {
-                    "short_term": "15분-1시간 전망",
-                    "medium_term": "1-4시간 전망",
+                    "short_term": "1시간 전망",
+                    "medium_term": "4시간 전망",
                     "trend_change_probability": self._calculate_trend_change_probability(composite_analysis)
                 },
                 "individual_analysis_summary": self._summarize_individual_analyses(validated_results),
@@ -1282,6 +1364,16 @@ class FinalDecisionMaker:
                 "human_review_reason": self._generate_review_reason(final_confidence, conflict_analysis)
             }
             
+            # 🔧 12. Reverse 결정시 추가 정보
+            if final_decision == 'Reverse':
+                result["reverse_details"] = reverse_decision
+                result["execution_plan"]["reverse_execution_steps"] = [
+                    "1. 기존 포지션 즉시 종료",
+                    "2. 포지션 종료 확인 대기 (3초)",
+                    "3. 반대 방향 신규 포지션 생성",
+                    "4. 새 포지션 TP/SL 설정"
+                ]
+            
             # 메타데이터 추가
             result['analysis_metadata'] = {
                 'analysis_type': 'rule_based',
@@ -1289,18 +1381,100 @@ class FinalDecisionMaker:
                 'model_used': 'rule_based_final_decision',
                 'integrated_analyses': list(validated_results.keys()),
                 'weights_used': weights,
-                'raw_data': integrated_data
+                'reverse_analysis_included': True
             }
-            
-            # 종합 타이밍 메타데이터 추가
-            result['timing_summary'] = self._generate_timing_summary(validated_results)
             
             return result
             
         except Exception as e:
             logger.error(f"규칙 기반 최종 결정 중 오류: {e}")
             return self._get_emergency_decision()
-    
+
+    def _generate_reverse_risk_management(self, current_position: Dict, market_data: Dict) -> Dict:
+        """Reverse 전용 리스크 관리"""
+        try:
+            return {
+                'position_size_percent': 15.0,  # 보수적 크기
+                'recommended_leverage': 5,      # 중간 레버리지
+                'stop_loss_price': None,        # 나중에 설정
+                'take_profit_price': None,      # 나중에 설정
+                'stop_loss_percentage': 3.0,    # 3% 손절
+                'take_profit_percentage': 5.0,  # 5% 익절
+                'max_loss_amount': 0.45,        # 15% * 3% = 0.45%
+                'risk_reward_ratio': 1.67,      # 5/3 = 1.67
+                'liquidation_buffer': 20,       # 높은 안전 버퍼
+                'position_monitoring': [
+                    "Reverse 포지션 생성 후 즉시 TP/SL 설정",
+                    "반전 신호 지속성 모니터링",
+                    "포지션 크기 보수적 관리"
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Reverse 리스크 관리 생성 오류: {e}")
+            return self._get_default_risk_management()
+
+
+    def _should_reverse_position(self, composite_analysis: Dict, current_position: Dict, validated_results: Dict) -> Dict:
+        """포지션 반전 필요성 판단"""
+        try:
+            score = composite_analysis['composite_score']
+            current_decision = composite_analysis['final_decision']
+            has_position = current_position.get('has_position', False)
+            position_side = current_position.get('side', 'none')
+            decision_strength = composite_analysis.get('decision_strength', 'Weak')
+            
+            reverse_conditions = []
+            
+            if has_position:
+                # 기존 포지션과 반대 신호가 강할 때
+                if position_side == 'long':
+                    if score < 30 and current_decision in ['Strong Sell', 'Sell'] and decision_strength in ['Strong', 'Very Strong']:
+                        reverse_conditions.append("롱 포지션 보유 중 강한 매도 신호")
+                elif position_side == 'short':
+                    if score > 70 and current_decision in ['Strong Buy', 'Buy'] and decision_strength in ['Strong', 'Very Strong']:
+                        reverse_conditions.append("숏 포지션 보유 중 강한 매수 신호")
+                
+                # 기술적 분석에서 강한 반전 신호
+                technical_result = validated_results.get('technical_analysis', {}).get('result', {})
+                if isinstance(technical_result, dict):
+                    indicators = technical_result.get('indicators', {})
+                    rsi = indicators.get('RSI', {}).get('current', 50) if indicators else 50
+                    
+                    if position_side == 'long' and rsi > 80:
+                        reverse_conditions.append("기술적 과매수 신호")
+                    elif position_side == 'short' and rsi < 20:
+                        reverse_conditions.append("기술적 과매도 신호")
+                
+                # 포지션 분석에서 리스크 경고
+                position_result = validated_results.get('position_analysis', {}).get('result', {})
+                if isinstance(position_result, dict):
+                    position_risk = position_result.get('risk_level', 'Low')
+                    if position_risk in ['Very High', 'Critical']:
+                        reverse_conditions.append(f"포지션 리스크 레벨: {position_risk}")
+            
+            should_reverse = (
+                len(reverse_conditions) >= 1 and 
+                decision_strength in ['Strong', 'Very Strong'] and
+                has_position
+            )
+            
+            return {
+                'should_reverse': should_reverse,
+                'reason': '; '.join(reverse_conditions) if reverse_conditions else 'No reverse conditions',
+                'conditions_met': len(reverse_conditions),
+                'decision_strength': decision_strength,
+                'target_direction': 'bearish' if position_side == 'long' else 'bullish'
+            }
+            
+        except Exception as e:
+            logger.error(f"Reverse 판단 오류: {e}")
+            return {
+                'should_reverse': False,
+                'reason': f'판단 오류: {str(e)}',
+                'conditions_met': 0
+            }
+
+
     def _map_decision_to_action(self, decision: str, current_position: Dict) -> str:
         """결정을 실행 가능한 액션으로 매핑"""
         try:
