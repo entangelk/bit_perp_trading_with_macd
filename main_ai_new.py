@@ -214,8 +214,8 @@ def create_order_without_tp_sl(symbol, side, usdt_amount, leverage, current_pric
         return None
 
 
-async def handle_reverse_decision(final_decision_result: Dict, current_position: Dict) -> bool:
-    """개선된 Reverse 결정 처리 - TP/SL 처리 순서 수정"""
+async def handle_reverse_decision(final_decision_result: Dict, current_position: Dict, config: Dict) -> bool:
+    """Reverse 결정 처리 - 완전한 구현"""
     try:
         logger.info("🔄 Reverse 결정 처리 시작")
         
@@ -233,7 +233,7 @@ async def handle_reverse_decision(final_decision_result: Dict, current_position:
         if has_position:
             logger.info(f"🔄 기존 {position_side} 포지션 → 반대 방향 반전 실행")
             
-            # 🔧 1단계: 기존 포지션 즉시 종료 (TP/SL 무시)
+            # 1단계: 기존 포지션 즉시 종료 (TP/SL 무시)
             logger.info("1단계: 기존 포지션 종료")
             close_result = close_position(symbol=config['symbol'])
             if not close_result:
@@ -242,7 +242,7 @@ async def handle_reverse_decision(final_decision_result: Dict, current_position:
             
             logger.info("✅ 기존 포지션 종료 완료")
             
-            # 🔧 2단계: 포지션 종료 확인 대기
+            # 2단계: 포지션 종료 확인 대기
             logger.info("2단계: 포지션 종료 확인 대기")
             await asyncio.sleep(3)  # 3초 대기
             
@@ -252,7 +252,7 @@ async def handle_reverse_decision(final_decision_result: Dict, current_position:
                 logger.warning("⚠️ 포지션이 완전히 종료되지 않음 - 추가 대기")
                 await asyncio.sleep(2)
             
-            # 🔧 3단계: 반대 방향 포지션 생성
+            # 3단계: 반대 방향 포지션 생성
             logger.info("3단계: 반대 방향 포지션 생성")
             new_side = 'Buy' if position_side == 'short' else 'Sell'
             
@@ -267,7 +267,7 @@ async def handle_reverse_decision(final_decision_result: Dict, current_position:
             if order_success:
                 logger.info("✅ Reverse 포지션 생성 완료")
                 
-                # 🔧 4단계: 새 포지션에 TP/SL 설정 (별도 처리)
+                # 4단계: 새 포지션에 TP/SL 설정 (별도 처리)
                 await asyncio.sleep(2)  # 포지션 안정화 대기
                 await set_tp_sl_for_new_position(config['symbol'], new_side, final_decision_result, config)
                 
@@ -297,10 +297,6 @@ async def set_tp_sl_for_new_position(symbol: str, side: str, final_decision_resu
             logger.warning("새 포지션 정보를 찾을 수 없음 - TP/SL 설정 스킵")
             return
         
-        # AI 제공 TP/SL 또는 기본값 계산
-        result = final_decision_result.get('result', {})
-        recommended_action = result.get('recommended_action', {})
-        
         # Reverse 후에는 기본 TP/SL 사용 (AI 값이 이전 포지션 기준일 수 있음)
         current_price = get_current_price(symbol)
         if not current_price:
@@ -329,7 +325,6 @@ async def set_tp_sl_for_new_position(symbol: str, side: str, final_decision_resu
 
 
 
-
 async def execute_reverse_order(symbol: str, new_side: str, final_decision_result: Dict, config: Dict) -> bool:
     """Reverse 전용 주문 실행 - TP/SL 없이"""
     try:
@@ -341,13 +336,15 @@ async def execute_reverse_order(symbol: str, new_side: str, final_decision_resul
         
         logger.info(f"Reverse 주문 실행: {new_side} at {current_price}")
         
-        # 🔧 핵심: TP/SL 없이 순수 포지션 진입만
-        order_response = create_order_without_tp_sl(  # 새로운 함수 필요
+        # TP/SL 없이 순수 포지션 진입만
+        order_response = create_order_with_tp_sl(
             symbol=symbol,
             side=new_side,
             usdt_amount=config['usdt_amount'],
             leverage=config['leverage'],
-            current_price=current_price
+            current_price=current_price,
+            stop_loss=None,  # TP/SL 없이
+            take_profit=None
         )
         
         if order_response:
@@ -360,7 +357,6 @@ async def execute_reverse_order(symbol: str, new_side: str, final_decision_resul
     except Exception as e:
         logger.error(f"Reverse 주문 실행 중 오류: {e}")
         return False
-
 
 
 
@@ -741,7 +737,6 @@ async def update_existing_position_tp_sl(symbol, final_decision_result, config):
         logger.error(f"기존 포지션 TP/SL 업데이트 중 오류: {e}", exc_info=True)
         return False
 
-
 async def main():
     """AI 기반 메인 트레이딩 루프 - Reverse 우선 처리 버전"""
     config = TRADING_CONFIG
@@ -898,19 +893,6 @@ async def main():
                 if current_position['has_position']:
                     logger.info("기존 포지션 발견 - TP/SL 업데이트 시도")
                     tp_sl_updated = await update_existing_position_tp_sl(config['symbol'], final_decision_result, config)
-                    
-                    # if tp_sl_updated:
-                    #     logger.info("✅ 기존 포지션 TP/SL 업데이트 완료")
-                    #     try:
-                    #         trade_logger.log_snapshot(
-                    #             server_time=datetime.now(timezone.utc),
-                    #             tag='tp_sl_update',
-                    #             position=current_position['side'].capitalize()
-                    #         )
-                    #     except Exception as e:
-                    #         logger.warning(f"TP/SL 업데이트 로그 기록 실패: {e}")
-                    # else:
-                    #     logger.info("TP/SL 업데이트 스킵 또는 실패")
                 else:
                     logger.info("현재 포지션 없음 - TP/SL 업데이트 스킵")
 
@@ -1002,7 +984,6 @@ def extract_current_position_safely(balance, positions_json) -> Dict:
             'error': str(e),
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
-
 def run_main():
     """비동기 메인 함수 실행"""
     try:

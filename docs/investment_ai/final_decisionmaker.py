@@ -954,6 +954,7 @@ class FinalDecisionMaker:
             }
 
 
+
     def generate_risk_management(self, final_decision: str, composite_score: float, 
                                 current_position: Dict, market_data: Dict) -> Dict:
         """리스크 관리 권장사항 생성"""
@@ -1301,8 +1302,19 @@ class FinalDecisionMaker:
                 # Reverse의 경우 신뢰도 조정
                 final_confidence = max(70, min(90, composite_analysis['weighted_confidence']))
                 
-                # Reverse 전용 리스크 관리
-                risk_management = self._generate_reverse_risk_management(current_position, market_data)
+                # 🔧 Reverse는 리스크 관리 함수 호출하지 않음 (TP/SL 생성 방지)
+                risk_management = {
+                    'position_size_percent': 15.0,
+                    'recommended_leverage': 5,
+                    'stop_loss_price': None,      # Reverse시 TP/SL 없음
+                    'take_profit_price': None,    # Reverse시 TP/SL 없음
+                    'stop_loss_percentage': 0,
+                    'take_profit_percentage': 0,
+                    'max_loss_amount': 0,
+                    'risk_reward_ratio': 0,
+                    'liquidation_buffer': 20,
+                    'position_monitoring': ["Reverse 후 별도 TP/SL 설정"]
+                }
                 
             else:
                 # 기존 로직 사용
@@ -1389,30 +1401,6 @@ class FinalDecisionMaker:
         except Exception as e:
             logger.error(f"규칙 기반 최종 결정 중 오류: {e}")
             return self._get_emergency_decision()
-
-    def _generate_reverse_risk_management(self, current_position: Dict, market_data: Dict) -> Dict:
-        """Reverse 전용 리스크 관리"""
-        try:
-            return {
-                'position_size_percent': 15.0,  # 보수적 크기
-                'recommended_leverage': 5,      # 중간 레버리지
-                'stop_loss_price': None,        # 나중에 설정
-                'take_profit_price': None,      # 나중에 설정
-                'stop_loss_percentage': 3.0,    # 3% 손절
-                'take_profit_percentage': 5.0,  # 5% 익절
-                'max_loss_amount': 0.45,        # 15% * 3% = 0.45%
-                'risk_reward_ratio': 1.67,      # 5/3 = 1.67
-                'liquidation_buffer': 20,       # 높은 안전 버퍼
-                'position_monitoring': [
-                    "Reverse 포지션 생성 후 즉시 TP/SL 설정",
-                    "반전 신호 지속성 모니터링",
-                    "포지션 크기 보수적 관리"
-                ]
-            }
-        except Exception as e:
-            logger.error(f"Reverse 리스크 관리 생성 오류: {e}")
-            return self._get_default_risk_management()
-
 
     def _should_reverse_position(self, composite_analysis: Dict, current_position: Dict, validated_results: Dict) -> Dict:
         """포지션 반전 필요성 판단"""
@@ -1544,18 +1532,19 @@ class FinalDecisionMaker:
             return "Medium"
     
     def _generate_immediate_action(self, decision: str) -> str:
-        """즉시 실행할 행동 생성"""
+        """즉시 실행할 행동 생성 - Reverse 추가"""
         action_map = {
             'Strong Buy': "즉시 롱 포지션 진입 또는 확대",
             'Buy': "적정 시점에 롱 포지션 진입",
             'Hold': "현재 상태 유지 및 관찰",
             'Sell': "적정 시점에 숏 포지션 진입 또는 롱 청산",
-            'Strong Sell': "즉시 숏 포지션 진입 또는 롱 전량 청산"
+            'Strong Sell': "즉시 숏 포지션 진입 또는 롱 전량 청산",
+            'Reverse': "기존 포지션 즉시 종료 후 반대 방향 진입"  # 새로 추가
         }
         return action_map.get(decision, "관찰 지속")
     
     def _generate_exit_conditions(self, decision: str) -> List[str]:
-        """청산 조건 생성"""
+        """청산 조건 생성 - Reverse 추가"""
         if decision in ['Strong Buy', 'Buy']:
             return [
                 "스톱로스 가격 터치 시 즉시 청산",
@@ -1570,10 +1559,17 @@ class FinalDecisionMaker:
                 "지지선 강력 지지 시 청산 고려",
                 "거시경제 호재 발생 시 재평가"
             ]
+        elif decision == 'Reverse':  # 새로 추가
+            return [
+                "새 포지션 TP/SL 터치 시 즉시 청산",
+                "반전 신호 약화 시 포지션 재검토",
+                "반대 방향 강한 신호 재등장 시 재반전 고려",
+                "1시간 이내 신호 재평가 필수"
+            ]
         else:
             return [
                 "명확한 방향성 신호 등장 시 포지션 검토",
-                "15분마다 신호 재평가"
+                "1시간마다 신호 재평가"
             ]
     
     def _calculate_trend_change_probability(self, composite_analysis: Dict) -> str:

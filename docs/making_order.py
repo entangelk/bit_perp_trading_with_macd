@@ -260,6 +260,7 @@ def create_signature_for_get(timestamp, api_key, api_secret, params):
     return signature
 
 def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, stop_loss, take_profit):
+    """TP/SL 조건부 포함 주문 생성 함수 - 수정된 버전"""
     sync_time()
     try:
         balance = bybit.fetch_balance()
@@ -268,11 +269,8 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
         if usdt_amount <= 0 or usdt_amount > 1:
             print(f"잘못된 투자 비율: {usdt_amount}. 0과 1 사이의 값이어야 합니다.")
             return None
-        
 
-        pass
         order_amount = current_have * usdt_amount
-        pass
         amount = calculate_amount(order_amount, leverage, current_price)
         
         if amount is None:
@@ -281,7 +279,7 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
 
         timestamp = str(int(time.time() * 1000))
         
-        # 주문 파라미터
+        # 🔧 핵심 수정: 기본 주문 파라미터
         params = {
             'category': 'linear',
             'symbol': symbol,
@@ -291,6 +289,23 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
             'timeInForce': 'IOC',
             'positionIdx': 0
         }
+
+        # 🔧 TP/SL 조건부 추가 (None이 아니고 "N/A"가 아닐 때만)
+        if stop_loss is not None and stop_loss != "N/A":
+            try:
+                sl_value = float(stop_loss)
+                params['stopLoss'] = str(sl_value)
+                print(f"StopLoss 설정: {sl_value}")
+            except (ValueError, TypeError):
+                print(f"StopLoss 값 변환 실패: {stop_loss} - 제외함")
+
+        if take_profit is not None and take_profit != "N/A":
+            try:
+                tp_value = float(take_profit)
+                params['takeProfit'] = str(tp_value)
+                print(f"TakeProfit 설정: {tp_value}")
+            except (ValueError, TypeError):
+                print(f"TakeProfit 값 변환 실패: {take_profit} - 제외함")
 
         # 새로운 서명 생성 방식
         signature = create_signature(
@@ -324,10 +339,15 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
             if result['retCode'] == 0:
                 print("주문 성공:", result)
                 
-                # 이 부분은 기존 코드 유지
-                amount, side, avgPrice,pnl = get_position_amount(symbol)
-                if avgPrice:
-                    set_tp_sl(symbol, stop_loss, take_profit, avgPrice, side)
+                # 🔧 TP/SL이 주문에 포함되지 않았으면 별도 설정
+                has_tp_sl_in_order = ('stopLoss' in params) or ('takeProfit' in params)
+                
+                if not has_tp_sl_in_order and (stop_loss is not None or take_profit is not None):
+                    print("주문에 TP/SL이 포함되지 않음 - 별도 설정 시도")
+                    amount, side, avgPrice, pnl = get_position_amount(symbol)
+                    if avgPrice:
+                        set_tp_sl(symbol, stop_loss, take_profit, avgPrice, side)
+                
                 return result
             else:
                 print("API 오류:", result)
@@ -339,6 +359,8 @@ def create_order_with_tp_sl(symbol, side, usdt_amount, leverage, current_price, 
     except Exception as e:
         print(f"오류 발생: {str(e)}")
         return None
+
+
 
 def set_tp_sl(symbol, stop_loss, take_profit, current_price, side):
     sync_time()
