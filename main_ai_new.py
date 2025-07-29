@@ -215,7 +215,7 @@ def create_order_without_tp_sl(symbol, side, usdt_amount, leverage, current_pric
         return None
 
 
-async def handle_reverse_decision(final_decision_result: Dict, current_position: Dict, config: Dict) -> bool:
+async def handle_reverse_decision(final_decision_result: dict, current_position: dict, config: dict) -> bool:
     """Reverse 결정 처리 - 완전한 구현"""
     try:
         logger.info("🔄 Reverse 결정 처리 시작")
@@ -286,6 +286,7 @@ async def handle_reverse_decision(final_decision_result: Dict, current_position:
         logger.error(f"❌ Reverse 결정 처리 중 오류: {e}")
         return False
 
+
 async def set_tp_sl_for_new_position(symbol: str, side: str, final_decision_result: Dict, config: Dict):
     """새로운 포지션에 TP/SL 설정"""
     try:
@@ -325,8 +326,7 @@ async def set_tp_sl_for_new_position(symbol: str, side: str, final_decision_resu
         logger.error(f"새 포지션 TP/SL 설정 중 오류: {e}")
 
 
-
-async def execute_reverse_order(symbol: str, new_side: str, final_decision_result: Dict, config: Dict) -> bool:
+async def execute_reverse_order(symbol: str, new_side: str, final_decision_result: dict, config: dict) -> bool:
     """Reverse 전용 주문 실행 - TP/SL 없이"""
     try:
         # 현재가 조회
@@ -358,8 +358,6 @@ async def execute_reverse_order(symbol: str, new_side: str, final_decision_resul
     except Exception as e:
         logger.error(f"Reverse 주문 실행 중 오류: {e}")
         return False
-
-
 
 def get_action_from_decision(final_decision, current_position):
     """AI 최종 결정을 거래 액션으로 변환"""
@@ -941,8 +939,8 @@ async def main():
 
 # 새로운 헬퍼 함수들
 
-def extract_current_position_safely(balance, positions_json) -> Dict:
-    """안전한 포지션 정보 추출"""
+def extract_current_position_safely(balance, positions_json) -> dict:
+    """안전한 포지션 정보 추출 - normalize_position_side 사용"""
     try:
         current_position = {
             'has_position': False,
@@ -964,7 +962,7 @@ def extract_current_position_safely(balance, positions_json) -> Dict:
         
         if abs(size) > 0:
             side_raw = position.get('side', 'none')
-            position_side = normalize_position_side(side_raw)
+            position_side = normalize_position_side(side_raw)  # ✅ 정규화 함수 사용
             
             current_position.update({
                 'has_position': True,
@@ -985,6 +983,7 @@ def extract_current_position_safely(balance, positions_json) -> Dict:
             'error': str(e),
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
+
 def run_main():
     """비동기 메인 함수 실행"""
     try:
