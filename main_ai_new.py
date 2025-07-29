@@ -216,23 +216,36 @@ def create_order_without_tp_sl(symbol, side, usdt_amount, leverage, current_pric
 
 
 async def handle_reverse_decision(final_decision_result: dict, current_position: dict, config: dict) -> bool:
-    """Reverse 결정 처리 - 완전한 구현"""
+    """Reverse 결정 처리 - 신뢰도 체크 추가"""
     try:
         logger.info("🔄 Reverse 결정 처리 시작")
         
+        # 🔧 핵심 추가: 신뢰도 및 검토 필요성 체크
+        if not final_decision_result.get('success', False):
+            logger.warning(f"AI 분석 실패로 Reverse 실행 안함: {final_decision_result.get('error', 'Unknown')}")
+            return False
+        
         result = final_decision_result.get('result', {})
         confidence = result.get('decision_confidence', 0)
+        needs_human_review = result.get('needs_human_review', False)
         
-        # 신뢰도 체크
+        # 신뢰도가 너무 낮거나 인간 검토가 필요한 경우
+        if confidence < 60 or needs_human_review:
+            logger.warning(f"Reverse 신뢰도 부족 또는 검토 필요: 신뢰도 {confidence}%, 검토필요: {needs_human_review}")
+            return False
+        
+        # Reverse의 경우 더 높은 신뢰도 요구 (65% 이상)
         if confidence < 65:
-            logger.warning(f"Reverse 신뢰도 부족 ({confidence}%) - 실행 보류")
+            logger.warning(f"Reverse 신뢰도 부족 ({confidence}%) - 실행 보류 (최소 65% 필요)")
             return False
         
         has_position = current_position.get('has_position', False)
         position_side = current_position.get('side', 'none')
         
+        logger.info(f"현재 포지션 상태: has_position={has_position}, side={position_side}")
+        
         if has_position:
-            logger.info(f"🔄 기존 {position_side} 포지션 → 반대 방향 반전 실행")
+            logger.info(f"🔄 기존 {position_side} 포지션 → 반대 방향 반전 실행 (신뢰도: {confidence}%)")
             
             # 1단계: 기존 포지션 즉시 종료 (TP/SL 무시)
             logger.info("1단계: 기존 포지션 종료")
@@ -257,6 +270,8 @@ async def handle_reverse_decision(final_decision_result: dict, current_position:
             logger.info("3단계: 반대 방향 포지션 생성")
             new_side = 'Buy' if position_side == 'short' else 'Sell'
             
+            logger.info(f"포지션 방향 변환: {position_side} → {new_side}")
+            
             # TP/SL은 새로운 포지션 생성 후 설정
             order_success = await execute_reverse_order(
                 symbol=config['symbol'], 
@@ -278,8 +293,8 @@ async def handle_reverse_decision(final_decision_result: dict, current_position:
                 return False
             
         else:
-            logger.warning("⚠️ 현재 포지션이 없는데 Reverse 결정 - 일반 진입으로 처리")
-            # 포지션이 없으면 일반적인 신규 진입
+            logger.warning("⚠️ 현재 포지션이 없는데 Reverse 결정 - 신뢰도 체크 후 일반 진입으로 처리")
+            # 포지션이 없으면 일반적인 신규 진입 (신뢰도 체크 포함)
             return await execute_ai_order(config['symbol'], final_decision_result, config)
         
     except Exception as e:
@@ -398,21 +413,27 @@ def get_action_from_decision(final_decision, current_position):
 
 def normalize_position_side(side_value):
     """
-    포지션 방향을 안전하게 정규화하는 함수
-    API 응답의 다양한 형태를 모두 처리
+    포지션 방향을 안전하게 정규화하는 함수 - 디버깅 로그 추가
     """
+    logger.debug(f"포지션 방향 정규화 입력: {side_value} (타입: {type(side_value)})")
+    
     if not side_value:
+        logger.debug("포지션 방향이 None 또는 빈 값 → 'none'")
         return 'none'
     
     side_str = str(side_value).lower().strip()
+    logger.debug(f"정규화된 문자열: '{side_str}'")
     
     # Long 포지션 케이스들
     if side_str in ['buy', 'long', 'bid', '1']:
+        logger.debug(f"'{side_str}' → 'long'")
         return 'long'
     # Short 포지션 케이스들  
     elif side_str in ['sell', 'short', 'ask', '-1']:
+        logger.debug(f"'{side_str}' → 'short'")
         return 'short'
     else:
+        logger.warning(f"알 수 없는 포지션 방향: '{side_str}' → 'none'")
         return 'none'
 
 async def get_all_analysis_for_decision():
@@ -589,8 +610,10 @@ def normalize_position_side(side_value):
         return 'none'
 
 def extract_position_info(position_data):
-    """포지션 데이터에서 현재 포지션 정보 추출 - 안전성 강화 (기존 함수명 유지)"""
+    """포지션 데이터에서 현재 포지션 정보 추출 - 디버깅 강화"""
     try:
+        logger.debug("=== 포지션 정보 추출 시작 ===")
+        
         # 기본값
         position_info = {
             'has_position': False,
@@ -607,6 +630,8 @@ def extract_position_info(position_data):
             logger.warning("포지션 데이터가 없거나 잘못된 형태")
             return position_info
         
+        logger.debug(f"포지션 데이터 키들: {list(position_data.keys())}")
+        
         # 잔고 정보
         balance = position_data.get('balance', {})
         if isinstance(balance, dict) and 'USDT' in balance:
@@ -622,55 +647,82 @@ def extract_position_info(position_data):
         
         # positions에서 BTC 포지션 찾기
         positions = position_data.get('positions', [])
+        logger.debug(f"포지션 데이터 타입: {type(positions)}")
+        
         if isinstance(positions, str):
             import json
             try:
                 positions = json.loads(positions)
-            except:
-                logger.warning("포지션 JSON 파싱 실패")
+                logger.debug(f"JSON 파싱 완료, 포지션 개수: {len(positions)}")
+            except Exception as e:
+                logger.warning(f"포지션 JSON 파싱 실패: {e}")
                 return position_info
         
         if not isinstance(positions, list):
-            logger.warning("포지션 데이터가 리스트가 아님")
+            logger.warning(f"포지션 데이터가 리스트가 아님: {type(positions)}")
             return position_info
         
-        for pos in positions:
+        # BTC 포지션 찾기
+        btc_position = None
+        for i, pos in enumerate(positions):
             if not isinstance(pos, dict):
+                logger.debug(f"포지션 {i}가 딕셔너리가 아님")
                 continue
                 
             symbol = pos.get('symbol', '')
+            logger.debug(f"포지션 {i} 심볼: {symbol}")
+            
             if 'BTC' in symbol:
-                # 🔧 수정: None 값 체크 강화
-                size_raw = pos.get('size', pos.get('contracts', 0))
-                entry_price_raw = pos.get('avgPrice', pos.get('entryPrice', 0))
-                unrealized_pnl_raw = pos.get('unrealizedPnl', 0)
-                
-                # None 체크 후 float 변환
-                try:
-                    size = float(size_raw) if size_raw is not None else 0
-                    entry_price = float(entry_price_raw) if entry_price_raw is not None else 0
-                    unrealized_pnl = float(unrealized_pnl_raw) if unrealized_pnl_raw is not None else 0
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"포지션 수치 변환 실패: {e}")
-                    continue
-                
-                # 🔧 핵심 수정: 안전한 포지션 방향 처리
-                side_raw = pos.get('side', 'none')
-                position_side = normalize_position_side(side_raw)
-                
-                if abs(size) > 0:
-                    position_info.update({
-                        'has_position': True,
-                        'side': position_side,  # ✅ 정규화된 값 사용
-                        'size': abs(size),
-                        'entry_price': entry_price,
-                        'unrealized_pnl': unrealized_pnl
-                    })
+                btc_position = pos
+                logger.debug(f"BTC 포지션 발견: 인덱스 {i}")
                 break
         
+        if btc_position:
+            logger.debug("=== BTC 포지션 상세 분석 ===")
+            
+            # 원시 데이터 로깅
+            size_raw = btc_position.get('size', btc_position.get('contracts', 0))
+            side_raw = btc_position.get('side', 'none')
+            entry_price_raw = btc_position.get('avgPrice', btc_position.get('entryPrice', 0))
+            unrealized_pnl_raw = btc_position.get('unrealizedPnl', 0)
+            
+            logger.debug(f"원시 데이터 - size: {size_raw}, side: {side_raw}, entry_price: {entry_price_raw}")
+            
+            # 🔧 수정: None 값 체크 강화
+            try:
+                size = float(size_raw) if size_raw is not None else 0
+                entry_price = float(entry_price_raw) if entry_price_raw is not None else 0
+                unrealized_pnl = float(unrealized_pnl_raw) if unrealized_pnl_raw is not None else 0
+            except (ValueError, TypeError) as e:
+                logger.warning(f"포지션 수치 변환 실패: {e}")
+                return position_info
+            
+            logger.debug(f"변환된 수치 - size: {size}, entry_price: {entry_price}")
+            
+            if abs(size) > 0:
+                # 🔧 핵심: 포지션 방향 정규화 (디버깅 포함)
+                position_side = normalize_position_side(side_raw)
+                
+                position_info.update({
+                    'has_position': True,
+                    'side': position_side,  # ✅ 정규화된 값 사용
+                    'size': abs(size),
+                    'entry_price': entry_price,
+                    'unrealized_pnl': unrealized_pnl
+                })
+                
+                logger.info(f"✅ 포지션 추출 완료: {position_side} {abs(size)} BTC @ {entry_price}")
+            else:
+                logger.debug("포지션 크기가 0이므로 포지션 없음으로 처리")
+        else:
+            logger.debug("BTC 포지션을 찾을 수 없음")
+        
+        logger.debug(f"=== 최종 포지션 정보: {position_info} ===")
         return position_info
+        
     except Exception as e:
         logger.error(f"포지션 정보 추출 오류: {e}")
+        logger.error(f"에러 발생 시 position_data: {position_data}")
         return {
             'has_position': False,
             'side': 'none',
@@ -678,6 +730,7 @@ def extract_position_info(position_data):
             'entry_price': 0,
             'error': str(e)
         }
+
 
 async def update_existing_position_tp_sl(symbol, final_decision_result, config):
     """기존 포지션의 TP/SL만 업데이트하는 함수 - 매 사이클마다 적용"""
@@ -940,8 +993,10 @@ async def main():
 # 새로운 헬퍼 함수들
 
 def extract_current_position_safely(balance, positions_json) -> dict:
-    """안전한 포지션 정보 추출 - normalize_position_side 사용"""
+    """안전한 포지션 정보 추출 - 디버깅 강화"""
     try:
+        logger.debug("=== extract_current_position_safely 시작 ===")
+        
         current_position = {
             'has_position': False,
             'side': 'none',
@@ -951,18 +1006,25 @@ def extract_current_position_safely(balance, positions_json) -> dict:
         }
         
         if positions_json == '[]' or positions_json is None:
+            logger.debug("positions_json이 빈 배열이거나 None")
             return current_position
         
         positions_data = json.loads(positions_json)
         if not positions_data:
+            logger.debug("파싱된 positions_data가 비어있음")
             return current_position
         
         position = positions_data[0]
-        size = float(position.get('size', position.get('contracts', 0)))
+        size_raw = position.get('size', position.get('contracts', 0))
+        side_raw = position.get('side', 'none')
+        
+        logger.debug(f"첫 번째 포지션 - size: {size_raw}, side: {side_raw}")
+        
+        size = float(size_raw) if size_raw is not None else 0
         
         if abs(size) > 0:
-            side_raw = position.get('side', 'none')
-            position_side = normalize_position_side(side_raw)  # ✅ 정규화 함수 사용
+            # 🔧 핵심: 동일한 정규화 함수 사용
+            position_side = normalize_position_side(side_raw)
             
             current_position.update({
                 'has_position': True,
@@ -970,6 +1032,10 @@ def extract_current_position_safely(balance, positions_json) -> dict:
                 'size': abs(size),
                 'entry_price': float(position.get('avgPrice', position.get('entryPrice', 0)))
             })
+            
+            logger.info(f"✅ 현재 포지션 추출 완료: {position_side} {abs(size)} BTC")
+        else:
+            logger.debug("포지션 크기가 0이므로 포지션 없음")
         
         return current_position
         
