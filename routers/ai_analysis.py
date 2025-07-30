@@ -69,7 +69,7 @@ class AIAnalysisViewer:
         }
         return name_mapping.get(task_name, task_name)
     
-    def get_recent_analyses(self, task_name: Optional[str] = None, hours: int = 24, limit: int = 50) -> List[Dict]:
+    def get_recent_analyses(self, task_name: Optional[str] = None, hours: int = 24, limit: int = 50, for_blog: bool = False) -> List[Dict]:
         """최근 AI 분석 결과 조회"""
         try:
             # 시간 범위 설정
@@ -111,7 +111,11 @@ class AIAnalysisViewer:
 
                     # 성공한 분석의 경우 요약 정보 추출  
                     if result["success"] and "result" in analysis_data:
-                        result["summary"] = self._extract_summary(doc.get("task_name"), analysis_data.get("result", {}))
+                        # 블로그용인지 일반용인지에 따라 다른 요약 함수 사용
+                        if for_blog:
+                            result["summary"] = self._extract_blog_summary(doc.get("task_name"), analysis_data.get("result", {}))
+                        else:
+                            result["summary"] = self._extract_summary(doc.get("task_name"), analysis_data.get("result", {}))
                     else:
                         # 실패한 분석의 경우 실패 정보 추출
                         result["failure_info"] = self._extract_failure_info(analysis_data)
@@ -203,6 +207,78 @@ class AIAnalysisViewer:
         
         return summary
     
+    def _extract_blog_summary(self, task_name: str, analysis_result: Dict) -> Dict:
+        """블로그용 분석 결과 요약 정보 추출 (길이 제한 없음)"""
+        summary = {
+            "confidence": analysis_result.get("confidence", 0),
+            "key_points": [],
+            "recommendation": "분석 불가"
+        }
+        
+        try:
+            if task_name == "ai_sentiment_analysis":
+                summary.update({
+                    "confidence": analysis_result.get("confidence", 0),
+                    "sentiment_score": analysis_result.get("market_sentiment_score", 50),
+                    "sentiment_state": analysis_result.get("sentiment_state", "중립"),
+                    "recommendation": analysis_result.get("investment_recommendation", "중립적 접근")
+                })
+                
+            elif task_name == "ai_technical_analysis":
+                summary.update({
+                    "confidence": analysis_result.get("confidence", 0),
+                    "signal": analysis_result.get("overall_signal", "Hold"),
+                    "trend": analysis_result.get("trend_analysis", {}).get("trend_direction", "중립"),
+                    "momentum": analysis_result.get("momentum_analysis", {}).get("momentum_direction", "중립"),
+                    "recommendation": f"{analysis_result.get('overall_signal', 'Hold')} - {analysis_result.get('trend_analysis', {}).get('trend_direction', '중립')} 추세"
+                })
+                
+            elif task_name == "ai_macro_analysis":
+                summary.update({
+                    "confidence": analysis_result.get("confidence", 0),
+                    "macro_score": analysis_result.get("macro_environment_score", 50),
+                    "investment_environment": analysis_result.get("investment_environment", "중립"),
+                    "recommendation": analysis_result.get("btc_recommendation", "신중한 접근")
+                })
+                
+            elif task_name == "ai_onchain_analysis":
+                summary.update({
+                    "confidence": analysis_result.get("confidence", 0),
+                    "health_score": analysis_result.get("onchain_health_score", 50),
+                    "signal": analysis_result.get("investment_signal", "Hold"),
+                    "network_security": analysis_result.get("network_security_analysis", "정상"),
+                    "recommendation": analysis_result.get("investment_signal", "중립적")
+                })
+                
+            elif task_name == "ai_institutional_analysis":
+                summary.update({
+                    "confidence": analysis_result.get("confidence", 0),
+                    "flow_score": analysis_result.get("institutional_flow_score", 50),
+                    "signal": analysis_result.get("investment_signal", "Hold"),
+                    "flow_direction": "분산" if "Sell" in analysis_result.get("investment_signal", "") else "중립",
+                    "recommendation": analysis_result.get("investment_signal", "관망")
+                })
+                
+            elif task_name == "final_decision":
+                summary.update({
+                    "confidence": analysis_result.get("decision_confidence", 0),
+                    "decision": analysis_result.get("final_decision", "Hold"),
+                    "action": analysis_result.get("recommended_action", {}).get("action_type", "Hold"),
+                    "recommendation": analysis_result.get("decision_reasoning", "분석 중"),  # 길이 제한 제거
+                    "needs_human_review": analysis_result.get("needs_human_review", False),
+                    "human_review_reason": analysis_result.get("human_review_reason", "")  # 길이 제한 제거
+                })
+            
+            # 공통 키 포인트 추출 (길이 제한 없음)
+            if "analysis_summary" in analysis_result:
+                summary["key_points"] = [analysis_result["analysis_summary"]]  # 전체 내용 사용
+                
+        except Exception as e:
+            logger.error(f"블로그용 요약 정보 추출 오류: {e}")
+        
+        return summary
+
+
     def _extract_failure_info(self, analysis_result: Dict) -> Dict:
         """실패한 분석 결과에서 실패 정보 추출"""
         failure_info = {
@@ -536,10 +612,10 @@ async def get_blog_analysis_api(
     """블로그 생성용 AI 분석 데이터 API"""
     try:
         # AI 분석 데이터 조회 - 최신 상세 데이터 (각 분석기별 최신 1개씩)
-        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours, limit=6)
+        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog: bool = True, limit=6)
         
         # AI 분석 데이터 조회 - 과거 요약 데이터 (6시간 전체)
-        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours, limit=50)
+        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog: bool = True, limit=50)
         historical_summaries = []
         
         for analysis in all_analyses:
@@ -552,21 +628,11 @@ async def get_blog_analysis_api(
                     "success": analysis.get("success", False)
                 })
         
-        # 통계 정보
-        statistics = ai_viewer.get_analysis_statistics(hours=analysis_hours)
-        
         return {
             "success": True,
             "data": {
                 "latest_detailed_analyses": latest_detailed,
                 "historical_summaries": historical_summaries,
-                "statistics": statistics,
-                "metadata": {
-                    "latest_detailed_count": len(latest_detailed),
-                    "historical_summaries_count": len(historical_summaries),
-                    "analysis_hours": analysis_hours,
-                    "latest_analysis_timestamp": latest_detailed[0]["created_at"].isoformat() if latest_detailed else None
-                }
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
@@ -579,8 +645,6 @@ async def get_blog_analysis_api(
             "data": {
                 "latest_detailed_analyses": [],
                 "historical_summaries": [],
-                "statistics": {},
-                "metadata": {}
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
