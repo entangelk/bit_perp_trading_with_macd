@@ -404,7 +404,7 @@ class AIAnalysisViewer:
             return {"total_analyses": 0, "success_count": 0, "failure_count": 0, "by_analyzer": {}, "success_rate": 0}
 
     # 외부 전송용 차트 데이터 (72시간봉)
-    def get_chart_data(self, hours: int = 72) -> List[Dict]:
+    def get_chart_data(self, hours: int = 300) -> List[Dict]:
         """시계열 차트 데이터 조회 (1시간봉 기준, 불완전한 마지막 데이터 제외)"""
         try:
             # 시간 범위 설정 (73시간 가져와서 마지막 1개 제외)
