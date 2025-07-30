@@ -531,21 +531,30 @@ async def get_chart_data_api(
 
 @router.get("/api/blog-data")
 async def get_blog_data_api(
-    analyzer: Optional[str] = Query(None, description="특정 분석기 필터"),
     chart_hours: int = Query(72, description="차트 데이터 시간 범위", ge=1, le=168),
-    analysis_hours: int = Query(24, description="AI 분석 데이터 시간 범위", ge=1, le=168)
+    analysis_hours: int = Query(6, description="AI 분석 데이터 시간 범위", ge=1, le=168)
 ):
     """블로그 생성용 통합 데이터 API (AI 분석 + 차트 데이터)"""
     try:
-        # AI 분석 데이터 조회
-        analyses = ai_viewer.get_recent_analyses(
-            task_name=analyzer, 
-            hours=analysis_hours, 
-            limit=50
-        )
-        
-        # 차트 데이터 조회
+        # 차트 데이터 조회 (73시간 가져와서 마지막 1개 제거)
         chart_data = ai_viewer.get_chart_data(hours=chart_hours)
+        
+        # AI 분석 데이터 조회 - 최신 상세 데이터 (각 분석기별 최신 1개씩)
+        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours, limit=6)
+        
+        # AI 분석 데이터 조회 - 과거 요약 데이터 (6시간 전체)
+        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours, limit=50)
+        historical_summaries = []
+        
+        for analysis in all_analyses:
+            if 'summary' in analysis:
+                historical_summaries.append({
+                    "task_name": analysis["task_name"],
+                    "display_name": analysis["display_name"],
+                    "created_at": analysis["created_at"].isoformat(),  # UTC ISO 형태
+                    "summary": analysis["summary"],
+                    "success": analysis.get("success", False)
+                })
         
         # 통계 정보
         statistics = ai_viewer.get_analysis_statistics(hours=analysis_hours)
@@ -553,17 +562,19 @@ async def get_blog_data_api(
         return {
             "success": True,
             "data": {
-                "ai_analyses": analyses,
+                "latest_detailed_analyses": latest_detailed,
+                "historical_summaries": historical_summaries,
                 "chart_data": chart_data,
                 "statistics": statistics,
                 "metadata": {
-                    "analysis_count": len(analyses),
+                    "latest_detailed_count": len(latest_detailed),
+                    "historical_summaries_count": len(historical_summaries),
                     "chart_data_count": len(chart_data),
                     "chart_hours": chart_hours,
                     "analysis_hours": analysis_hours,
                     "first_chart_timestamp": chart_data[0]["timestamp"].isoformat() if chart_data else None,
                     "last_chart_timestamp": chart_data[-1]["timestamp"].isoformat() if chart_data else None,
-                    "latest_analysis_timestamp": analyses[0]["created_at"].isoformat() if analyses else None
+                    "latest_analysis_timestamp": latest_detailed[0]["created_at"].isoformat() if latest_detailed else None
                 }
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
@@ -575,7 +586,8 @@ async def get_blog_data_api(
             "success": False,
             "error": str(e),
             "data": {
-                "ai_analyses": [],
+                "latest_detailed_analyses": [],
+                "historical_summaries": [],
                 "chart_data": [],
                 "statistics": {},
                 "metadata": {}
