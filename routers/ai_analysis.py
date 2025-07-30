@@ -703,7 +703,7 @@ async def ai_analysis_detail(
 
 @router.get("/api/chart-data")
 async def get_chart_data_api(
-    hours: int = Query(72, description="조회할 시간 범위 (시간)", ge=1, le=168)
+    hours: int = Query(300, description="조회할 시간 범위 (시간)", ge=1, le=720)
 ):
     """차트 데이터 조회 API (1시간봉 기준)"""
     try:
