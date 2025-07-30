@@ -908,8 +908,8 @@ class SerialDataScheduler:
     async def _ai_technical_analysis(self):
         """기술적 분석"""
         try:
-            from docs.investment_ai.analyzers.technical_analyzer import analyze_technical_indicators
-            return await analyze_technical_indicators('BTCUSDT', '60m', 300)  # 15m → 60m으로 변경
+            from docs.investment_ai.analyzers.technical_analyzer import analyze_enhanced_technical_indicators
+            return await analyze_enhanced_technical_indicators('BTCUSDT', '1h', 300)
         except Exception as e:
             logger.error(f"기술적 분석 오류: {e}")
             return None
