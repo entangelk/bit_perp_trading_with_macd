@@ -612,10 +612,10 @@ async def get_blog_analysis_api(
     """블로그 생성용 AI 분석 데이터 API"""
     try:
         # AI 분석 데이터 조회 - 최신 상세 데이터 (각 분석기별 최신 1개씩)
-        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog: bool = True, limit=6)
+        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog = True, limit=6)
         
         # AI 분석 데이터 조회 - 과거 요약 데이터 (6시간 전체)
-        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog: bool = True, limit=50)
+        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog = True, limit=50)
         historical_summaries = []
         
         for analysis in all_analyses:
