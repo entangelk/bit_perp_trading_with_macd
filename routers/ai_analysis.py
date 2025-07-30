@@ -529,16 +529,12 @@ async def get_chart_data_api(
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
-@router.get("/api/blog-data")
-async def get_blog_data_api(
-    chart_hours: int = Query(72, description="차트 데이터 시간 범위", ge=1, le=168),
+@router.get("/api/blog-analysis")
+async def get_blog_analysis_api(
     analysis_hours: int = Query(6, description="AI 분석 데이터 시간 범위", ge=1, le=168)
 ):
-    """블로그 생성용 통합 데이터 API (AI 분석 + 차트 데이터)"""
+    """블로그 생성용 AI 분석 데이터 API"""
     try:
-        # 차트 데이터 조회 (73시간 가져와서 마지막 1개 제거)
-        chart_data = ai_viewer.get_chart_data(hours=chart_hours)
-        
         # AI 분석 데이터 조회 - 최신 상세 데이터 (각 분석기별 최신 1개씩)
         latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours, limit=6)
         
@@ -564,16 +560,11 @@ async def get_blog_data_api(
             "data": {
                 "latest_detailed_analyses": latest_detailed,
                 "historical_summaries": historical_summaries,
-                "chart_data": chart_data,
                 "statistics": statistics,
                 "metadata": {
                     "latest_detailed_count": len(latest_detailed),
                     "historical_summaries_count": len(historical_summaries),
-                    "chart_data_count": len(chart_data),
-                    "chart_hours": chart_hours,
                     "analysis_hours": analysis_hours,
-                    "first_chart_timestamp": chart_data[0]["timestamp"].isoformat() if chart_data else None,
-                    "last_chart_timestamp": chart_data[-1]["timestamp"].isoformat() if chart_data else None,
                     "latest_analysis_timestamp": latest_detailed[0]["created_at"].isoformat() if latest_detailed else None
                 }
             },
@@ -581,14 +572,13 @@ async def get_blog_data_api(
         }
         
     except Exception as e:
-        logger.error(f"블로그 데이터 API 오류: {e}")
+        logger.error(f"블로그 분석 데이터 API 오류: {e}")
         return {
             "success": False,
             "error": str(e),
             "data": {
                 "latest_detailed_analyses": [],
                 "historical_summaries": [],
-                "chart_data": [],
                 "statistics": {},
                 "metadata": {}
             },
