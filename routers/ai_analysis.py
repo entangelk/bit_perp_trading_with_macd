@@ -438,6 +438,139 @@ class AIAnalysisViewer:
             logger.error(f"차트 데이터 조회 오류: {e}")
             return []
 
+
+    def _filter_analysis_for_blog(self, analysis_data):
+        """블로그용으로 분석 데이터를 필터링하는 함수"""
+        filtered_data = {}
+        
+        # 기본 정보 유지
+        basic_fields = ['task_name', 'display_name', 'created_at', 'success']
+        for field in basic_fields:
+            if field in analysis_data:
+                filtered_data[field] = analysis_data[field]
+        
+        # analysis_result가 있는 경우에만 처리
+        if 'analysis_result' in analysis_data and analysis_data['analysis_result'].get('success'):
+            result = analysis_data['analysis_result']['result']
+            filtered_result = {}
+            
+            # 분석 타입별로 필터링
+            task_name = analysis_data.get('task_name', '')
+            
+            if task_name == 'final_decision':
+                # 최종 결정 - 핵심 정보만
+                filtered_result = {
+                    'final_decision': result.get('final_decision'),
+                    'decision_confidence': result.get('decision_confidence'),
+                    'market_outlook': result.get('market_outlook', {}),
+                    'decision_reasoning': result.get('decision_reasoning'),
+                    'signal_consensus': {
+                        'consensus_level': result.get('signal_consensus', {}).get('consensus_level'),
+                        'conflicting_signals': result.get('signal_consensus', {}).get('conflicting_signals', []),
+                        'dominant_signal_source': result.get('signal_consensus', {}).get('dominant_signal_source')
+                    },
+                    'confidence_factors': {
+                        'supporting_factors': result.get('confidence_factors', {}).get('supporting_factors', []),
+                        'risk_factors': result.get('confidence_factors', {}).get('risk_factors', [])
+                    }
+                }
+                
+            elif task_name == 'ai_technical_analysis':
+                # 기술적 분석 - 상세 수치 제외
+                filtered_result = {
+                    'overall_signal': result.get('overall_signal'),
+                    'confidence': result.get('confidence'),
+                    'trend_analysis': result.get('trend_analysis', {}),
+                    'momentum_analysis': result.get('momentum_analysis', {}),
+                    'timeframe_analysis': result.get('timeframe_analysis', {}),
+                    'analysis_summary': result.get('analysis_summary')
+                }
+                
+            elif task_name == 'ai_sentiment_analysis':
+                # 시장 감정 분석
+                filtered_result = {
+                    'market_sentiment_score': result.get('market_sentiment_score'),
+                    'sentiment_state': result.get('sentiment_state'),
+                    'confidence': result.get('confidence'),
+                    'investment_recommendation': result.get('investment_recommendation'),
+                    'market_impact': result.get('market_impact'),
+                    'analysis_summary': result.get('analysis_summary')
+                }
+                
+            elif task_name == 'ai_macro_analysis':
+                # 거시경제 분석
+                filtered_result = {
+                    'macro_environment_score': result.get('macro_environment_score'),
+                    'investment_environment': result.get('investment_environment'),
+                    'confidence': result.get('confidence'),
+                    'btc_recommendation': result.get('btc_recommendation'),
+                    'analysis_summary': result.get('analysis_summary'),
+                    'key_insights': result.get('key_insights', [])
+                }
+                
+            elif task_name == 'ai_onchain_analysis':
+                # 온체인 분석
+                filtered_result = {
+                    'onchain_health_score': result.get('onchain_health_score'),
+                    'investment_signal': result.get('investment_signal'),
+                    'confidence': result.get('confidence'),
+                    'network_security_analysis': result.get('network_security_analysis'),
+                    'holder_sentiment': result.get('holder_sentiment'),
+                    'mining_outlook': result.get('mining_outlook'),
+                    'analysis_summary': result.get('analysis_summary'),
+                    'key_insights': result.get('key_insights', [])
+                }
+                
+            elif task_name == 'ai_institutional_analysis':
+                # 기관투자 분석
+                filtered_result = {
+                    'institutional_flow_score': result.get('institutional_flow_score'),
+                    'investment_signal': result.get('investment_signal'),
+                    'confidence': result.get('confidence'),
+                    'analysis_summary': result.get('analysis_summary'),
+                    'key_insights': result.get('key_insights', [])
+                }
+            
+            # 필터링된 결과 저장
+            filtered_data['analysis_result'] = {
+                'success': True,
+                'result': filtered_result
+            }
+        
+        return filtered_data
+
+    def _filter_blog_analysis_data(self, latest_detailed, historical_summaries):
+        """블로그 분석 데이터 전체를 필터링하는 함수"""
+        
+        # 최신 상세 데이터 필터링
+        filtered_latest = []
+        for analysis in latest_detailed:
+            filtered_analysis = self._filter_analysis_for_blog(analysis)
+            filtered_latest.append(filtered_analysis)
+        
+        # 과거 요약 데이터는 이미 요약된 형태이므로 그대로 유지
+        # 단, 너무 긴 summary 내용이 있다면 일부 제한
+        filtered_historical = []
+        for summary in historical_summaries:
+            filtered_summary = summary.copy()
+            
+            # summary 내 key_points가 너무 길면 첫 번째만 유지
+            if 'summary' in filtered_summary and 'key_points' in filtered_summary['summary']:
+                key_points = filtered_summary['summary']['key_points']
+                if isinstance(key_points, list) and len(key_points) > 0:
+                    # 첫 번째 key_point가 너무 길면 1000자로 제한
+                    first_point = key_points[0]
+                    if len(first_point) > 1000:
+                        filtered_summary['summary']['key_points'] = [first_point[:1000] + "..."]
+                    else:
+                        filtered_summary['summary']['key_points'] = [first_point]
+            
+            filtered_historical.append(filtered_summary)
+        
+        return filtered_latest, filtered_historical
+
+
+
 # 전역 뷰어 인스턴스
 ai_viewer = AIAnalysisViewer()
 
@@ -609,13 +742,13 @@ async def get_chart_data_api(
 async def get_blog_analysis_api(
     analysis_hours: int = Query(6, description="AI 분석 데이터 시간 범위", ge=1, le=168)
 ):
-    """블로그 생성용 AI 분석 데이터 API"""
+    """블로그 생성용 AI 분석 데이터 API (필터링 적용)"""
     try:
         # AI 분석 데이터 조회 - 최신 상세 데이터 (각 분석기별 최신 1개씩)
-        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog = True, limit=6)
+        latest_detailed = ai_viewer.get_recent_analyses(hours=analysis_hours, for_blog=True, limit=6)
         
         # AI 분석 데이터 조회 - 과거 요약 데이터 (6시간 전체)
-        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours,for_blog = True, limit=50)
+        all_analyses = ai_viewer.get_recent_analyses(hours=analysis_hours, for_blog=True, limit=50)
         historical_summaries = []
         
         for analysis in all_analyses:
@@ -628,11 +761,21 @@ async def get_blog_analysis_api(
                     "success": analysis.get("success", False)
                 })
         
+        # 블로그용 데이터 필터링 적용
+        filtered_latest, filtered_historical = ai_viewer._filter_blog_analysis_data(latest_detailed, historical_summaries)
+        
         return {
             "success": True,
             "data": {
-                "latest_detailed_analyses": latest_detailed,
-                "historical_summaries": historical_summaries,
+                "latest_detailed_analyses": filtered_latest,
+                "historical_summaries": filtered_historical,
+                "metadata": {
+                    "latest_detailed_count": len(filtered_latest),
+                    "historical_summaries_count": len(filtered_historical),
+                    "analysis_hours": analysis_hours,
+                    "latest_analysis_timestamp": filtered_latest[0]["created_at"].isoformat() if filtered_latest else None,
+                    "filtered": True  # 필터링 적용됨을 표시
+                }
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
@@ -645,6 +788,7 @@ async def get_blog_analysis_api(
             "data": {
                 "latest_detailed_analyses": [],
                 "historical_summaries": [],
+                "metadata": {}
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
