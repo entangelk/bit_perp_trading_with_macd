@@ -327,6 +327,41 @@ class AIAnalysisViewer:
             logger.error(f"분석 통계 조회 오류: {e}")
             return {"total_analyses": 0, "success_count": 0, "failure_count": 0, "by_analyzer": {}, "success_rate": 0}
 
+    # 외부 전송용 차트 데이터 (72시간봉)
+    def get_chart_data(self, hours: int = 72) -> List[Dict]:
+        """시계열 차트 데이터 조회 (1시간봉 기준, 불완전한 마지막 데이터 제외)"""
+        try:
+            # 시간 범위 설정 (73시간 가져와서 마지막 1개 제외)
+            since_time = datetime.now(timezone.utc) - timedelta(hours=hours + 1)
+            
+            # chart_60m 컬렉션에서 데이터 조회
+            chart_collection = self.database["chart_60m"]
+            
+            cursor = chart_collection.find({
+                "timestamp": {"$gte": since_time}
+            }).sort("timestamp", 1).limit(hours + 1)  # 73개 가져오기
+            
+            chart_data = []
+            for doc in cursor:
+                chart_data.append({
+                    "timestamp": doc.get("timestamp"),
+                    "open": float(doc.get("open", 0)),
+                    "high": float(doc.get("high", 0)), 
+                    "low": float(doc.get("low", 0)),
+                    "close": float(doc.get("close", 0)),
+                    "volume": float(doc.get("volume", 0))
+                })
+            
+            # 마지막 불완전한 데이터 제거
+            if len(chart_data) > hours:
+                chart_data = chart_data[:-1]  # 마지막 1개 제거
+            
+            return chart_data
+            
+        except Exception as e:
+            logger.error(f"차트 데이터 조회 오류: {e}")
+            return []
+
 # 전역 뷰어 인스턴스
 ai_viewer = AIAnalysisViewer()
 
@@ -455,3 +490,95 @@ async def ai_analysis_detail(
     except Exception as e:
         logger.error(f"AI 분석 상세 페이지 오류: {e}")
         raise HTTPException(status_code=500, detail=f"페이지 로드 오류: {str(e)}")
+
+
+@router.get("/api/chart-data")
+async def get_chart_data_api(
+    hours: int = Query(72, description="조회할 시간 범위 (시간)", ge=1, le=168)
+):
+    """차트 데이터 조회 API (1시간봉 기준)"""
+    try:
+        chart_data = ai_viewer.get_chart_data(hours=hours)
+        
+        if not chart_data:
+            return {
+                "success": False,
+                "error": "차트 데이터를 찾을 수 없습니다.",
+                "data": [],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "chart_data": chart_data,
+                "data_count": len(chart_data),
+                "hours_requested": hours,
+                "first_timestamp": chart_data[0]["timestamp"].isoformat() if chart_data else None,
+                "last_timestamp": chart_data[-1]["timestamp"].isoformat() if chart_data else None
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"차트 데이터 API 오류: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": [],
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+@router.get("/api/blog-data")
+async def get_blog_data_api(
+    analyzer: Optional[str] = Query(None, description="특정 분석기 필터"),
+    chart_hours: int = Query(72, description="차트 데이터 시간 범위", ge=1, le=168),
+    analysis_hours: int = Query(24, description="AI 분석 데이터 시간 범위", ge=1, le=168)
+):
+    """블로그 생성용 통합 데이터 API (AI 분석 + 차트 데이터)"""
+    try:
+        # AI 분석 데이터 조회
+        analyses = ai_viewer.get_recent_analyses(
+            task_name=analyzer, 
+            hours=analysis_hours, 
+            limit=50
+        )
+        
+        # 차트 데이터 조회
+        chart_data = ai_viewer.get_chart_data(hours=chart_hours)
+        
+        # 통계 정보
+        statistics = ai_viewer.get_analysis_statistics(hours=analysis_hours)
+        
+        return {
+            "success": True,
+            "data": {
+                "ai_analyses": analyses,
+                "chart_data": chart_data,
+                "statistics": statistics,
+                "metadata": {
+                    "analysis_count": len(analyses),
+                    "chart_data_count": len(chart_data),
+                    "chart_hours": chart_hours,
+                    "analysis_hours": analysis_hours,
+                    "first_chart_timestamp": chart_data[0]["timestamp"].isoformat() if chart_data else None,
+                    "last_chart_timestamp": chart_data[-1]["timestamp"].isoformat() if chart_data else None,
+                    "latest_analysis_timestamp": analyses[0]["created_at"].isoformat() if analyses else None
+                }
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"블로그 데이터 API 오류: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {
+                "ai_analyses": [],
+                "chart_data": [],
+                "statistics": {},
+                "metadata": {}
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
