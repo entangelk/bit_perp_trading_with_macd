@@ -151,9 +151,19 @@ class AITradingIntegration:
                 positions = json.loads(positions_json)
                 if positions:
                     position = positions[0]  # 첫 번째 포지션 (BTCUSDT)
+
+                    # API 값 정규화
+                    api_side = position['side']
+                    if api_side in ['Buy', 'buy', 'Long', 'long']:
+                        normalized_side = 'long'
+                    elif api_side in ['Sell', 'sell', 'Short', 'short']:
+                        normalized_side = 'short'
+                    else:
+                        normalized_side = 'none'
+
                     current_position.update({
                         'has_position': True,
-                        'side': 'long' if position['side'] == 'long' else 'short',
+                        'side': normalized_side,
                         'size': float(position.get('contracts', 0)),
                         'entry_price': float(position.get('entryPrice', 0)),
                         'unrealized_pnl': float(position.get('unrealizedPnl', 0)),

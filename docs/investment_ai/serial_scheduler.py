@@ -652,9 +652,17 @@ class SerialDataScheduler:
                     if abs(size) > 0:
                         # side 필드를 직접 사용해야 함
                         api_side = pos.get('side', '')
+
+                        if api_side in ['Buy', 'buy', 'Long', 'long']:
+                            normalized_side = 'long'
+                        elif api_side in ['Sell', 'sell', 'Short', 'short']:
+                            normalized_side = 'short'
+                        else:
+                            normalized_side = 'none'
+                            
                         position_info.update({
                             'has_position': True,
-                            'side': 'long' if api_side == 'Buy' else 'short',
+                            'side': normalized_side,
                             'size': abs(size),
                             'entry_price': entry_price,
                             'unrealized_pnl': unrealized_pnl

@@ -333,9 +333,16 @@ class FinalDecisionMaker:
                             else:  # 숏 포지션
                                 take_profit_distance = ((mark_price - take_profit_price) / mark_price) * 100
                         
+                        if api_side in ['Buy', 'buy', 'Long', 'long']:
+                            normalized_side = 'long'
+                        elif api_side in ['Sell', 'sell', 'Short', 'short']:
+                            normalized_side = 'short'
+                        else:
+                            normalized_side = 'none'
+
                         current_position.update({
                             'has_position': True,
-                            'side': 'long' if api_side == 'Buy' else 'short',
+                            'side': normalized_side,
                             'size': abs(size),
                             'entry_price': entry_price,
                             'unrealized_pnl': float(btc_position.get('unrealizedPnl', 0)),

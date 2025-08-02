@@ -425,11 +425,11 @@ def normalize_position_side(side_value):
     logger.debug(f"정규화된 문자열: '{side_str}'")
     
     # Long 포지션 케이스들
-    if side_str in ['buy', 'long', 'bid', '1']:
+    if side_str in ['buy', 'long', 'bid', '1','Buy']:
         logger.debug(f"'{side_str}' → 'long'")
         return 'long'
     # Short 포지션 케이스들  
-    elif side_str in ['sell', 'short', 'ask', '-1']:
+    elif side_str in ['sell', 'short', 'ask', '-1','Sell']:
         logger.debug(f"'{side_str}' → 'short'")
         return 'short'
     else:
