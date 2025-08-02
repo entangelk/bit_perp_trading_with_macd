@@ -181,53 +181,120 @@ CONFIG = {
         - 현재 가격: {current_price}
         - 24시간 변동률: {price_change_24h}%
         - 거래량: {volume}
+        - 시간봉: {timeframe}
 
         분석해야 할 지표들:
-        1. 추세 지표: MACD, EMA, ADX
-        2. 모멘텀 지표: RSI, Stochastic
+        1. 추세 지표: MACD, EMA, ADX, DI+/DI-
+        2. 모멘텀 지표: RSI, Stochastic, Williams %R
         3. 변동성 지표: Bollinger Bands, ATR
-        4. 볼륨 지표: Volume Trend, OBV
+        4. 볼륨 지표: Volume Trend, OBV, 볼륨 다이버전스
+        5. 🆕 반전 분석: 다이버전스, 패턴, 선형회귀 채널
+        6. 🆕 횡보장 분석: 박스권 식별, 돌파 가능성
+
+        ⚠️ 중요한 분석 지침:
+        1. **횡보장(박스권) vs 돌파장 구분**: 현재 시장이 박스권인지 돌파 추세인지 명확히 판단하세요
+        2. **MACD 지연 신호 인지**: 박스권에서 MACD 크로스오버는 이미 늦은 신호일 수 있습니다. 돌파장에서만 유의미합니다
+        3. **반전 신호 우선순위**: 다이버전스, 패턴, 지지/저항 반전 신호를 추세 지표보다 우선 고려하세요
+        4. **볼륨 확인**: 모든 신호는 볼륨으로 확인되어야 합니다
+        5. **다중 시간봉 확인**: 상위 시간봉의 지지/저항을 고려하세요
+
+        특히 다음 반전 신호들에 주목하세요:
+        - 강세 반전 신호: {bullish_reversal_signals}
+        - 약세 반전 신호: {bearish_reversal_signals}
+        - 다이버전스 분석: {divergence_analysis}
+        - 패턴 분석: {pattern_analysis}
+        - 선형회귀 채널: {linear_regression_analysis}
 
         다음 형식으로 결과를 제공해주세요:
         {{
             "overall_signal": "Strong Buy/Buy/Hold/Sell/Strong Sell",
+            "market_structure": {{
+                "market_type": "trending/sideways/transitional",
+                "trend_direction": "Strong Uptrend/Uptrend/Sideways/Downtrend/Strong Downtrend",
+                "sideways_analysis": {{
+                    "is_sideways": true/false,
+                    "box_range_upper": "박스권 상단",
+                    "box_range_lower": "박스권 하단",
+                    "current_position_in_box": "상단/중간/하단",
+                    "breakout_probability": 0~100,
+                    "expected_breakout_direction": "상승/하락/불확실"
+                }}
+            }},
             "trend_analysis": {{
                 "trend_direction": "Strong Uptrend/Uptrend/Sideways/Downtrend/Strong Downtrend",
                 "trend_strength": 0~100,
+                "trend_sustainability": 0~100,
                 "key_support_level": "주요 지지선",
                 "key_resistance_level": "주요 저항선"
             }},
             "momentum_analysis": {{
                 "momentum_direction": "Bullish/Neutral/Bearish",
                 "momentum_strength": 0~100,
-                "oversold_overbought": "Oversold/Normal/Overbought"
+                "momentum_divergence": "bullish/bearish/none",
+                "oversold_overbought": "Oversold/Normal/Overbought",
+                "macd_reliability": "high/medium/low (박스권에서는 low)"
+            }},
+            "reversal_analysis": {{
+                "reversal_probability": 0~100,
+                "reversal_direction": "상승반전/하락반전/없음",
+                "key_reversal_signals": ["신호1", "신호2"],
+                "divergence_confirmation": "확인됨/부분적/미확인",
+                "pattern_strength": 0~100,
+                "linear_regression_signal": "과매수/과매도/중립"
             }},
             "volatility_analysis": {{
                 "volatility_level": "Low/Medium/High",
+                "volatility_contraction": true/false,
+                "squeeze_breakout_imminent": true/false,
                 "breakout_probability": 0~100,
                 "expected_direction": "Up/Down/Uncertain"
             }},
             "volume_analysis": {{
                 "volume_trend": "Increasing/Stable/Decreasing",
                 "volume_confirmation": true/false,
-                "institutional_flow": "Buying/Selling/Neutral"
+                "volume_divergence": "bullish/bearish/none",
+                "institutional_flow": "Buying/Selling/Neutral",
+                "volume_breakout_confirmation": true/false
             }},
-            "entry_exit_points": {{
+            "entry_exit_strategy": {{
+                "market_condition": "trending/sideways/breakout",
+                "strategy_type": "trend_following/mean_reversion/breakout",
                 "best_entry_long": "롱 진입 적정가",
                 "best_entry_short": "숏 진입 적정가",
                 "stop_loss_long": "롱 스톱로스",
                 "stop_loss_short": "숏 스톱로스",
                 "take_profit_long": "롱 테이크프로핏",
-                "take_profit_short": "숏 테이크프로핏"
+                "take_profit_short": "숏 테이크프로핏",
+                "risk_reward_ratio": "1:X 비율"
             }},
             "timeframe_analysis": {{
-                "short_term": "1시간~4시간 전망",
-                "medium_term": "일봉 전망", 
-                "long_term": "주봉 전망"
+                "short_term": "1시간~4시간 전망 (현재 시간봉 기준)",
+                "medium_term": "4시간~일봉 전망", 
+                "long_term": "일봉~주봉 전망",
+                "multi_timeframe_alignment": "상승/하락/혼재"
+            }},
+            "signal_timing": {{
+                "immediate_action": "즉시 진입/대기/청산",
+                "wait_for_confirmation": true/false,
+                "confirmation_criteria": ["확인 조건1", "확인 조건2"],
+                "signal_urgency": "high/medium/low"
+            }},
+            "risk_assessment": {{
+                "market_risk": "high/medium/low",
+                "signal_reliability": "high/medium/low",
+                "position_size_recommendation": "full/half/quarter/avoid",
+                "key_invalidation_level": "신호 무효화 레벨"
             }},
             "confidence": 0~100 사이의 분석 신뢰도,
-            "analysis_summary": "기술적 분석 요약"
+            "analysis_summary": "핵심 분석 요약 (반전 신호, 박스권/돌파 여부, MACD 신뢰도 포함)"
         }}
+
+        📊 분석 시 특별 고려사항:
+        1. 박스권에서는 지지/저항 반전 신호와 RSI 과매수/과매도를 우선시하세요
+        2. 돌파 확인 시에는 볼륨과 캔들 패턴을 반드시 체크하세요
+        3. MACD 신호의 타이밍을 시장 구조에 맞게 해석하세요
+        4. 반전 신호가 여러 개 겹칠 때는 신뢰도를 높게 평가하세요
+        5. 다이버전스는 조기 반전 신호이므로 높은 가중치를 부여하세요
         """,
         
         "macro_analysis": """
@@ -666,7 +733,7 @@ CONFIG = {
 
 
 
-        "final_decision": """
+"final_decision": """
         당신은 투자 결정을 내리는 최종 AI입니다. 모든 분석 결과를 종합하여 최종 투자 결정을 내려주세요.
         입력 분석 결과:
 
@@ -686,20 +753,58 @@ CONFIG = {
         - Hold: 현재 상태 유지 (포지션 있으면 그대로, 없으면 대기)
         - Reverse: 기존 포지션과 반대 방향으로 전환
 
+        🆕 **향상된 기술적 분석 해석 가이드**:
+
+        **반전 신호 우선순위 체계**:
+        1. **다이버전스 신호**: 가격 vs RSI/MACD/볼륨 다이버전스는 조기 반전 신호로 높은 가중치
+        2. **패턴 분석**: 이중천정/바닥, 헤드앤숄더 등은 강력한 반전 확률 제시
+        3. **선형회귀 채널**: 채널 상/하단 터치는 과매수/과매도 신호, 돌파는 추세 연장
+        4. **지지/저항 반전**: 주요 레벨에서의 반전은 즉시 대응 필요
+
+        **시장 구조별 신호 해석 방법**:
+        
+        📊 **횡보장(박스권) 시장**:
+        - **MACD 크로스오버 신호 주의**: 박스권에서는 이미 늦은 신호일 가능성 높음
+        - **RSI/Stochastic 우선**: 과매수/과매도 레벨에서의 반전 신호 중시
+        - **지지/저항 반전 신호**: 박스권 상/하단에서의 반전이 가장 신뢰성 높음
+        - **볼륨 확인 필수**: 돌파 시에는 반드시 볼륨 증가 동반되어야 함
+        - **전략**: 평균회귀 전략 (지지선 매수, 저항선 매도)
+
+        🚀 **돌파장(추세장) 시장**:
+        - **MACD 신호 유효**: 추세 방향 확인 시 높은 신뢰도
+        - **추세 지표 우선**: EMA, ADX, DI+/DI- 등 추세 지표에 높은 가중치
+        - **시장 심리 분석 중요**: 돌파장에서는 감정적 요인이 크게 작용
+        - **볼륨 폭증 확인**: 진정한 돌파는 거래량 급증을 동반
+        - **전략**: 추세 추종 전략 (돌파 후 추격 매수/매도)
+
+        **기술적 분석 신뢰도 평가 기준**:
+        - **반전 신호 3개 이상 겹침**: 신뢰도 90% 이상
+        - **다이버전스 + 패턴**: 신뢰도 85% 이상  
+        - **단일 지표 신호**: 신뢰도 60% 이하
+        - **박스권에서 MACD만 의존**: 신뢰도 40% 이하
+
+        **신호 강도별 대응 방식**:
+        - **강한 반전 신호 (신뢰도 85%+)**: 즉시 포지션 전환 고려
+        - **중간 신호 (신뢰도 70-85%)**: 포지션 크기 조절 후 진입
+        - **약한 신호 (신뢰도 70% 미만)**: 추가 확인 후 진입 또는 관망
+
         Reverse 판단 기준:
 
         1. 현재 포지션 수익률 vs 새 신호 강도
-        2. 시장 추세 전환 확실성
+        2. 시장 추세 전환 확실성 (**반전 신호 3개 이상 겹침 시 고려**)
         3. 리스크 대비 보상 비율
+        4. 절대적인 확실한 경우에만 Reverse를 제안할 것 (하루 1~2회 거래하는 스윙거래라는 것을 잊지말것)
+        5. 단기 Reverse가 예상될 경우, Reverse보다는 SL의 범위를 늘려서 장기적 투자관점으로 접근할 것.
 
         종합 분석 기준:
 
-        1. 신호 강도가 최우선 (각 분석의 확실성과 일치도)
-        2. 기술적 분석과 시장 심리 분석에 가장 높은 가중치 부여
-        3. 각 분석의 신뢰도 가중 평가
-        4. 상충되는 신호들의 우선순위 판단
-        5. 리스크 대비 수익률 최적화
-        6. 현재 포지션 상태에 따른 맞춤 전략
+        1. **반전 신호 강도가 최우선** (다이버전스, 패턴, 지지/저항 반전)
+        2. **시장 구조 파악 필수** (횡보 vs 돌파 구분 후 적절한 전략 선택)
+        3. 기술적 분석과 시장 심리 분석에 가장 높은 가중치 부여
+        4. 각 분석의 신뢰도 가중 평가
+        5. 상충되는 신호들의 우선순위 판단 (**반전 신호 > 추세 신호**)
+        6. 리스크 대비 수익률 최적화
+        7. 현재 포지션 상태에 따른 맞춤 전략
 
         온체인 분석 해석 가이드:
 
@@ -728,20 +833,25 @@ CONFIG = {
 
         중요 고려사항:
 
-        - 1시간봉 기준 스윙 거래(하루 1-2회)이므로 기술적 분석과 시장 심리가 핵심
+        - **1시간봉 기준 스윙 거래**이므로 반전 신호와 시장 심리가 핵심
+        - **횡보장에서는 지지/저항 반전 > MACD 신호** 우선순위 적용
+        - **돌파장에서는 시장 심리 + 추세 지표** 조합 중시
+        - **반전 신호 다중 확인** 시 높은 신뢰도로 평가
         - 거시경제와 온체인 분석은 1-2일 단기적 신호에 중점을 둔 방향성 고려용
         - **온체인 분석에서는 일일 해시레이트 변화와 스윙 신호에 더 높은 가중치**
         - 장기적 분석과 단기적 분석이 상충할 때는 단기 분석 우선
         - 기관 투자 흐름은 큰 틀에서의 자금 흐름 파악
         - 포지션 분석 결과는 현재 상황에 가장 적합한 정보
-        - 신호 간 충돌 시에는 신뢰도가 높은 분석에 더 큰 가중치
+        - 신호 간 충돌 시에는 **반전 신호의 신뢰도를 높게 평가**
         - 섣부른 포지션 변경보다는 확실한 신호에서만 진입
 
         needs_human_review 기준:
 
+        - **반전 신호와 추세 신호가 극단적으로 상충**할 때 (반전 신호 3개+ vs 강한 추세)
         - 기술적 분석과 시장심리가 정반대 신호이면서 둘 다 높은 신뢰도일 때
         - 포지션 분석과 기술적 분석이 완전히 상반될 때
         - **온체인 스윙 신호와 트렌드 신호가 극단적으로 상충할 때** (점수 차이 30+ && 반대 방향)
+        - **박스권/돌파장 판단이 애매**할 때 (시장 구조 불분명)
         - 극단적 변동성 상황 (일시적 급락/급등)
         - 시스템/데이터 오류 감지 시
         - 장기 vs 단기 분석 상충은 단기 우선으로 진행 (심각한 상충이 아닐 시 needs_human_review : false 로 설정)
@@ -749,14 +859,17 @@ CONFIG = {
         리스크 관리 필수사항:
 
         - 진입 시 반드시 스톱로스와 테이크프로핏 설정
-        - 포지션 크기는 신호 강도와 신뢰도에 비례
+        - **반전 신호 강도에 따른 포지션 크기 조절** (강한 반전 신호 시 큰 포지션)
         - 레버리지는 5배 고정값임
-        - 신호가 약하거나 충돌 시에는 포지션 크기 축소 또는 관망
+        - **박스권에서는 작은 포지션**, **돌파장에서는 큰 포지션** 권장
         - **온체인 채굴자 리스크 High 시에는 포지션 크기 50% 축소 권장**
 
         TP/SL 설정 기준:
 
         - TP는 반드시 300 이상 설정 (오프닝/클로징 수수료 고려)
+        - **반전 신호 기반 진입 시**: SL을 반전 무효화 레벨로 설정
+        - **박스권 진입 시**: 박스 상/하단을 TP/SL 기준으로 활용 (돌파장 변환시 재진입 고려)
+        - **돌파장 진입 시**: 돌파 실패 레벨을 SL로 설정
         - **시장 혼조세나 과매수/과매도 중 박스돌파 혹은 MACD 충분상태에서 추가 돌입 등과 같이 불확실성이 있는 경우에는 TP를 200 ~ 300으로 잡고, SL은 일반 설정 지침을 따를 것** (단타를 통한 최소 이익 확보 및 리스크 분산 투자 전략) 
         - SL은 기술적 지지선이 명확할 때 300-500까지 축소 가능
         - 지지선 불분명 시 800-1200 권장
@@ -771,7 +884,9 @@ CONFIG = {
 
         기타 주의사항:
 
-        - API 오류로 hash_rate가 0으로 수집될 수 있습니다. 이 경우, 이 데이터는 분석에 포함하지 말고 그 외의 데이터로만 분석하시오.
+        - **반전 신호 3개 이상 겹칠 때는 기술적 분석 가중치를 150%로 증가**
+        - **박스권 확인 시 MACD 신뢰도를 50%로 축소**
+        - **돌파 확인 시 볼륨 + 시장심리 가중치를 120%로 증가**
         - **온체인 데이터 수집 성공률이 60% 미만일 때는 온체인 분석 가중치를 50% 축소**
         - **일일 해시레이트와 7일 평균의 차이가 10% 이상일 때는 시장 변동성 증가 주의**
 
@@ -779,6 +894,18 @@ CONFIG = {
         {{
             "final_decision": "Buy/Sell/Hold/Reverse",
             "decision_confidence": 0~100,
+            "market_structure_assessment": {{
+                "market_type": "trending/sideways/transitional",
+                "structure_confidence": 0~100,
+                "preferred_strategy": "trend_following/mean_reversion/breakout_waiting",
+                "macd_reliability": "high/medium/low"
+            }},
+            "reversal_signal_analysis": {{
+                "reversal_signals_detected": 0~10,
+                "primary_reversal_type": "divergence/pattern/support_resistance/linear_regression",
+                "reversal_confidence": 0~100,
+                "reversal_direction": "bullish/bearish/none"
+            }},
             "recommended_action": {{
                 "action_type": "Open Long/Open Short/Close Position/Reverse to Long/Reverse to Short/Hold Current/Wait",
                 "entry_price": "진입 권장가 (해당시)",

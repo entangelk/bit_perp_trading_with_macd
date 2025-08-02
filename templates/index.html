@@ -435,15 +435,16 @@
             }
         }
         // 타임스탬프 변환 후 시간대 조정 함수
+        // 타임스탬프 변환 후 시간대 조정 함수 (수정됨)
         function adjustTimestampForKST(timestamp) {
             if (!timestamp) return null;
 
             const date = normalizeTimestamp(timestamp);
             if (!date) return null;
 
-            // 9시간 전으로 조정 (UTC+9 보정)
-            const adjustedDate = new Date(date.getTime() - (9 * 60 * 60 * 1000));
-            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (-9시간)`);
+            // 시간조정 없음 (UTC -> KST)
+            const adjustedDate = new Date(date.getTime() + (0 * 60 * 60 * 1000));
+            console.log(`시간 조정: ${date.toISOString()} → ${adjustedDate.toISOString()} (+0시간)`);
             return adjustedDate;
         }
 
@@ -859,6 +860,9 @@
                     `<div class="p-4 text-red-600">차트 생성 오류: ${error.message}</div>`;
             }
         }
+    
+    
+    
     </script>
 
 </body>
