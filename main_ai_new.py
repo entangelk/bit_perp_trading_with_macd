@@ -741,6 +741,13 @@ async def update_existing_position_tp_sl(symbol, final_decision_result, config):
             return False
         
         result = final_decision_result.get('result', {})
+        confidence = result.get('decision_confidence', 0)
+        
+        # 🔧 추가: 신뢰도 및 인간 검토 필요성 체크 (거래 실행과 동일한 로직)
+        if confidence < 60 or result.get('needs_human_review', False):
+            logger.info(f"AI 신뢰도 부족 또는 검토 필요로 TP/SL 업데이트 안함: 신뢰도={confidence}%, 검토필요={result.get('needs_human_review', False)}")
+            return False
+        
         recommended_action = result.get('recommended_action', {})
         
         # AI 권장 TP/SL 값 추출 (기존 메인 코드와 동일한 방식)
